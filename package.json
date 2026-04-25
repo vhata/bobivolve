@@ -24,7 +24,7 @@
     "pre-commit": "pnpm exec lint-staged && pnpm run typecheck && pnpm run test"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml,proto}": [
+    "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}": [
       "prettier --write"
     ],
     "*.{ts,tsx,js,mjs,cjs}": [

@@ -10,3 +10,6 @@ protocol/generated
 SPEC.md
 ARCHITECTURE.md
 PROCESS.md
+
+# Prettier has no parser for .proto.
+*.proto
