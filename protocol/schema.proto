@@ -1,0 +1,192 @@
+// Bobivolve sim/UI seam contract.
+//
+// Single source of truth for what crosses the simulation boundary — see
+// ARCHITECTURE.md ("The seam contract", "Protocol and IDL"). Proto3 is the
+// IDL; the wire format is proto3 JSON (NDJSON for streams). Field numbers
+// follow proto3 evolution rules: additive only, no renumbering, no semantic
+// changes to existing fields. Messages reserved for later releases keep
+// their field numbers reserved here so R0–R1 work cannot accidentally
+// collide with them.
+//
+// Naming convention: snake_case in this file, camelCase on the wire (proto3
+// JSON encoding). The codegen toolchain (ts-proto, prost) produces the
+// language-idiomatic shape on each side.
+
+syntax = "proto3";
+
+package bobivolve.protocol.v1;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Command — UI → sim. Fire-and-forget; the sim acknowledges via SimEvent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+message Command {
+  // Caller-supplied id. The sim echoes it on CommandAck / CommandError so the
+  // UI can correlate. Empty string is permitted; the UI then forfeits ack.
+  string command_id = 1;
+
+  oneof body {
+    NewRun new_run = 2;
+    SetSpeed set_speed = 3;
+    Pause pause = 4;
+    Resume resume = 5;
+    Step step = 6;
+    // 7..9 reserved: R2+ ApplyPatch, QueueDecree, Quarantine.
+    ConfigureAutoPause configure_auto_pause = 10;
+    Save save = 11;
+    Load load = 12;
+  }
+
+  reserved 7, 8, 9;
+  reserved "apply_patch", "queue_decree", "quarantine";
+}
+
+message NewRun {
+  // Single u64 seed; the sim expands it to xoshiro256** state via splitmix64.
+  uint64 seed = 1;
+}
+
+message SetSpeed {
+  // Allowed values: 1, 4, 16, 64. Validated at the seam.
+  uint32 speed = 1;
+}
+
+message Pause {}
+message Resume {}
+
+message Step {
+  // Number of sim ticks to advance while paused. Zero is treated as one.
+  uint64 ticks = 1;
+}
+
+message Save {
+  string slot = 1;
+}
+
+message Load {
+  string slot = 1;
+}
+
+message ConfigureAutoPause {
+  // R0 ships a fixed default trigger set. Per-trigger configuration messages
+  // land alongside the auto-pause UI; the message stays defined here so the
+  // command field number is locked.
+  repeated string enabled_triggers = 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SimEvent — sim → UI. Two delivery tiers (heartbeat vs domain events) are an
+// implementation concern of the transport layer, not of the schema.
+// ─────────────────────────────────────────────────────────────────────────────
+
+message SimEvent {
+  // Integer time. Floats are forbidden in tick fields (ARCHITECTURE.md).
+  uint64 sim_tick = 1;
+
+  oneof body {
+    Tick tick = 2;
+    Replication replication = 3;
+    Speciation speciation = 4;
+    Extinction extinction = 5;
+    Death death = 6;
+    // 7..8 reserved: R3+ FirstContact, TreatyViolation.
+    // 9 reserved: R2+ PatchSaturated.
+    AutoPaused auto_paused = 10;
+    CommandAck command_ack = 11;
+    CommandError command_error = 12;
+  }
+
+  reserved 7, 8, 9;
+  reserved "first_contact", "treaty_violation", "patch_saturated";
+}
+
+message Tick {
+  uint32 actual_speed = 1;
+  uint64 population_total = 2;
+  map<string, uint64> population_by_lineage = 3;
+}
+
+message Replication {
+  string parent_probe_id = 1;
+  string child_probe_id = 2;
+  string lineage_id = 3;
+  bool mutated = 4;
+}
+
+message Speciation {
+  string parent_lineage_id = 1;
+  string new_lineage_id = 2;
+  string new_lineage_name = 3;
+}
+
+message Extinction {
+  string lineage_id = 1;
+}
+
+message Death {
+  string probe_id = 1;
+  string lineage_id = 2;
+}
+
+message AutoPaused {
+  // Identifier of the trigger that fired (e.g. "lineage_extinction").
+  string trigger = 1;
+}
+
+message CommandAck {
+  string command_id = 1;
+}
+
+message CommandError {
+  string command_id = 1;
+  string message = 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Query / QueryResult — UI → sim → reply. Pull-only; never pushed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+message Query {
+  string query_id = 1;
+
+  oneof body {
+    LineageTreeQuery lineage_tree = 2;
+    ProbeInspectorQuery probe_inspector = 3;
+    DriftTelemetryQuery drift_telemetry = 4;
+    LogSliceQuery log_slice = 5;
+    PopulationSummaryQuery population_summary = 6;
+  }
+}
+
+message QueryResult {
+  string query_id = 1;
+
+  oneof body {
+    LineageTree lineage_tree = 2;
+    ProbeInspector probe_inspector = 3;
+    DriftTelemetry drift_telemetry = 4;
+    LogSlice log_slice = 5;
+    PopulationSummary population_summary = 6;
+  }
+}
+
+message LineageTreeQuery {}
+message ProbeInspectorQuery {
+  string probe_id = 1;
+}
+message DriftTelemetryQuery {
+  string lineage_id = 1;
+}
+message LogSliceQuery {
+  uint64 from_tick = 1;
+  uint64 to_tick = 2;
+}
+message PopulationSummaryQuery {}
+
+// Result message bodies are placeholders; their shape is shaped by the
+// dashboard implementation and will be filled out alongside the relevant UI.
+message LineageTree {}
+message ProbeInspector {}
+message DriftTelemetry {}
+message LogSlice {}
+message PopulationSummary {}

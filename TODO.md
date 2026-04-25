@@ -4,8 +4,8 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 ## Foundational
 
-- `protocol/schema.proto` with initial `Command`, `SimEvent`, `Query` message families #r0 #protocol
-- Wire protobuf codegen into the prebuild step #r0 #toolchain
+- Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
+- Flesh out R0 `Query` result message bodies as the dashboard UI takes shape #r0 #protocol
 - Integer-time clock (`simTick: u64`) #r0 #sim
 - `Storage` and `Clock` ports for sim core #r0 #sim
 - Sim core directory: `/sim` per ARCHITECTURE.md, with no DOM/Node imports #r0 #sim
