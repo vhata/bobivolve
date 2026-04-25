@@ -6,4 +6,4 @@ Updated in the same commit as any feature whose status changes.
 
 ## Release 0 — Petri Dish
 
-*Nothing in progress yet.*
+_Nothing in progress yet._

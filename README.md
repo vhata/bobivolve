@@ -2,7 +2,7 @@
 
 A real-time evolutionary simulation. You author the firmware for a swarm of self-replicating probes and watch what becomes of it. Lineages drift, compete, dominate, and collapse. You name them, study them, and — from Release 2 onward — patch them.
 
-The setting borrows premises from Dennis E. Taylor's *Bobiverse* novels: Von Neumann probes, replicative drift, a galaxy with neighbours. The world and the events in it are procedurally generated.
+The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neumann probes, replicative drift, a galaxy with neighbours. The world and the events in it are procedurally generated.
 
 ## Status
 
