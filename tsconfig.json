@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": ["node"],
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
+
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": [
+    "sim/**/*.ts",
+    "host/**/*.ts",
+    "transport/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.tsx",
+    "test/**/*.ts",
+    "protocol/**/*.ts",
+    "*.config.ts",
+    "*.config.mjs"
+  ],
+  "exclude": ["node_modules", "dist", "build", "protocol/generated"]
+}

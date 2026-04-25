@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+out
+coverage
+pnpm-lock.yaml
+protocol/generated
+
+# Author-curated design documents. Prose, not code.
+SPEC.md
+ARCHITECTURE.md
+PROCESS.md

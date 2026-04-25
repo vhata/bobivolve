@@ -4,8 +4,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 ## Foundational
 
-- Set up TypeScript toolchain: package.json, tsconfig, test runner, linter, formatter, pre-commit hook #r0 #toolchain
-- `.editorconfig` for consistent whitespace across editors #r0 #toolchain
 - `protocol/schema.proto` with initial `Command`, `SimEvent`, `Query` message families #r0 #protocol
 - Wire protobuf codegen into the prebuild step #r0 #toolchain
 - `xoshiro256**` PRNG, seedable, portable, with golden-vector test #r0 #sim
@@ -19,7 +17,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Snapshot mechanism (implementation-defined; rebuild-from-log fallback) #r0 #sim
 - Determinism golden test: `(seed, command-log) → event-log` diffed against checked-in golden #r0 #ci
 - GitHub Actions: format, lint, tests, determinism, build, on every push #r0 #ci
-- Lint rules: no `Math.random` / `Date.now` in `/sim`; no host imports in `/sim`; no floats in tick fields; no class instances in protocol types #r0 #lint
 - Project-aware code review skill (PROCESS.md Layer 2) #r0 #process
 
 ## Release 0 — Petri Dish
