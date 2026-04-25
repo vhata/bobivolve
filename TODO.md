@@ -14,8 +14,8 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - WorkerTransport and NodeTransport implementations #r0 #transport
 - Event log (NDJSON, append-only, keyed by `(tick, seq)`) #r0 #sim
 - Snapshot mechanism (implementation-defined; rebuild-from-log fallback) #r0 #sim
-- Determinism golden test: `(seed, command-log) → event-log` diffed against checked-in golden #r0 #ci
-- GitHub Actions: format, lint, tests, determinism, build, on every push #r0 #ci
+- Determinism golden test: `(seed, command-log) → event-log` diffed against checked-in golden, wired into CI #r0 #ci
+- Add `build` step to CI once a build target exists (Vite + UI) #r0 #ci
 - Project-aware code review skill (PROCESS.md Layer 2) #r0 #process
 
 ## Release 0 — Petri Dish
