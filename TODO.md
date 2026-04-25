@@ -6,14 +6,12 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
 - Flesh out R0 `Query` result message bodies as the dashboard UI takes shape #r0 #protocol
-- Integer-time clock (`simTick: u64`) #r0 #sim
-- `Storage` and `Clock` ports for sim core #r0 #sim
-- Sim core directory: `/sim` per ARCHITECTURE.md, with no DOM/Node imports #r0 #sim
+- `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Worker host (`/host/worker.ts`) #r0 #host
 - Node host (`/host/node.ts`) for headless runs #r0 #host
 - WorkerTransport and NodeTransport implementations #r0 #transport
 - Event log (NDJSON, append-only, keyed by `(tick, seq)`) #r0 #sim
-- Snapshot mechanism (implementation-defined; rebuild-from-log fallback) #r0 #sim
+- Persistent snapshot mechanism (write to Storage; rebuild-from-log fallback) #r0 #sim
 - Determinism golden test: `(seed, command-log) → event-log` diffed against checked-in golden, wired into CI #r0 #ci
 - Add `build` step to CI once a build target exists (Vite + UI) #r0 #ci
 - Project-aware code review skill (PROCESS.md Layer 2) #r0 #process
