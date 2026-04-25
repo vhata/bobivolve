@@ -6,7 +6,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 - `protocol/schema.proto` with initial `Command`, `SimEvent`, `Query` message families #r0 #protocol
 - Wire protobuf codegen into the prebuild step #r0 #toolchain
-- `xoshiro256**` PRNG, seedable, portable, with golden-vector test #r0 #sim
 - Integer-time clock (`simTick: u64`) #r0 #sim
 - `Storage` and `Clock` ports for sim core #r0 #sim
 - Sim core directory: `/sim` per ARCHITECTURE.md, with no DOM/Node imports #r0 #sim
