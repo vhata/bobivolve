@@ -210,6 +210,14 @@ body {
   min-width: 0;
 }
 
+/* The panel spans two columns so a long u64 threshold fits on one line.
+   The form (input + Inspect button) is capped so it doesn't stretch
+   into a sea of empty space. The detail dl below is allowed to use the
+   full width, which is where long values land. */
+.inspector-panel .inspector-form {
+  max-width: 22rem;
+}
+
 .lineage-tree {
   list-style: none;
   margin: 0;
