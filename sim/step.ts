@@ -1,6 +1,7 @@
 import type { ReplicationEvent, SimEvent, SpeciationEvent } from '../protocol/types.js';
 import type { Directive } from './directive.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
+import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
 import type { Probe, SimState } from './state.js';
 import { LineageId, ProbeId, SimTick } from './types.js';
@@ -75,10 +76,13 @@ function maybeReplicate(
 
   let childLineageId = parent.lineageId;
   if (firmwareDiverged(childFirmware, parentLineage.referenceFirmware)) {
-    childLineageId = LineageId(`L${state.nextLineageOrdinal}`);
+    const ordinal = state.nextLineageOrdinal;
+    childLineageId = LineageId(`L${ordinal.toString()}`);
     state.nextLineageOrdinal += 1n;
+    const newLineageName = lineageName(ordinal);
     const newLineage: Lineage = {
       id: childLineageId,
+      name: newLineageName,
       founderProbeId: childId,
       parentLineageId: parent.lineageId,
       referenceFirmware: childFirmware,
@@ -92,9 +96,7 @@ function maybeReplicate(
         simTick: state.simTick,
         parentLineageId: parent.lineageId,
         newLineageId: childLineageId,
-        // Lay-person legible names are an open question (ARCHITECTURE.md);
-        // for now, the ordinal id doubles as the display name.
-        newLineageName: childLineageId,
+        newLineageName,
       } satisfies SpeciationEvent & { simTick: bigint };
       events.push(speciation);
     }

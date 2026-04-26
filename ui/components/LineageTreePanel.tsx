@@ -52,7 +52,10 @@ function TreeNodeView({ node }: { node: TreeNode }): React.JSX.Element {
   return (
     <li className={`lineage-node${extinct ? ' lineage-node-extinct' : ''}`}>
       <div className="lineage-node-row">
-        <span className="lineage-id">{node.lineage.name}</span>
+        <span className="lineage-id">
+          {node.lineage.name}
+          <span className="lineage-id-ordinal"> {node.lineage.id}</span>
+        </span>
         <span className="lineage-meta">
           {extinct ? 'extinct' : `${node.population.toString()} probes`}
           {node.lineage.foundedAtTick > 0n

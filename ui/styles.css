@@ -218,6 +218,13 @@ body {
   font-size: 0.85rem;
 }
 
+.lineage-id-ordinal {
+  color: #6e7178;
+  font-weight: 400;
+  font-size: 0.78rem;
+  margin-left: 0.4rem;
+}
+
 .lineage-node-extinct .lineage-id,
 .lineage-node-extinct .lineage-meta {
   color: #555861;
