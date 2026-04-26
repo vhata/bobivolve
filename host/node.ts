@@ -39,10 +39,11 @@ import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 // 60 Hz target frame rate; a single heartbeat per UI frame at most.
 const DEFAULT_HEARTBEAT_HZ = 60;
 
-// Maximum sim ticks executed in a single run-loop slice. Caps the work the
-// loop does before yielding to the event queue, so commands can interleave
-// at high speeds without blocking the process.
-const MAX_TICKS_PER_SLICE = 1024;
+// Maximum sim ticks executed in a single run-loop inner slice between
+// budget / pause checks. Smaller slice = more responsive pause and
+// wall-clock-budget enforcement; the per-iteration loop overhead is
+// negligible next to BigInt-heavy tick work.
+const MAX_TICKS_PER_SLICE = 8;
 
 // Snapshot cadence — a snapshot lands every N ticks while the run advances.
 // ARCHITECTURE.md flags this as an open question with ~30,000 as the
@@ -318,12 +319,21 @@ export class NodeHost {
     }
   }
 
-  // Run synchronously until the sim reaches `untilTick` or until `paused` is
-  // set. Heartbeats fire on a wall-clock cadence measured between slices.
-  // Returns when the budget is exhausted.
-  runUntil(untilTick: bigint): void {
+  // Run synchronously until the sim reaches `untilTick`, or until `paused`
+  // is set, or until `wallClockBudgetMs` of wall-clock time has elapsed —
+  // whichever happens first. Heartbeats fire on a wall-clock cadence
+  // measured between slices.
+  //
+  // The wall-clock budget exists so the worker host's pulser can bound
+  // how long one pulse blocks the worker's event loop, regardless of how
+  // expensive a single tick has become at fat population. Without it, a
+  // pulse asking for "advance 64 ticks" can run for seconds when each
+  // tick is BigInt-heavy, and any incoming pause/setSpeed message sits
+  // in the postMessage queue for that whole duration.
+  runUntil(untilTick: bigint, wallClockBudgetMs?: number): void {
     if (this.state === null) return;
     this.resetHeartbeatBaseline();
+    const start = wallClockBudgetMs !== undefined ? performance.now() : 0;
     while (this.state.simTick < untilTick && !this.paused) {
       // One slice per loop iteration; heartbeat decision is between slices.
       const remaining = untilTick - this.state.simTick;
@@ -331,6 +341,9 @@ export class NodeHost {
         remaining > BigInt(MAX_TICKS_PER_SLICE) ? BigInt(MAX_TICKS_PER_SLICE) : remaining;
       this.advanceUnpaused(slice);
       this.maybeEmitHeartbeat();
+      if (wallClockBudgetMs !== undefined && performance.now() - start >= wallClockBudgetMs) {
+        break;
+      }
     }
     // Final heartbeat so the UI sees the terminal state of a finite run.
     if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
