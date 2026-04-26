@@ -275,6 +275,15 @@ test('lineage inspector renders firmware and identity for the default L0', async
   await expect(inspectorPanel).toContainText(/replicates/i);
 });
 
+test('lineage inspector surfaces the speciation rule', async ({ page }) => {
+  await page.goto('/');
+  const inspectorPanel = page.locator('.inspector-panel');
+  // The rule is exposed by the host on the drift telemetry message and
+  // rendered next to the Drift heading. R0 sets the divisor to 100, so
+  // the threshold reads as ±1.00%.
+  await expect(inspectorPanel).toContainText(/speciates beyond ±\d+\.\d+% of founder/);
+});
+
 test('Save creates a slot that appears in the saves list', async ({ page }) => {
   await page.goto('/');
   // Wait for some growth so the saved tick is meaningfully nonzero.

@@ -11,11 +11,14 @@
 // has uses (chasing outliers, debugging) but is a drill-down concern;
 // the dashboard's primary inspector is lineage-shaped.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
 
-const RANGE_PX = 220;
+const BAR_PX = 220;
+const SPARK_PX_W = 220;
+const SPARK_PX_H = 36;
+const SPARK_HISTORY = 60;
 const REFRESH_INTERVAL_MS = 1500;
 
 function describeReplicateRate(thresholdStr: string): string {
@@ -24,49 +27,114 @@ function describeReplicateRate(thresholdStr: string): string {
   return `replicates ≈ ${(probabilityPerTick * 100).toFixed(3)}% per tick`;
 }
 
-interface RangeViewProps {
+function thresholdPercent(divisorStr: string): number {
+  const divisor = Number(BigInt(divisorStr));
+  if (divisor <= 0) return 0;
+  return 100 / divisor;
+}
+
+function driftPercent(reference: bigint, value: bigint): number {
+  if (reference === 0n) return 0;
+  return Number(((value - reference) * 100_000n) / reference) / 1000;
+}
+
+// Map a value in [reference - threshold, reference + threshold] onto
+// [0, BAR_PX]. Values outside the threshold envelope are clamped to the
+// edges; in practice this should not happen, since a probe whose
+// firmware exceeds the threshold would have speciated into a new
+// lineage at birth.
+function projectBar(value: bigint, reference: bigint, thresholdSpan: bigint): number {
+  const lo = reference > thresholdSpan ? reference - thresholdSpan : 0n;
+  const hi = reference + thresholdSpan;
+  const range = hi - lo === 0n ? 1n : hi - lo;
+  const clamped = value < lo ? lo : value > hi ? hi : value;
+  return Number(((clamped - lo) * BigInt(BAR_PX * 1000)) / range) / 1000;
+}
+
+interface DriftBarProps {
   readonly reference: bigint;
   readonly min: bigint;
   readonly max: bigint;
   readonly mean: bigint;
+  readonly divisor: bigint;
 }
 
-function RangeView({ reference, min, max, mean }: RangeViewProps): React.JSX.Element {
-  // Span the bar over [reference - delta, reference + delta] where delta
-  // is max(|reference - min|, |max - reference|), clamped to a minimum
-  // so a no-drift lineage still renders sensibly.
-  const deltaLow = reference > min ? reference - min : 0n;
-  const deltaHigh = max > reference ? max - reference : 0n;
-  let span = deltaLow > deltaHigh ? deltaLow : deltaHigh;
-  if (span === 0n) span = reference / 100n + 1n;
-  const lo = reference > span ? reference - span : 0n;
-  const hi = reference + span;
-  const range = hi - lo === 0n ? 1n : hi - lo;
-
-  const project = (value: bigint): number => {
-    const clamped = value < lo ? lo : value > hi ? hi : value;
-    const num = (clamped - lo) * BigInt(RANGE_PX * 1000);
-    return Number(num / range) / 1000;
-  };
-
+function DriftBar({ reference, min, max, mean, divisor }: DriftBarProps): React.JSX.Element {
+  // Frame is fixed at the speciation envelope: [reference - reference/divisor,
+  // reference + reference/divisor]. The reference sits dead centre, the
+  // edges mark the threshold beyond which a probe would speciate.
+  const thresholdSpan = divisor > 0n ? reference / divisor : 1n;
+  const refX = projectBar(reference, reference, thresholdSpan);
+  const minX = projectBar(min, reference, thresholdSpan);
+  const maxX = projectBar(max, reference, thresholdSpan);
+  const meanX = projectBar(mean, reference, thresholdSpan);
   return (
     <svg
-      viewBox={`0 0 ${RANGE_PX.toString()} 24`}
+      viewBox={`0 0 ${BAR_PX.toString()} 24`}
       preserveAspectRatio="none"
-      className="drift-range"
+      className="drift-bar"
       role="img"
-      aria-label="Parameter range"
+      aria-label="Drift envelope: edges mark the speciation threshold; the bar is the live spread; the dot is the mean."
     >
-      <line x1={0} x2={RANGE_PX} y1={12} y2={12} className="drift-axis" />
-      <line x1={project(min)} x2={project(max)} y1={12} y2={12} className="drift-span" />
-      <line
-        x1={project(reference)}
-        x2={project(reference)}
-        y1={4}
-        y2={20}
-        className="drift-reference"
-      />
-      <circle cx={project(mean)} cy={12} r={3} className="drift-mean" />
+      {/* Speciation edges */}
+      <line x1={1} x2={1} y1={2} y2={22} className="drift-edge">
+        <title>speciation edge (low)</title>
+      </line>
+      <line x1={BAR_PX - 1} x2={BAR_PX - 1} y1={2} y2={22} className="drift-edge">
+        <title>speciation edge (high)</title>
+      </line>
+      {/* Axis */}
+      <line x1={0} x2={BAR_PX} y1={12} y2={12} className="drift-axis" />
+      {/* Live spread */}
+      <line x1={minX} x2={maxX} y1={12} y2={12} className="drift-span">
+        <title>live spread across extant members</title>
+      </line>
+      {/* Founder reference */}
+      <line x1={refX} x2={refX} y1={5} y2={19} className="drift-reference">
+        <title>founder firmware (reference)</title>
+      </line>
+      {/* Mean dot */}
+      <circle cx={meanX} cy={12} r={3} className="drift-mean">
+        <title>mean across extant members</title>
+      </circle>
+    </svg>
+  );
+}
+
+interface SparklineProps {
+  readonly samples: readonly number[];
+  readonly thresholdPct: number;
+}
+
+function Sparkline({ samples, thresholdPct }: SparklineProps): React.JSX.Element {
+  // Y axis: ±thresholdPct percent (the speciation envelope). Centre line
+  // is zero drift. Samples that exceed are clamped — same reasoning as
+  // the bar: out-of-envelope members would have speciated already.
+  const max = thresholdPct === 0 ? 1 : thresholdPct;
+  const points = samples.map((value, index) => {
+    const x = samples.length <= 1 ? SPARK_PX_W / 2 : (index / (samples.length - 1)) * SPARK_PX_W;
+    const clamped = Math.max(-max, Math.min(max, value));
+    const y = SPARK_PX_H / 2 - (clamped / max) * (SPARK_PX_H / 2 - 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  return (
+    <svg
+      viewBox={`0 0 ${SPARK_PX_W.toString()} ${SPARK_PX_H.toString()}`}
+      preserveAspectRatio="none"
+      className="drift-sparkline"
+      role="img"
+      aria-label="Mean drift over time"
+    >
+      <line x1={0} x2={SPARK_PX_W} y1={SPARK_PX_H / 2} y2={SPARK_PX_H / 2} className="spark-axis" />
+      {points.length >= 2 ? <polyline points={points.join(' ')} className="spark-line" /> : null}
+      {points.length >= 1 ? (
+        <circle
+          cx={Number(points[points.length - 1]?.split(',')[0] ?? 0)}
+          cy={Number(points[points.length - 1]?.split(',')[1] ?? 0)}
+          r={2}
+          className="spark-head"
+        />
+      ) : null}
     </svg>
   );
 }
@@ -77,27 +145,70 @@ interface ParamRowProps {
   readonly min: bigint;
   readonly max: bigint;
   readonly mean: bigint;
+  readonly divisor: bigint;
+  readonly samples: readonly number[];
+  readonly thresholdPct: number;
 }
 
-function ParamRow({ name, reference, min, max, mean }: ParamRowProps): React.JSX.Element {
-  const driftPct = reference === 0n ? 0 : Number(((mean - reference) * 10000n) / reference) / 100;
+function ParamRow({
+  name,
+  reference,
+  min,
+  max,
+  mean,
+  divisor,
+  samples,
+  thresholdPct,
+}: ParamRowProps): React.JSX.Element {
+  const drift = driftPercent(reference, mean);
   return (
     <div className="drift-row">
       <div className="drift-row-header">
         <span className="param-key">{name}</span>
-        <span className="drift-pct">
-          {driftPct >= 0 ? '+' : ''}
-          {driftPct.toFixed(2)}%
+        <span className="drift-pct" title="mean drift from founder firmware">
+          {drift >= 0 ? '+' : ''}
+          {drift.toFixed(2)}%
         </span>
       </div>
-      <RangeView reference={reference} min={min} max={max} mean={mean} />
-      <div className="drift-row-stats">
-        <span>min {min.toString()}</span>
-        <span>mean {mean.toString()}</span>
-        <span>max {max.toString()}</span>
-      </div>
+      <DriftBar reference={reference} min={min} max={max} mean={mean} divisor={divisor} />
+      <Sparkline samples={samples} thresholdPct={thresholdPct} />
     </div>
   );
+}
+
+function DriftLegend(): React.JSX.Element {
+  return (
+    <ul className="drift-legend" aria-label="Drift glyph legend">
+      <li>
+        <span className="legend-glyph legend-edge" aria-hidden="true" />
+        speciation edge
+      </li>
+      <li>
+        <span className="legend-glyph legend-reference" aria-hidden="true" />
+        founder
+      </li>
+      <li>
+        <span className="legend-glyph legend-span" aria-hidden="true" />
+        live spread
+      </li>
+      <li>
+        <span className="legend-glyph legend-mean" aria-hidden="true" />
+        mean
+      </li>
+    </ul>
+  );
+}
+
+// Sparkline samples keyed by `${lineageId}::${parameterKey}` so we can
+// keep a separate trace per parameter and reset cleanly when the user
+// switches lineages.
+type SparkBuffer = Map<string, number[]>;
+
+function pushSample(buffer: SparkBuffer, key: string, value: number): void {
+  const existing = buffer.get(key) ?? [];
+  const next = existing.length >= SPARK_HISTORY ? existing.slice(1) : existing.slice();
+  next.push(value);
+  buffer.set(key, next);
 }
 
 export function LineageInspectorPanel(): React.JSX.Element {
@@ -107,11 +218,19 @@ export function LineageInspectorPanel(): React.JSX.Element {
 
   const [drift, setDrift] = useState<DriftTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Per-lineage sparkline buffers. Held in a ref so a render does not
+  // discard the history; we surface a render counter to push samples
+  // through to the children.
+  const sparkBufferRef = useRef<SparkBuffer>(new Map());
+  const [sparkVersion, setSparkVersion] = useState(0);
 
   // Re-query on selection change and on a 1.5s interval so the drift
-  // numbers stay live as the sim advances.
+  // numbers stay live as the sim advances. Sparkline buffers reset when
+  // the selected lineage changes — different clade, different history.
   useEffect(() => {
     if (transport === null) return;
+    sparkBufferRef.current = new Map();
+    setSparkVersion((v) => v + 1);
     let cancelled = false;
     const fetch = async (): Promise<void> => {
       try {
@@ -120,9 +239,20 @@ export function LineageInspectorPanel(): React.JSX.Element {
           queryId: '',
           lineageId: selectedLineageId,
         })) as DriftTelemetryResult & { queryId: string };
-        if (!cancelled) {
-          setDrift(result.drift);
-          setError(null);
+        if (cancelled) return;
+        setDrift(result.drift);
+        setError(null);
+        if (result.drift !== null) {
+          for (const [paramKey, p] of Object.entries(result.drift.parameters)) {
+            const ref = BigInt(p.reference);
+            const mean = BigInt(p.mean);
+            pushSample(
+              sparkBufferRef.current,
+              `${selectedLineageId}::${paramKey}`,
+              driftPercent(ref, mean),
+            );
+          }
+          setSparkVersion((v) => v + 1);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -140,6 +270,9 @@ export function LineageInspectorPanel(): React.JSX.Element {
 
   const lineage = lineages.get(selectedLineageId);
   const referenceThreshold = drift?.parameters['replicate.threshold']?.reference ?? null;
+  const divisorStr = drift?.divergenceDivisor ?? null;
+  const thresholdPct = divisorStr === null ? 0 : thresholdPercent(divisorStr);
+  const isSolo = drift !== null && drift.population === 1n;
 
   return (
     <section className="panel inspector-panel">
@@ -185,17 +318,41 @@ export function LineageInspectorPanel(): React.JSX.Element {
             </dl>
             {drift !== null && Object.keys(drift.parameters).length > 0 ? (
               <div className="lineage-drift">
-                <h3 className="subhead">Drift</h3>
-                {Object.entries(drift.parameters).map(([name, p]) => (
-                  <ParamRow
-                    key={name}
-                    name={name}
-                    reference={BigInt(p.reference)}
-                    min={BigInt(p.min)}
-                    max={BigInt(p.max)}
-                    mean={BigInt(p.mean)}
-                  />
-                ))}
+                <div className="drift-heading">
+                  <h3 className="subhead">Drift</h3>
+                  <span className="drift-rule" title="speciation rule">
+                    speciates beyond ±{thresholdPct.toFixed(2)}% of founder
+                  </span>
+                </div>
+                {isSolo ? (
+                  <p className="panel-empty drift-empty">
+                    no descendants yet — drift will appear as the lineage replicates.
+                  </p>
+                ) : (
+                  <>
+                    <DriftLegend />
+                    {Object.entries(drift.parameters).map(([name, p]) => {
+                      const key = `${selectedLineageId}::${name}`;
+                      // sparkVersion in the closure keeps the lookup
+                      // fresh every poll without needing buffer state.
+                      void sparkVersion;
+                      const samples = sparkBufferRef.current.get(key) ?? [];
+                      return (
+                        <ParamRow
+                          key={name}
+                          name={name}
+                          reference={BigInt(p.reference)}
+                          min={BigInt(p.min)}
+                          max={BigInt(p.max)}
+                          mean={BigInt(p.mean)}
+                          divisor={BigInt(drift.divergenceDivisor)}
+                          samples={samples}
+                          thresholdPct={thresholdPct}
+                        />
+                      );
+                    })}
+                  </>
+                )}
               </div>
             ) : null}
           </>
