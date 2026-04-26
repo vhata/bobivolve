@@ -281,9 +281,11 @@ test('every panel and control is visibly rendered', async ({ page }) => {
 
 test('probe inspector returns firmware for P0', async ({ page }) => {
   await page.goto('/');
-  // P0 exists from tick 0, no need to wait.
+  // P0 exists from tick 0; the inspector auto-inspects on mount, so the
+  // firmware description should appear without an explicit Inspect click.
   const inspectorPanel = page.locator('.inspector-panel');
-  await inspectorPanel.getByRole('button', { name: 'Inspect' }).click();
   await expect(inspectorPanel).toContainText(/replicates/i);
-  await expect(inspectorPanel).toContainText(/threshold/);
+  // Identity fields populate too.
+  await expect(inspectorPanel).toContainText('P0');
+  await expect(inspectorPanel).toContainText('L0');
 });

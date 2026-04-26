@@ -294,7 +294,7 @@ body {
 
 .inspector-detail > div {
   display: grid;
-  grid-template-columns: 7rem 1fr;
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0.5rem;
 }
 
@@ -307,6 +307,11 @@ body {
 
 .inspector-detail dd {
   margin: 0;
+  min-width: 0;
+  /* Long values like u64 thresholds shouldn't push the layout — wrap
+     across lines instead. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .firmware-list,
@@ -314,6 +319,8 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  font-size: 0.78rem;
+  color: #8a8c93;
 }
 
 .firmware-list > li {
@@ -337,9 +344,14 @@ body {
 }
 
 .directive-params > li {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0.5rem;
+}
+
+.directive-params .param-value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .param-key {

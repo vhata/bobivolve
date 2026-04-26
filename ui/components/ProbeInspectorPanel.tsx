@@ -6,7 +6,7 @@
 // never pushed"), so the panel queries on demand and holds the result in
 // local component state.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ProbeInspectorDirective,
   ProbeInspectorProbe,
@@ -36,7 +36,7 @@ export function ProbeInspectorPanel(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [probe, setProbe] = useState<ProbeInspectorProbe | null | undefined>(undefined);
 
-  async function inspect(): Promise<void> {
+  async function runInspect(id: string): Promise<void> {
     if (transport === null) return;
     setPending(true);
     setError(null);
@@ -44,7 +44,7 @@ export function ProbeInspectorPanel(): React.JSX.Element {
       const result = (await transport.query({
         kind: 'probeInspector',
         queryId: '',
-        probeId,
+        probeId: id,
       })) as ProbeInspectorResult & { queryId: string };
       setProbe(result.probe);
     } catch (e) {
@@ -53,6 +53,19 @@ export function ProbeInspectorPanel(): React.JSX.Element {
       setPending(false);
     }
   }
+
+  // Auto-inspect the default P0 once a transport is attached so the
+  // panel arrives with content rather than an empty-state prompt. The
+  // input retains focus on user-driven changes — this only fires once
+  // per (transport, current probeId) initial mount.
+  // Auto-inspect P0 once a transport is attached so the panel arrives
+  // with content rather than an empty-state prompt. Typing in the input
+  // doesn't auto-query — that would fire one query per keystroke;
+  // explicit Inspect is the user-driven request.
+  useEffect(() => {
+    if (transport === null) return;
+    void runInspect('P0');
+  }, [transport]);
 
   return (
     <section className="panel inspector-panel">
@@ -64,7 +77,7 @@ export function ProbeInspectorPanel(): React.JSX.Element {
           className="inspector-form"
           onSubmit={(e) => {
             e.preventDefault();
-            void inspect();
+            void runInspect(probeId);
           }}
         >
           <input
@@ -106,14 +119,6 @@ export function ProbeInspectorPanel(): React.JSX.Element {
                   {probe.firmware.map((directive, index) => (
                     <li key={index}>
                       <div className="directive-summary">{describeDirective(directive)}</div>
-                      <ul className="directive-params">
-                        {Object.entries(directive.params).map(([k, v]) => (
-                          <li key={k}>
-                            <span className="param-key">{k}</span>
-                            <span className="param-value">{v}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </li>
                   ))}
                 </ul>
