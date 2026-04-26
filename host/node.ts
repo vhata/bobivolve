@@ -109,7 +109,9 @@ export class NodeHost {
   // snapshots land at snapshotCadenceTicks. None of this fires when
   // persistence is undefined.
   private readonly persistence: PersistenceOptions | undefined;
-  private readonly logWriter: EventLogWriter | null;
+  // Re-created on each newRun so the previous run's seq counter doesn't
+  // bleed into the new log.
+  private logWriter: EventLogWriter | null;
   private readonly snapshotCadenceTicks: bigint;
   private lastSnapAtTick: SimTick = SimTick(0n);
   // Serialised async work. Save and Load enqueue here so they execute in
@@ -268,10 +270,18 @@ export class NodeHost {
   // commands are acknowledged via commandAck once their effect has been
   // applied to host state.
   send(cmd: Command): void {
-    // Log every command except Load: a logged Load would fork the timeline
-    // every time the run is re-loaded later. Save IS logged — it marks a
-    // checkpoint in the run history that future inspection should see.
-    if (!this.replaying && this.logWriter !== null && cmd.kind !== 'load') {
+    // Log every command except Load and newRun:
+    //  - Load is a meta-control that forks the timeline; logging it would
+    //    cause a circular reference on future loads.
+    //  - newRun is logged inside handleNewRun, after the writer is reset
+    //    for the new run, so the cmd lands in the right slot.
+    // Save IS logged — it marks a checkpoint in the run history.
+    if (
+      !this.replaying &&
+      this.logWriter !== null &&
+      cmd.kind !== 'load' &&
+      cmd.kind !== 'newRun'
+    ) {
       this.logWriter.appendCommand(this.state?.simTick ?? 0n, cmd);
     }
     switch (cmd.kind) {
@@ -337,10 +347,32 @@ export class NodeHost {
   // ── command handlers ───────────────────────────────────────────────────────
 
   private handleNewRun(commandId: string, seed: bigint): void {
+    // newRun starts a fresh run. If persistence is configured, the previous
+    // run's log is deleted so the slot doesn't accumulate multiple newRun
+    // entries (which would make Load replay them in sequence). Snapshot
+    // files become orphans; a future reaper can sweep them, but they are
+    // no longer referenced once the snap log entries are gone.
+    const persistence = this.persistence;
+    if (persistence !== undefined) {
+      const storage = persistence.storage;
+      const key = logKey(persistence.runId);
+      this.logWriter = new EventLogWriter(storage, key);
+      this.lastSnapAtTick = SimTick(0n);
+      this.enqueue(async () => {
+        await storage.delete(key);
+      });
+    }
+
     this.state = createInitialState(Seed(seed));
     this.speed = 1;
     this.paused = false;
     this.resetHeartbeatBaseline();
+
+    // Log the newRun command into the freshly-reset writer so the
+    // canonical (seed, command-log) description survives.
+    if (!this.replaying && this.logWriter !== null) {
+      this.logWriter.appendCommand(0n, { kind: 'newRun', commandId, seed });
+    }
     this.ack(commandId);
   }
 
