@@ -78,3 +78,9 @@ Below that threshold, merge overhead consumes the gain.
 Good candidates: independent sim mechanics once the spine is in place; separate UI panels; cross-cutting refactors that do not conflict with active feature work; documentation polish during implementation; the code review of a finished chunk while the next chunk begins.
 
 Bad candidates: anything that touches the protocol (everything depends on it); foundational scaffolding; work whose boundaries are not yet clear.
+
+### Integration
+
+Worktree-agent output is **rebased** onto `main`, never merged. Each agent must produce commits that are self-contained — touching only files outside the main-thread work — so integration is a fast-forward or a clean cherry-pick. Merge commits are forbidden in this repository. If a rebase produces conflicts, the conflict is fixed in the agent branch (or the agent is re-run against current `main`); merge commits are not used to paper over the friction.
+
+The boundary discipline that makes rebase clean is the same discipline that makes the work parallel-safe: if two branches touch the same file, they should not have been parallel in the first place.
