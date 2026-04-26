@@ -74,9 +74,9 @@ describe('EventLogWriter / EventLogReader', () => {
 
   it('writes entries and reads them back in order', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
-    await writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
-    await writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c1' });
-    await writer.appendEvent(190n, {
+    writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c1' });
+    writer.appendEvent(190n, {
       kind: 'replication',
       simTick: 190n,
       parentProbeId: 'P0',
@@ -84,6 +84,7 @@ describe('EventLogWriter / EventLogReader', () => {
       lineageId: 'L0',
       mutated: false,
     });
+    await writer.flush();
 
     const reader = new EventLogReader(storage, 'log.ndjson');
     const entries = await reader.readAll();
@@ -95,10 +96,11 @@ describe('EventLogWriter / EventLogReader', () => {
 
   it('assigns seq starting at 0 within each tick, resetting on tick change', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
-    await writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
-    await writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c1' });
-    await writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c2' });
-    await writer.appendEvent(5n, { kind: 'commandAck', simTick: 5n, commandId: 'c3' });
+    writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c1' });
+    writer.appendEvent(0n, { kind: 'commandAck', simTick: 0n, commandId: 'c2' });
+    writer.appendEvent(5n, { kind: 'commandAck', simTick: 5n, commandId: 'c3' });
+    await writer.flush();
 
     const reader = new EventLogReader(storage, 'log.ndjson');
     const entries = await reader.readAll();
@@ -112,10 +114,11 @@ describe('EventLogWriter / EventLogReader', () => {
 
   it('latestSnap returns the snap with the highest tick', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
-    await writer.appendSnap(0n, 'snapshots/0.snap');
-    await writer.appendEvent(50n, { kind: 'commandAck', simTick: 50n, commandId: 'x' });
-    await writer.appendSnap(30000n, 'snapshots/30000.snap');
-    await writer.appendEvent(31000n, { kind: 'commandAck', simTick: 31000n, commandId: 'y' });
+    writer.appendSnap(0n, 'snapshots/0.snap');
+    writer.appendEvent(50n, { kind: 'commandAck', simTick: 50n, commandId: 'x' });
+    writer.appendSnap(30000n, 'snapshots/30000.snap');
+    writer.appendEvent(31000n, { kind: 'commandAck', simTick: 31000n, commandId: 'y' });
+    await writer.flush();
 
     const reader = new EventLogReader(storage, 'log.ndjson');
     const latest = await reader.latestSnap();
@@ -126,17 +129,19 @@ describe('EventLogWriter / EventLogReader', () => {
 
   it('latestSnap returns null when no snap entries exist', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
-    await writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    await writer.flush();
     const reader = new EventLogReader(storage, 'log.ndjson');
     expect(await reader.latestSnap()).toBeNull();
   });
 
   it('tailAfter returns only entries strictly after (tick, seq)', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
-    await writer.appendSnap(100n, 'snapshots/100.snap');
-    await writer.appendEvent(100n, { kind: 'commandAck', simTick: 100n, commandId: 'a' });
-    await writer.appendCommand(200n, { kind: 'pause', commandId: 'b' });
-    await writer.appendCommand(300n, { kind: 'resume', commandId: 'c' });
+    writer.appendSnap(100n, 'snapshots/100.snap');
+    writer.appendEvent(100n, { kind: 'commandAck', simTick: 100n, commandId: 'a' });
+    writer.appendCommand(200n, { kind: 'pause', commandId: 'b' });
+    writer.appendCommand(300n, { kind: 'resume', commandId: 'c' });
+    await writer.flush();
 
     const reader = new EventLogReader(storage, 'log.ndjson');
     const tail = await reader.tailAfter(100n, 0);
