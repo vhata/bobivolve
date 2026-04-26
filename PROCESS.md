@@ -10,11 +10,12 @@ Companion to `SPEC.md` and `ARCHITECTURE.md`. Captures development discipline. T
 
 ## Living documents
 
-Three documents are updated *in the same commit as the change they describe*. A commit that alters player-visible behaviour, or that completes a tracked TODO, without touching the relevant document is a bug to be amended.
+Four documents are updated *in the same commit as the change they describe*. A commit that alters player-visible behaviour, or that completes a tracked TODO, without touching the relevant document is a bug to be amended.
 
 - **`README.md`** — what the game is, how to run it, current release, links to `SPEC.md` and `ARCHITECTURE.md` for the technically curious. Lay-person tone, no jargon. Updated when player-visible behaviour changes.
 - **`FEATURES.md`** — grouped by release. Each entry one line, marked ✓ shipped or ⋯ in progress. Lay-person legible. Updated when a feature changes status.
 - **`TODO.md`** — flat list. Each entry tagged with `#release` and `#area`. Done items deleted, not struck through. Updated when an item is added, completed, or abandoned.
+- **`ACCEPTANCE.md`** — per-release acceptance gates. A release tag (`r0-petri-dish`, `r1-scarcity`, ...) only lands on `main` once the matching section's criteria are all marked shipped. The list for a release is fleshed out when work on that release begins; we don't write speculative criteria for far-off releases.
 
 ## Tags
 
