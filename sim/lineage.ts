@@ -18,6 +18,10 @@ import type { LineageId, ProbeId, SimTick } from './types.js';
 
 export interface Lineage {
   readonly id: LineageId;
+  // Lay-person legible name from sim/lineage-names.ts. Distinct from id
+  // (which stays the ordinal Lk for stable referencing); a UI may
+  // display either.
+  readonly name: string;
   readonly founderProbeId: ProbeId;
   // null for the founding lineage; otherwise the lineage that speciated to
   // produce this one. Lets the dashboard render a tree.

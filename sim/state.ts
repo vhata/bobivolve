@@ -1,5 +1,6 @@
 import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import type { Lineage } from './lineage.js';
+import { lineageName } from './lineage-names.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
@@ -54,6 +55,7 @@ export function createInitialState(
   };
   const founderLineage: Lineage = {
     id: founderLineageId,
+    name: lineageName(0n),
     founderProbeId,
     parentLineageId: null,
     referenceFirmware: founderFirmware,
