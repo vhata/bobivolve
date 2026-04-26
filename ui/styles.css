@@ -103,3 +103,63 @@ body {
 .lineage-count {
   color: #e8e9ed;
 }
+
+.controls-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.control-button {
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid #2c2f36;
+  background: #1c1f25;
+  color: #e8e9ed;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 60ms ease;
+}
+
+.control-button:hover {
+  background: #232730;
+}
+
+.control-button[aria-pressed='true'] {
+  background: #2c4a8a;
+  border-color: #3a5fa8;
+}
+
+.speed-group {
+  display: inline-flex;
+  border: 1px solid #2c2f36;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.speed-button {
+  padding: 0.4rem 0.65rem;
+  border: 0;
+  border-right: 1px solid #2c2f36;
+  background: #1c1f25;
+  color: #b6b8be;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 60ms ease;
+}
+
+.speed-button:last-child {
+  border-right: 0;
+}
+
+.speed-button:hover {
+  background: #232730;
+}
+
+.speed-button-active {
+  background: #2c4a8a;
+  color: #ffffff;
+}
