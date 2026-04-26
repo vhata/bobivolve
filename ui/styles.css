@@ -391,3 +391,51 @@ body {
   font-variant-numeric: tabular-nums;
   margin-top: 0.2rem;
 }
+
+.timeline-panel {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.timeline-svg {
+  display: block;
+  width: 100%;
+  height: 36px;
+  background: #1c1f25;
+  border-radius: 4px;
+  margin-bottom: 0.6rem;
+}
+
+.timeline-axis {
+  stroke: #2c2f36;
+  stroke-width: 1;
+}
+
+.timeline-marker {
+  stroke: #ff7d3f;
+  stroke-width: 2;
+}
+
+.timeline-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-list li {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.timeline-tick {
+  color: #6e7178;
+  min-width: 6rem;
+}
+
+.timeline-description {
+  color: #e8e9ed;
+}
