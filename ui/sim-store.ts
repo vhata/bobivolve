@@ -83,6 +83,10 @@ export interface SimStoreState {
   readonly autoPauseTriggers: ReadonlySet<string>;
   readonly lastAutoPauseTrigger: string | null;
   readonly setAutoPauseTriggers: (triggers: ReadonlySet<string>) => void;
+  // Tick at which the most recent Save command was acknowledged by the
+  // host. Cleared when a fresh Save dispatches; the RunPanel uses this
+  // to render a "saved at tick N" indicator.
+  readonly lastSaveAtTick: bigint | null;
   // The Lineage Inspector reads this; clicking a lineage in the tree
   // updates it. Defaults to L0 once the founder lineage is seeded.
   readonly selectedLineageId: string;
@@ -232,9 +236,14 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // optimistic state set when the command was sent stays — the
         // ack just promotes it from "projected" to "confirmed".
         const pending = new Map(get().pendingCommands);
-        if (pending.has(event.commandId)) {
+        const ackedEntry = pending.get(event.commandId);
+        if (ackedEntry !== undefined) {
           pending.delete(event.commandId);
-          set({ pendingCommands: pending });
+          if (ackedEntry.kind === 'save') {
+            set({ pendingCommands: pending, lastSaveAtTick: event.simTick });
+          } else {
+            set({ pendingCommands: pending });
+          }
         }
         return;
       }
@@ -278,6 +287,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     autoPauseTriggers: new Set(),
     lastAutoPauseTrigger: null,
     selectedLineageId: 'L0',
+    lastSaveAtTick: null,
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -390,7 +400,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const commandId = mintCommandId('ui-save');
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, { commandId, kind: 'save', issuedAtMs: Date.now(), retryCount: 0 });
-      set({ pendingCommands: pending });
+      // Clear any prior "saved at" indicator while a fresh save is in
+      // flight; the ack handler will set it again.
+      set({ pendingCommands: pending, lastSaveAtTick: null });
       transport.send({ kind: 'save', commandId, slot });
     },
     load: (slot = 'default') => {
@@ -399,7 +411,22 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const commandId = mintCommandId('ui-load');
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now(), retryCount: 0 });
-      set({ pendingCommands: pending });
+      // Reset projected state — after a Load, the sim is at a different
+      // tick with a different lineage tree and population. Clearing here
+      // means the heartbeat the host emits at end of Load (and any
+      // events on resume) repopulate from a clean baseline; without it,
+      // the dashboard would show stale data from the pre-Load run.
+      set({
+        pendingCommands: pending,
+        simTick: 0n,
+        populationTotal: 0n,
+        populationByLineage: new Map(),
+        populationHistory: [],
+        lineages: freshLineages(),
+        paused: true,
+        actualSpeed: 0,
+        selectedLineageId: 'L0',
+      });
       transport.send({ kind: 'load', commandId, slot });
     },
     selectLineage: (id) => {

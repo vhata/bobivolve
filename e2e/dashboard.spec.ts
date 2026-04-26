@@ -275,6 +275,52 @@ test('lineage inspector renders firmware and identity for the default L0', async
   await expect(inspectorPanel).toContainText(/replicates/i);
 });
 
+test('Save shows a "saved at tick" indicator after the host acks', async ({ page }) => {
+  await page.goto('/');
+  // Wait for some growth so the saved tick is meaningfully nonzero.
+  await expect
+    .poll(
+      async () => {
+        const text = (await page.locator('.population-total').textContent()) ?? '';
+        return readNumeric(text);
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(2);
+
+  await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
+  // The indicator appears after the host's ack round-trips.
+  await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/, {
+    timeout: 5_000,
+  });
+});
+
+test('Load restores state and pauses; UI reflects it', async ({ page }) => {
+  await page.goto('/');
+  // Let some growth happen so a Save captures something meaningful.
+  await expect
+    .poll(
+      async () => {
+        const text = (await page.locator('.population-total').textContent()) ?? '';
+        return readNumeric(text);
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(2);
+
+  await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.run-status')).toContainText(/saved at tick/, { timeout: 5_000 });
+
+  // Let the run advance further so a Load should visibly snap back.
+  await page.waitForTimeout(2_000);
+  await page.locator('.run-panel').getByRole('button', { name: 'Load' }).click();
+
+  // After Load the host pauses; the UI's Resume button should appear.
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 5_000 });
+  // The post-Load heartbeat repopulates the population panel — non-empty.
+  await expect(page.locator('.population-total')).toContainText(/\d+ probes/);
+});
+
 test('clicking a lineage in the tree selects it in the inspector', async ({ page }) => {
   await page.goto('/');
   // L0 is the only lineage on a fresh run; clicking it should mark it

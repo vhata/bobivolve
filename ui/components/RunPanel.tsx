@@ -25,6 +25,7 @@ export function RunPanel(): React.JSX.Element {
   const save = useSimStore((s) => s.save);
   const load = useSimStore((s) => s.load);
   const seed = useSimStore((s) => s.seed);
+  const lastSaveAtTick = useSimStore((s) => s.lastSaveAtTick);
 
   const [draft, setDraft] = useState<string>(seed === null ? '42' : seed.toString());
   const parsed = parseSeed(draft);
@@ -78,6 +79,11 @@ export function RunPanel(): React.JSX.Element {
             Load
           </button>
         </div>
+        {lastSaveAtTick !== null ? (
+          <p className="run-status" role="status">
+            saved at tick {lastSaveAtTick.toString()}
+          </p>
+        ) : null}
       </div>
     </section>
   );
