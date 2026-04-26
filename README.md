@@ -6,7 +6,7 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 
 ## Status
 
-Pre-Release 0. The simulation core, the persistence layer, and the dashboard shell are in place; player-facing panels are landing one at a time.
+Approaching Release 0. The simulation core, the persistence layer, and a working dashboard with seven panels are in place. Two R0 polish items remain — additional mutation kinds and forensic state-rewind scrub — see [`TODO.md`](TODO.md).
 
 ## How to run
 
@@ -17,10 +17,19 @@ pnpm install
 pnpm dev
 ```
 
+A run starts at seed 42 by default. The Run panel changes the seed; the Controls panel pauses, resumes, and toggles speed (1×, 4×, 16×, 64×). Save and Load persist the current run to the browser's Origin Private File System.
+
 A headless run that emits NDJSON `SimEvent`s to stdout:
 
 ```
 pnpm sim --seed 42 --ticks 1000 --no-heartbeat
+```
+
+Headless save and resume:
+
+```
+pnpm sim --seed 42 --ticks 30001 --save-dir ./saves --run-id demo --no-heartbeat
+pnpm sim --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
 ```
 
 ## For the technically curious
