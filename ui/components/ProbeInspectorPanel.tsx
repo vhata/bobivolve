@@ -7,8 +7,27 @@
 // local component state.
 
 import { useState } from 'react';
-import type { ProbeInspectorProbe, ProbeInspectorResult } from '../../protocol/types.js';
+import type {
+  ProbeInspectorDirective,
+  ProbeInspectorProbe,
+  ProbeInspectorResult,
+} from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
+
+// Per-directive-kind interpretation of raw u64 parameter strings into
+// something readable. Unknown directives fall back to "key: value".
+function describeDirective(directive: ProbeInspectorDirective): string {
+  if (directive.kind === 'replicate') {
+    const t = BigInt(directive.params['threshold'] ?? '0');
+    // Probability per tick = threshold / 2^64. Render as a percentage
+    // with three significant figures.
+    const probabilityPerTick = Number(t) / 2 ** 64;
+    return `replicates ≈ ${(probabilityPerTick * 100).toFixed(3)}% per tick`;
+  }
+  return Object.entries(directive.params)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+}
 
 export function ProbeInspectorPanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
@@ -86,7 +105,7 @@ export function ProbeInspectorPanel(): React.JSX.Element {
                 <ul className="firmware-list">
                   {probe.firmware.map((directive, index) => (
                     <li key={index}>
-                      <span className="directive-kind">{directive.kind}</span>
+                      <div className="directive-summary">{describeDirective(directive)}</div>
                       <ul className="directive-params">
                         {Object.entries(directive.params).map(([k, v]) => (
                           <li key={k}>

@@ -45,6 +45,10 @@ body {
   border: 1px solid #23252b;
   border-radius: 8px;
   padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  max-height: 360px;
+  min-height: 0;
 }
 
 .panel-header {
@@ -52,6 +56,16 @@ body {
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Subtle scrollbar so it stops being a layout grenade. */
+  scrollbar-width: thin;
+  scrollbar-color: #2c2f36 transparent;
 }
 
 .panel-header h2 {
@@ -299,6 +313,12 @@ body {
 .directive-kind {
   font-weight: 600;
   color: #b6b8be;
+}
+
+.directive-summary {
+  font-weight: 500;
+  color: #e8e9ed;
+  font-size: 0.9rem;
 }
 
 .directive-params {

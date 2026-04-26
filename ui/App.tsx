@@ -23,11 +23,11 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const transport = new WorkerTransport(new SimWorker());
     attach(transport);
-    // Soft default: kick off a 16× run at seed=42 so a freshly-loaded
-    // page is visibly evolving within seconds. The user can override via
-    // the Run panel (seed) and Controls panel (speed).
+    // Soft default: kick off a 4× run at seed=42. Visible growth without
+    // immediately overwhelming the layout; the user can speed up via the
+    // Controls panel.
     startRun(42n);
-    setSpeed(16);
+    setSpeed(4);
     return () => {
       detach();
     };
