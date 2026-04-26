@@ -82,9 +82,13 @@ export function parseEntry(line: string): LogEntry {
   return JSON.parse(trimmed, bigintReviver) as LogEntry;
 }
 
-// Append-only writer over a Storage key. The writer keeps a per-tick
-// sequence counter so callers don't have to thread it through.
+// Append-only writer over a Storage key. Buffers entries in memory; flush()
+// drains the buffer to storage in a single append. Sync appends compose with
+// the NodeHost run-loop, which is itself synchronous; the host calls flush()
+// at points where durability matters (after a Save command, before close,
+// during Load setup).
 export class EventLogWriter {
+  private buffer: LogEntry[] = [];
   private currentTick: bigint | null = null;
   private nextSeq = 0;
 
@@ -93,26 +97,38 @@ export class EventLogWriter {
     private readonly key: string,
   ) {}
 
-  async appendCommand(tick: bigint, command: Command): Promise<void> {
-    const seq = this.advanceSeq(tick);
-    await this.appendBytes({ type: 'cmd', tick, seq, command });
+  appendCommand(tick: bigint, command: Command): void {
+    this.buffer.push({ type: 'cmd', tick, seq: this.advanceSeq(tick), command });
   }
 
-  async appendEvent(tick: bigint, event: SimEvent): Promise<void> {
-    const seq = this.advanceSeq(tick);
-    await this.appendBytes({ type: 'ev', tick, seq, event });
+  appendEvent(tick: bigint, event: SimEvent): void {
+    this.buffer.push({ type: 'ev', tick, seq: this.advanceSeq(tick), event });
   }
 
-  async appendSnap(tick: bigint, snapshotKey: string): Promise<void> {
-    const seq = this.advanceSeq(tick);
-    await this.appendBytes({ type: 'snap', tick, seq, snapshotKey });
+  appendSnap(tick: bigint, snapshotKey: string): void {
+    this.buffer.push({ type: 'snap', tick, seq: this.advanceSeq(tick), snapshotKey });
+  }
+
+  // Drain all buffered entries to storage. Idempotent on an empty buffer.
+  async flush(): Promise<void> {
+    if (this.buffer.length === 0) return;
+    const text = this.buffer.map(serializeEntry).join('');
+    this.buffer = [];
+    await this.storage.append(this.key, new TextEncoder().encode(text));
   }
 
   // Force the writer to use a specific (tick, seq) baseline. Used by load
-  // when continuing an existing log.
+  // when continuing an existing log so future entries don't collide with
+  // previously-written ones at the same tick.
   resumeAt(tick: bigint, nextSeq: number): void {
     this.currentTick = tick;
     this.nextSeq = nextSeq;
+  }
+
+  // Number of entries currently buffered but not yet flushed. Surface for
+  // tests; not part of the public contract.
+  pendingCount(): number {
+    return this.buffer.length;
   }
 
   private advanceSeq(tick: bigint): number {
@@ -123,11 +139,6 @@ export class EventLogWriter {
     const seq = this.nextSeq;
     this.nextSeq += 1;
     return seq;
-  }
-
-  private async appendBytes(entry: LogEntry): Promise<void> {
-    const text = serializeEntry(entry);
-    await this.storage.append(this.key, new TextEncoder().encode(text));
   }
 }
 
