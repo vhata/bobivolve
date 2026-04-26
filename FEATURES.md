@@ -6,4 +6,6 @@ Updated in the same commit as any feature whose status changes.
 
 ## Release 0 — Petri Dish
 
-_Nothing in progress yet._
+- ⋯ Probes — entities with identity, lineage, and firmware
+- ⋯ Directive stacks — for now, just one directive kind: replicate
+- ⋯ Replication — children inherit their parent's firmware (mutation pending)
