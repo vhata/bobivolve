@@ -37,6 +37,7 @@
     "ui/**/*.ts",
     "ui/**/*.tsx",
     "test/**/*.ts",
+    "e2e/**/*.ts",
     "protocol/**/*.ts",
     "*.config.ts",
     "*.config.mjs"

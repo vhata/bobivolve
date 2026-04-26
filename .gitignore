@@ -34,6 +34,11 @@ pnpm-debug.log*
 # Worktrees created by background agents — never tracked.
 .claude/worktrees/
 
+# Playwright test artefacts
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Editors / OS
 .DS_Store
 Thumbs.db
