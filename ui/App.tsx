@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { ControlsPanel } from './components/ControlsPanel.js';
 import { DriftTelemetryPanel } from './components/DriftTelemetryPanel.js';
+import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { ProbeInspectorPanel } from './components/ProbeInspectorPanel.js';
@@ -42,6 +43,7 @@ export function App(): React.JSX.Element {
         <LineageTreePanel />
         <ProbeInspectorPanel />
         <DriftTelemetryPanel />
+        <EventsTimelinePanel />
       </main>
     </div>
   );

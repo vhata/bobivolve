@@ -18,6 +18,5 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Mutation: directive loss / gain (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
 - Lineage names: lay-person legible (currently ordinal `Lk`) — ARCHITECTURE.md open question, deferred #r0 #sim
 - Population graphs by lineage (visual chart, not just count list) #r0 #ui
-- Drift telemetry (rate of change per parameter, per lineage) #r0 #ui
 - Forensic replay: scrubable timeline #r0 #ui
 - Auto-pause trigger configuration UI #r0 #ui

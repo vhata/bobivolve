@@ -14,6 +14,7 @@
 /// <reference lib="webworker" />
 
 import { NodeHost } from './node.js';
+import { OPFSStorage } from './storage-opfs.js';
 import type { Command, Query, QueryResult, SimEvent } from '../protocol/types.js';
 
 interface CommandMessage {
@@ -41,8 +42,18 @@ type IncomingMessage = CommandMessage | QueryMessage;
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
+// Default runId until the UI exposes a Start Run dialog with a slot
+// picker. All sessions write to the same slot for now; reloading the page
+// without explicit Save still loses the in-memory tail past the latest
+// snap, which is fine for R0 dashboard demo purposes.
+const DEFAULT_RUN_ID = 'default';
+
 const host = new NodeHost({
   heartbeatHz: 60,
+  persistence: {
+    storage: new OPFSStorage({ root: 'bobivolve' }),
+    runId: DEFAULT_RUN_ID,
+  },
 });
 
 host.subscribe((event: SimEvent) => {
