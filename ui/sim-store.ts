@@ -19,10 +19,20 @@ export interface LineagePopulation {
 
 export type SimSpeed = 1 | 4 | 16 | 64;
 
+export interface LineageNode {
+  readonly id: string;
+  readonly name: string;
+  // null for the founding lineage; otherwise the lineage that speciated
+  // to produce this one.
+  readonly parentId: string | null;
+  readonly foundedAtTick: bigint;
+}
+
 export interface SimStoreState {
   readonly simTick: bigint;
   readonly populationTotal: bigint;
   readonly populationByLineage: ReadonlyMap<string, bigint>;
+  readonly lineages: ReadonlyMap<string, LineageNode>;
   readonly seed: bigint | null;
   readonly speed: SimSpeed;
   readonly paused: boolean;
@@ -34,6 +44,13 @@ export interface SimStoreState {
   readonly pause: () => void;
   readonly resume: () => void;
   readonly setSpeed: (speed: SimSpeed) => void;
+}
+
+// L0 is the founding lineage — every fresh run starts with it. The sim
+// emits a Speciation event for every subsequent lineage but never one for
+// L0; the store seeds it implicitly.
+function freshLineages(): Map<string, LineageNode> {
+  return new Map([['L0', { id: 'L0', name: 'L0', parentId: null, foundedAtTick: 0n }]]);
 }
 
 export const useSimStore = create<SimStoreState>((set, get) => {
@@ -59,7 +76,17 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         });
         return;
       }
-      case 'speciation':
+      case 'speciation': {
+        const lineages = new Map(get().lineages);
+        lineages.set(event.newLineageId, {
+          id: event.newLineageId,
+          name: event.newLineageName,
+          parentId: event.parentLineageId,
+          foundedAtTick: event.simTick,
+        });
+        set({ simTick: event.simTick, lineages });
+        return;
+      }
       case 'extinction':
       case 'death':
       case 'autoPaused':
@@ -76,6 +103,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     simTick: 0n,
     populationTotal: 0n,
     populationByLineage: new Map(),
+    lineages: freshLineages(),
     seed: null,
     speed: 1,
     paused: false,
@@ -110,6 +138,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
+        lineages: freshLineages(),
         paused: false,
         actualSpeed: 0,
       });
