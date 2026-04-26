@@ -11,4 +11,7 @@ Updated in the same commit as any feature whose status changes.
 - ⋯ Replication — children inherit (and may drift from) their parent's firmware
 - ⋯ Mutation — parameter drift on inherited firmware (priority swap and directive loss/gain still pending)
 - ⋯ Lineage clustering — descendants whose firmware drifts past the divergence threshold found a new lineage; the lineage tree records who descended from whom
-- ⋯ Dashboard — population trajectory chart, lineage tree, probe inspector, controls (pause / resume / 1×–64× speed)
+- ⋯ Dashboard — population trajectory, named lineage tree, probe inspector, drift telemetry, events timeline, run controls, auto-pause toggles
+- ⋯ Auto-pause triggers — pause when a clade speciates (other triggers wait for their mechanics to land at later releases)
+- ⋯ Persistence — runs save and load via the browser's Origin Private File System; same shape on the Node side via the headless CLI
+- ⋯ Lay-person lineage names — Pioneers, Vagabonds, Drifters and friends (deterministic, hashed from ordinal)
