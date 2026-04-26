@@ -39,6 +39,7 @@ pnpm sim --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
 - [`PROCESS.md`](PROCESS.md) — how the work is run.
 - [`FEATURES.md`](FEATURES.md) — what has shipped.
 - [`TODO.md`](TODO.md) — what is next.
+- [`ACCEPTANCE.md`](ACCEPTANCE.md) — release-by-release acceptance gates.
 
 ## License
 
