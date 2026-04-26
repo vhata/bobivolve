@@ -1,7 +1,8 @@
 import type { Directive } from './directive.js';
+import { firmwareDiverged, type Lineage } from './lineage.js';
 import { maybeMutate } from './mutation.js';
 import type { Probe, SimState } from './state.js';
-import { ProbeId, SimTick } from './types.js';
+import { LineageId, ProbeId, SimTick } from './types.js';
 
 // Advance the simulation by one tick. SPEC.md R0 — Petri Dish: probes
 // replicate per their firmware; no resources, no death (those land at R1).
@@ -43,12 +44,37 @@ function maybeReplicate(state: SimState, parent: Probe, threshold: bigint): void
   const roll = state.rng.nextU64();
   if (roll >= threshold) return;
 
-  const child: Probe = {
-    id: ProbeId(`P${state.nextProbeOrdinal}`),
-    lineageId: parent.lineageId,
-    bornAtTick: state.simTick,
-    firmware: maybeMutate(state.rng, parent.firmware),
-  };
+  const childFirmware = maybeMutate(state.rng, parent.firmware);
+  const childId = ProbeId(`P${state.nextProbeOrdinal}`);
   state.nextProbeOrdinal += 1n;
-  state.probes.set(child.id, child);
+
+  // Lineage clustering: if the child's firmware has drifted past the
+  // divergence threshold from its parent's lineage reference, the child
+  // founds a new lineage. Otherwise it inherits the parent's.
+  const parentLineage = state.lineages.get(parent.lineageId);
+  if (parentLineage === undefined) {
+    throw new Error(`lineage ${parent.lineageId} missing from state`);
+  }
+
+  let childLineageId = parent.lineageId;
+  if (firmwareDiverged(childFirmware, parentLineage.referenceFirmware)) {
+    childLineageId = LineageId(`L${state.nextLineageOrdinal}`);
+    state.nextLineageOrdinal += 1n;
+    const newLineage: Lineage = {
+      id: childLineageId,
+      founderProbeId: childId,
+      parentLineageId: parent.lineageId,
+      referenceFirmware: childFirmware,
+      foundedAtTick: state.simTick,
+    };
+    state.lineages.set(childLineageId, newLineage);
+  }
+
+  const child: Probe = {
+    id: childId,
+    lineageId: childLineageId,
+    bornAtTick: state.simTick,
+    firmware: childFirmware,
+  };
+  state.probes.set(childId, child);
 }
