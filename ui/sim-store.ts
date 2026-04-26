@@ -190,7 +190,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     pause: () => {
       const transport = get().transport;
       if (transport === null) return;
-      set({ paused: true });
+      // actualSpeed reads the last Tick heartbeat; once paused, no more
+      // heartbeats fire and the lingering value reads as if the sim were
+      // still running. Reset it explicitly.
+      set({ paused: true, actualSpeed: 0 });
       transport.send({ kind: 'pause', commandId: 'ui-pause' });
     },
     resume: () => {
