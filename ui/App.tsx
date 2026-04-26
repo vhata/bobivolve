@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { ControlsPanel } from './components/ControlsPanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
+import { ProbeInspectorPanel } from './components/ProbeInspectorPanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
 import SimWorker from '../host/worker.ts?worker';
@@ -38,6 +39,7 @@ export function App(): React.JSX.Element {
         <ControlsPanel />
         <PopulationPanel />
         <LineageTreePanel />
+        <ProbeInspectorPanel />
       </main>
     </div>
   );

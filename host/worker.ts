@@ -14,17 +14,30 @@
 /// <reference lib="webworker" />
 
 import { NodeHost } from './node.js';
-import type { Command, SimEvent } from '../protocol/types.js';
+import type { Command, Query, QueryResult, SimEvent } from '../protocol/types.js';
 
 interface CommandMessage {
   readonly type: 'command';
   readonly cmd: Command;
 }
 
+interface QueryMessage {
+  readonly type: 'query';
+  readonly query: Query;
+}
+
 interface EventMessage {
   readonly type: 'event';
   readonly event: SimEvent;
 }
+
+interface QueryResultMessage {
+  readonly type: 'queryResult';
+  readonly queryId: string;
+  readonly result: QueryResult;
+}
+
+type IncomingMessage = CommandMessage | QueryMessage;
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -60,7 +73,14 @@ function stopPulsing(): void {
   }
 }
 
-ctx.addEventListener('message', (e: MessageEvent<CommandMessage>) => {
+ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
+  if (e.data.type === 'query') {
+    const result = host.executeQuery(e.data.query);
+    const reply: QueryResultMessage = { type: 'queryResult', queryId: result.queryId, result };
+    ctx.postMessage(reply);
+    return;
+  }
+
   if (e.data.type !== 'command') return;
   const cmd = e.data.cmd;
   // Update pacing state before forwarding the command, so setSpeed takes

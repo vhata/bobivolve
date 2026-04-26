@@ -223,3 +223,92 @@ body {
   color: #555861;
   text-decoration: line-through;
 }
+
+.inspector-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.inspector-input {
+  flex: 1;
+  padding: 0.4rem 0.65rem;
+  background: #1c1f25;
+  border: 1px solid #2c2f36;
+  border-radius: 4px;
+  color: #e8e9ed;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector-input:focus {
+  outline: 1px solid #3a5fa8;
+  outline-offset: 0;
+  border-color: #3a5fa8;
+}
+
+.inspector-error {
+  color: #ff6f6f;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.inspector-detail {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector-detail > div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.5rem;
+}
+
+.inspector-detail dt {
+  color: #6e7178;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.inspector-detail dd {
+  margin: 0;
+}
+
+.firmware-list,
+.directive-params {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.firmware-list > li {
+  margin-bottom: 0.4rem;
+}
+
+.directive-kind {
+  font-weight: 600;
+  color: #b6b8be;
+}
+
+.directive-params {
+  padding-left: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.directive-params > li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.param-key {
+  color: #6e7178;
+}
+
+.param-value {
+  color: #e8e9ed;
+}

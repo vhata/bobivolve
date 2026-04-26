@@ -73,14 +73,18 @@ export class NodeTransport implements SimTransport {
     };
   }
 
-  query(_q: Query): Promise<QueryResult> {
+  query(q: Query): Promise<QueryResult> {
     if (this.closed) {
       return Promise.reject(new Error('NodeTransport: query after close'));
     }
-    // Query bodies in schema.proto are placeholders awaiting the dashboard
-    // implementation. The transport interface is in place; the routing to the
-    // sim will land alongside the first query the UI actually issues.
-    return Promise.reject(new Error('NodeTransport: queries not yet implemented'));
+    // In-process variant: queries run synchronously against state and
+    // return a resolved Promise. The async surface keeps the
+    // SimTransport interface symmetric with cross-process variants.
+    try {
+      return Promise.resolve(this.host.executeQuery(q));
+    } catch (e) {
+      return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+    }
   }
 
   close(): void {

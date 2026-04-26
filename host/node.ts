@@ -14,14 +14,18 @@
 //   - Acknowledge each command with CommandAck or, on validation failure,
 //     CommandError.
 
+import type { Directive } from '../sim/directive.js';
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
-import { Seed, SimTick } from '../sim/types.js';
+import { ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
 import type {
   Command,
   CommandAckEvent,
   CommandErrorEvent,
+  ProbeInspectorDirective,
+  Query,
+  QueryResult,
   SimEvent,
   TickEvent,
 } from '../protocol/types.js';
@@ -73,6 +77,16 @@ function snapshotKey(runId: string, tick: bigint): string {
   return `runs/${runId}/snapshots/${tick.toString()}.snap`;
 }
 
+function directiveToInspector(directive: Directive): ProbeInspectorDirective {
+  switch (directive.kind) {
+    case 'replicate':
+      return {
+        kind: 'replicate',
+        params: { threshold: directive.threshold.toString() },
+      };
+  }
+}
+
 // Listener shape used by the in-process NodeTransport. Identical signature to
 // SimEventHandler (transport/types.ts) but redeclared here so this file does
 // not depend on the transport layer.
@@ -121,6 +135,46 @@ export class NodeHost {
       this.persistence !== undefined
         ? new EventLogWriter(this.persistence.storage, logKey(this.persistence.runId))
         : null;
+  }
+
+  // Execute a Query against current state. Queries are pull-only and
+  // synchronous against in-memory state; the transport layer wraps the
+  // call in a Promise for interface symmetry with cross-process variants.
+  // ARCHITECTURE.md "Query: pull-only, never pushed".
+  executeQuery(query: Query): QueryResult {
+    switch (query.kind) {
+      case 'probeInspector':
+        return this.queryProbeInspector(query.queryId, query.probeId);
+      case 'lineageTree':
+      case 'driftTelemetry':
+      case 'logSlice':
+      case 'populationSummary':
+        // Result bodies for these are still placeholders in the schema;
+        // their handlers land alongside the matching dashboard panels.
+        // Returning a placeholder rather than throwing keeps the query
+        // surface live for early UI integration.
+        return { queryId: query.queryId, kind: query.kind } as QueryResult;
+    }
+  }
+
+  private queryProbeInspector(queryId: string, probeId: string): QueryResult {
+    if (this.state === null) {
+      return { queryId, kind: 'probeInspector', probe: null };
+    }
+    const probe = this.state.probes.get(ProbeId(probeId));
+    if (probe === undefined) {
+      return { queryId, kind: 'probeInspector', probe: null };
+    }
+    return {
+      queryId,
+      kind: 'probeInspector',
+      probe: {
+        id: probe.id,
+        lineageId: probe.lineageId,
+        bornAtTick: probe.bornAtTick,
+        firmware: probe.firmware.map(directiveToInspector),
+      },
+    };
   }
 
   // Drain any pending log entries to storage and wait for any queued async
