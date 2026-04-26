@@ -17,19 +17,21 @@ export function App(): React.JSX.Element {
   const attach = useSimStore((s) => s.attach);
   const detach = useSimStore((s) => s.detach);
   const startRun = useSimStore((s) => s.startRun);
+  const setSpeed = useSimStore((s) => s.setSpeed);
   const seed = useSimStore((s) => s.seed);
 
   useEffect(() => {
     const transport = new WorkerTransport(new SimWorker());
     attach(transport);
-    // Kick off a default run so a freshly-loaded page shows something.
-    // Future commits will wire this through a "Start Run" panel rather
-    // than auto-starting.
+    // Soft default: kick off a 16× run at seed=42 so a freshly-loaded
+    // page is visibly evolving within seconds. The user can override via
+    // the Run panel (seed) and Controls panel (speed).
     startRun(42n);
+    setSpeed(16);
     return () => {
       detach();
     };
-  }, [attach, detach, startRun]);
+  }, [attach, detach, startRun, setSpeed]);
 
   return (
     <div className="bobivolve-app">
