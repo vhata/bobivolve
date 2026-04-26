@@ -97,6 +97,7 @@ function maybeReplicate(
         parentLineageId: parent.lineageId,
         newLineageId: childLineageId,
         newLineageName,
+        founderProbeId: childId,
       } satisfies SpeciationEvent & { simTick: bigint };
       events.push(speciation);
     }

@@ -197,7 +197,7 @@ test('every panel and control is visibly rendered', async ({ page }) => {
   await expect(page.locator('h1')).toBeVisible();
   await expect(page.locator('.bobivolve-tagline')).toBeVisible();
 
-  // ── all eight panels exist and are visible ────────────────────────────
+  // ── all panels exist and are visible ──────────────────────────────────
   const panelClasses = [
     '.run-panel',
     '.controls-panel',
@@ -205,7 +205,6 @@ test('every panel and control is visibly rendered', async ({ page }) => {
     '.population-panel',
     '.lineage-tree-panel',
     '.inspector-panel',
-    '.drift-panel',
     '.timeline-panel',
   ];
   for (const cls of panelClasses) {
@@ -255,37 +254,34 @@ test('every panel and control is visibly rendered', async ({ page }) => {
   await expect(page.locator('.lineage-tree')).toBeVisible();
   await expect(page.locator('.lineage-tree')).toContainText('L0');
 
-  // ── ProbeInspectorPanel: input + Inspect button (button not clipped) ─
-  await expect(page.locator('.inspector-panel input[aria-label="Probe id"]')).toBeVisible();
-  const inspectButton = page.locator('.inspector-panel').getByRole('button', { name: 'Inspect' });
-  await expect(inspectButton).toBeVisible();
-  // Guard against the button being squeezed or clipped: it must lie
-  // wholly inside the inspector panel's content box.
-  const inspectorPanelBox = await page.locator('.inspector-panel').boundingBox();
-  const inspectButtonBox = await inspectButton.boundingBox();
-  expect(inspectorPanelBox).not.toBeNull();
-  expect(inspectButtonBox).not.toBeNull();
-  if (inspectorPanelBox !== null && inspectButtonBox !== null) {
-    expect(inspectButtonBox.x + inspectButtonBox.width).toBeLessThanOrEqual(
-      inspectorPanelBox.x + inspectorPanelBox.width + 1,
-    );
-    expect(inspectButtonBox.width).toBeGreaterThan(40);
-  }
-
-  // ── DriftTelemetryPanel: lineage selector dropdown ────────────────────
-  await expect(page.locator('.lineage-select')).toBeVisible();
+  // ── LineageInspectorPanel: identity rows render for the default L0 ────
+  const inspectorPanel = page.locator('.inspector-panel');
+  await expect(inspectorPanel).toContainText('founder');
+  await expect(inspectorPanel).toContainText('founded at');
+  await expect(inspectorPanel).toContainText('members');
 
   // ── EventsTimelinePanel: timeline svg ─────────────────────────────────
   await expect(page.locator('.timeline-svg')).toBeVisible();
 });
 
-test('probe inspector returns firmware for P0', async ({ page }) => {
+test('lineage inspector renders firmware and identity for the default L0', async ({ page }) => {
   await page.goto('/');
-  // P0 exists from tick 0; the inspector auto-inspects on mount, so the
-  // firmware description should appear without an explicit Inspect click.
   const inspectorPanel = page.locator('.inspector-panel');
-  await expect(inspectorPanel).toContainText(/replicates/i);
-  // Identity fields populate too.
+  // Identity for the founder lineage.
   await expect(inspectorPanel).toContainText('P0');
-  await expect(inspectorPanel).toContainText('L0');
+  await expect(inspectorPanel).toContainText('tick 0');
+  // Firmware description from the host's drift telemetry (the founder's
+  // reference firmware for the replicate directive).
+  await expect(inspectorPanel).toContainText(/replicates/i);
+});
+
+test('clicking a lineage in the tree selects it in the inspector', async ({ page }) => {
+  await page.goto('/');
+  // L0 is the only lineage on a fresh run; clicking it should mark it
+  // selected (aria-pressed=true) and the inspector should already be
+  // showing it. This proves the click → store → both panels wiring.
+  const l0Row = page.locator('.lineage-tree button[aria-pressed]').first();
+  await l0Row.click();
+  await expect(l0Row).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.inspector-panel')).toContainText('P0');
 });

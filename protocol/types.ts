@@ -107,6 +107,7 @@ export interface SpeciationEvent {
   readonly parentLineageId: string;
   readonly newLineageId: string;
   readonly newLineageName: string;
+  readonly founderProbeId: string;
 }
 
 export interface ExtinctionEvent {

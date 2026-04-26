@@ -26,6 +26,7 @@ export interface LineageNode {
   // to produce this one.
   readonly parentId: string | null;
   readonly foundedAtTick: bigint;
+  readonly founderProbeId: string;
 }
 
 // Sampled point in the population history. We keep a bounded rolling
@@ -82,6 +83,10 @@ export interface SimStoreState {
   readonly autoPauseTriggers: ReadonlySet<string>;
   readonly lastAutoPauseTrigger: string | null;
   readonly setAutoPauseTriggers: (triggers: ReadonlySet<string>) => void;
+  // The Lineage Inspector reads this; clicking a lineage in the tree
+  // updates it. Defaults to L0 once the founder lineage is seeded.
+  readonly selectedLineageId: string;
+  readonly selectLineage: (id: string) => void;
 }
 
 let nextCommandOrdinal = 0;
@@ -95,7 +100,18 @@ function mintCommandId(prefix: string): string {
 // emits a Speciation event for every subsequent lineage but never one for
 // L0; the store seeds it implicitly.
 function freshLineages(): Map<string, LineageNode> {
-  return new Map([['L0', { id: 'L0', name: 'L0', parentId: null, foundedAtTick: 0n }]]);
+  return new Map([
+    [
+      'L0',
+      {
+        id: 'L0',
+        name: 'L0',
+        parentId: null,
+        foundedAtTick: 0n,
+        founderProbeId: 'P0',
+      },
+    ],
+  ]);
 }
 
 export const useSimStore = create<SimStoreState>((set, get) => {
@@ -199,6 +215,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           name: event.newLineageName,
           parentId: event.parentLineageId,
           foundedAtTick: event.simTick,
+          founderProbeId: event.founderProbeId,
         });
         set({ simTick: event.simTick, lineages });
         return;
@@ -260,6 +277,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     pendingCommands: new Map(),
     autoPauseTriggers: new Set(),
     lastAutoPauseTrigger: null,
+    selectedLineageId: 'L0',
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -314,6 +332,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         paused: false,
         actualSpeed: 0,
         pendingCommands: pending,
+        selectedLineageId: 'L0',
       });
       transport.send({ kind: 'newRun', commandId, seed });
     },
@@ -382,6 +401,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now(), retryCount: 0 });
       set({ pendingCommands: pending });
       transport.send({ kind: 'load', commandId, slot });
+    },
+    selectLineage: (id) => {
+      set({ selectedLineageId: id });
     },
     setAutoPauseTriggers: (triggers) => {
       const transport = get().transport;

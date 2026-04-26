@@ -3,11 +3,10 @@
 import { useEffect } from 'react';
 import { AutoPausePanel } from './components/AutoPausePanel.js';
 import { ControlsPanel } from './components/ControlsPanel.js';
-import { DriftTelemetryPanel } from './components/DriftTelemetryPanel.js';
 import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
+import { LineageInspectorPanel } from './components/LineageInspectorPanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
-import { ProbeInspectorPanel } from './components/ProbeInspectorPanel.js';
 import { RunPanel } from './components/RunPanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
@@ -47,8 +46,7 @@ export function App(): React.JSX.Element {
         <AutoPausePanel />
         <PopulationPanel />
         <LineageTreePanel />
-        <ProbeInspectorPanel />
-        <DriftTelemetryPanel />
+        <LineageInspectorPanel />
         <EventsTimelinePanel />
       </main>
     </div>

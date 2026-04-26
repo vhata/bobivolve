@@ -237,15 +237,6 @@ body {
   margin: 0.15rem 0;
 }
 
-.lineage-node-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.9rem;
-  font-variant-numeric: tabular-nums;
-  align-items: baseline;
-}
-
 .lineage-meta {
   color: #6e7178;
   font-size: 0.85rem;
@@ -262,6 +253,48 @@ body {
 .lineage-node-extinct .lineage-meta {
   color: #555861;
   text-decoration: line-through;
+}
+
+.lineage-node-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  align-items: baseline;
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.lineage-node-row:hover {
+  background: #1c1f25;
+}
+
+.lineage-node-selected > .lineage-node-row {
+  background: #2c4a8a;
+  border-color: #3a5fa8;
+  color: #ffffff;
+}
+
+.lineage-node-selected > .lineage-node-row .lineage-id-ordinal,
+.lineage-node-selected > .lineage-node-row .lineage-meta {
+  color: #c8d4ec;
+}
+
+.subhead {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6e7178;
+  font-weight: 600;
 }
 
 .inspector-form {
