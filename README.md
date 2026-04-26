@@ -6,11 +6,22 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 
 ## Status
 
-Pre-Release 0. No implementation yet. The shape of the work is set out in the design documents.
+Pre-Release 0. The simulation core, the persistence layer, and the dashboard shell are in place; player-facing panels are landing one at a time.
 
 ## How to run
 
-Nothing to run yet. This section will be filled in once Release 0 is playable.
+The dashboard:
+
+```
+pnpm install
+pnpm dev
+```
+
+A headless run that emits NDJSON `SimEvent`s to stdout:
+
+```
+pnpm sim --seed 42 --ticks 1000 --no-heartbeat
+```
 
 ## For the technically curious
 
