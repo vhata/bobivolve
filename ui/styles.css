@@ -312,3 +312,82 @@ body {
 .param-value {
   color: #e8e9ed;
 }
+
+.drift-panel {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.lineage-select {
+  background: #1c1f25;
+  border: 1px solid #2c2f36;
+  color: #e8e9ed;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.drift-population {
+  color: #b6b8be;
+  margin: 0 0 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+
+.drift-row {
+  margin-bottom: 0.75rem;
+}
+
+.drift-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+.drift-row-header .param-key {
+  color: #b6b8be;
+  font-size: 0.85rem;
+}
+
+.drift-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: #ffd83f;
+}
+
+.drift-range {
+  display: block;
+  width: 100%;
+  height: 24px;
+}
+
+.drift-axis {
+  stroke: #2c2f36;
+  stroke-width: 1;
+}
+
+.drift-span {
+  stroke: #608aff;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.drift-reference {
+  stroke: #ffd83f;
+  stroke-width: 1.5;
+}
+
+.drift-mean {
+  fill: #e8e9ed;
+}
+
+.drift-row-stats {
+  display: flex;
+  justify-content: space-between;
+  color: #6e7178;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.2rem;
+}
