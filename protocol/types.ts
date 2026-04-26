@@ -221,6 +221,27 @@ export interface ProbeInspectorDirective {
 
 export interface DriftTelemetryResult {
   readonly kind: 'driftTelemetry';
+  readonly lineageId: string;
+  // null when the lineage id is not registered.
+  readonly drift: DriftTelemetry | null;
+}
+
+export interface DriftTelemetry {
+  // Number of extant probes in this lineage.
+  readonly population: bigint;
+  // Per-parameter drift stats. Keyed by dotted path, e.g. 'replicate.threshold',
+  // so multiple directives' parameters in a richer firmware do not collide.
+  readonly parameters: Readonly<Record<string, ParameterDrift>>;
+}
+
+export interface ParameterDrift {
+  // Numeric values are decimal strings to preserve u64 precision across
+  // the seam (proto3 JSON convention).
+  readonly reference: string;
+  readonly min: string;
+  readonly max: string;
+  // Integer mean computed as floor(sum / count).
+  readonly mean: string;
 }
 
 export interface LogSliceResult {

@@ -17,12 +17,13 @@
 import type { Directive } from '../sim/directive.js';
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
-import { ProbeId, Seed, SimTick } from '../sim/types.js';
+import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
 import type {
   Command,
   CommandAckEvent,
   CommandErrorEvent,
+  ParameterDrift,
   ProbeInspectorDirective,
   Query,
   QueryResult,
@@ -145,8 +146,9 @@ export class NodeHost {
     switch (query.kind) {
       case 'probeInspector':
         return this.queryProbeInspector(query.queryId, query.probeId);
-      case 'lineageTree':
       case 'driftTelemetry':
+        return this.queryDriftTelemetry(query.queryId, query.lineageId);
+      case 'lineageTree':
       case 'logSlice':
       case 'populationSummary':
         // Result bodies for these are still placeholders in the schema;
@@ -155,6 +157,68 @@ export class NodeHost {
         // surface live for early UI integration.
         return { queryId: query.queryId, kind: query.kind } as QueryResult;
     }
+  }
+
+  private queryDriftTelemetry(queryId: string, lineageId: string): QueryResult {
+    if (this.state === null) {
+      return { queryId, kind: 'driftTelemetry', lineageId, drift: null };
+    }
+    const lineage = this.state.lineages.get(LineageId(lineageId));
+    if (lineage === undefined) {
+      return { queryId, kind: 'driftTelemetry', lineageId, drift: null };
+    }
+
+    // Walk extant probes in this lineage, accumulate per-parameter stats.
+    // Reference values come from the lineage's referenceFirmware (set at
+    // speciation, immutable afterwards).
+    const accum = new Map<string, { sum: bigint; min: bigint; max: bigint; count: bigint }>();
+    let population = 0n;
+    for (const probe of this.state.probes.values()) {
+      if (probe.lineageId !== lineage.id) continue;
+      population += 1n;
+      for (const directive of probe.firmware) {
+        if (directive.kind !== 'replicate') continue;
+        const key = 'replicate.threshold';
+        const existing = accum.get(key);
+        const value = directive.threshold;
+        if (existing === undefined) {
+          accum.set(key, { sum: value, min: value, max: value, count: 1n });
+        } else {
+          accum.set(key, {
+            sum: existing.sum + value,
+            min: value < existing.min ? value : existing.min,
+            max: value > existing.max ? value : existing.max,
+            count: existing.count + 1n,
+          });
+        }
+      }
+    }
+
+    // Reference values from the lineage's frozen reference firmware.
+    const reference = new Map<string, bigint>();
+    for (const directive of lineage.referenceFirmware) {
+      if (directive.kind !== 'replicate') continue;
+      reference.set('replicate.threshold', directive.threshold);
+    }
+
+    const parameters: Record<string, ParameterDrift> = {};
+    for (const [key, stats] of accum) {
+      const ref = reference.get(key) ?? 0n;
+      const mean = stats.count === 0n ? 0n : stats.sum / stats.count;
+      parameters[key] = {
+        reference: ref.toString(),
+        min: stats.min.toString(),
+        max: stats.max.toString(),
+        mean: mean.toString(),
+      };
+    }
+
+    return {
+      queryId,
+      kind: 'driftTelemetry',
+      lineageId,
+      drift: { population, parameters },
+    };
   }
 
   private queryProbeInspector(queryId: string, probeId: string): QueryResult {
