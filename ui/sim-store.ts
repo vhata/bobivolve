@@ -90,25 +90,29 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             history.splice(i, 1);
           }
         }
+        // Suppress actualSpeed updates while paused. An in-flight
+        // runUntil that started before the pause click can emit a Tick
+        // heartbeat with a non-zero actualSpeed AFTER the pause action
+        // zeroed it; without this guard, the readout flips back to a
+        // misleading non-zero value and stays there until resume.
+        const paused = get().paused;
         set({
           simTick: event.simTick,
           populationTotal: event.populationTotal,
           populationByLineage: byLineage,
           populationHistory: history,
-          actualSpeed: event.actualSpeed,
+          actualSpeed: paused ? 0 : event.actualSpeed,
         });
         return;
       }
-      case 'replication': {
-        const next = new Map(get().populationByLineage);
-        next.set(event.lineageId, (next.get(event.lineageId) ?? 0n) + 1n);
-        set({
-          simTick: event.simTick,
-          populationTotal: get().populationTotal + 1n,
-          populationByLineage: next,
-        });
+      case 'replication':
+        // Population accounting flows from Tick heartbeats (throttled to
+        // 60Hz). Updating on every Replication event would cause hundreds
+        // of re-renders per second at fat population + high speed, which
+        // saturates the browser's event loop and starves user clicks.
+        // Only the simTick monotonic update lives here.
+        if (event.simTick > get().simTick) set({ simTick: event.simTick });
         return;
-      }
       case 'speciation': {
         const lineages = new Map(get().lineages);
         lineages.set(event.newLineageId, {
