@@ -18,9 +18,8 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 ## Release 0 — Petri Dish
 
-- Mutation: parameter drift #r0 #sim
-- Mutation: priority swap #r0 #sim
-- Mutation: directive loss / gain #r0 #sim
+- Mutation: priority swap (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
+- Mutation: directive loss / gain (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
 - Lineage clustering against a reference genome #r0 #sim
 - Speciation event when drift exceeds threshold #r0 #sim
 - Dashboard shell (React) #r0 #ui

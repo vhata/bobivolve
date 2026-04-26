@@ -1,4 +1,5 @@
 import type { Directive } from './directive.js';
+import { maybeMutate } from './mutation.js';
 import type { Probe, SimState } from './state.js';
 import { ProbeId, SimTick } from './types.js';
 
@@ -46,7 +47,7 @@ function maybeReplicate(state: SimState, parent: Probe, threshold: bigint): void
     id: ProbeId(`P${state.nextProbeOrdinal}`),
     lineageId: parent.lineageId,
     bornAtTick: state.simTick,
-    firmware: parent.firmware,
+    firmware: maybeMutate(state.rng, parent.firmware),
   };
   state.nextProbeOrdinal += 1n;
   state.probes.set(child.id, child);
