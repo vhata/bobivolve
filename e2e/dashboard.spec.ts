@@ -148,6 +148,36 @@ test('pause actually halts growth at 64× with a busy worker', async ({ page }) 
   expect(popLater - popJustAfterPause).toBeLessThanOrEqual(5);
 });
 
+test('pause clears the pending indicator within a reasonable window', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '64×' }).click();
+  await expect
+    .poll(
+      async () => {
+        const text = (await page.locator('.population-total').textContent()) ?? '';
+        return readNumeric(text);
+      },
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(50);
+
+  // Click pause. data-pending should be true momentarily, then false
+  // once the worker acks. data-stuck should never go true under nominal
+  // load — its appearance means the worker took >1s to ack and is the
+  // user-visible signal that something is wrong.
+  const pauseButton = page.getByRole('button', { name: /^Pause$/ });
+  await pauseButton.click();
+
+  // The button text flips to Resume optimistically.
+  const resumeButton = page.getByRole('button', { name: /^Resume$/ });
+  await expect(resumeButton).toBeVisible();
+
+  // Within a healthy window, the ack arrives and pending clears.
+  await expect(resumeButton).toHaveAttribute('data-pending', 'false', { timeout: 1_500 });
+  // And the "stuck" state should never appear during a healthy run.
+  await expect(resumeButton).toHaveAttribute('data-stuck', 'false');
+});
+
 test('lineage tree starts with the founder lineage L0', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.lineage-tree')).toContainText('L0');

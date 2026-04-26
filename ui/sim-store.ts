@@ -39,6 +39,20 @@ export interface PopulationHistoryPoint {
 
 const HISTORY_CAPACITY = 240;
 
+// In-flight command tracking. ACK-based confirmation is the only way to
+// tell whether the worker actually applied a command — without it the UI
+// can flip its button text to "Resume" while the sim merrily keeps
+// running because the message never made it through.
+export interface PendingCommand {
+  readonly commandId: string;
+  readonly kind: 'pause' | 'resume' | 'setSpeed' | 'newRun' | 'save' | 'load';
+  readonly issuedAtMs: number;
+  // Optimistic effect summary. The UI reads it to render the projected
+  // state while the ack is in flight; on ack the projection is confirmed
+  // and the entry is removed.
+  readonly projection?: { readonly paused?: boolean; readonly speed?: SimSpeed };
+}
+
 export interface SimStoreState {
   readonly simTick: bigint;
   readonly populationTotal: bigint;
@@ -49,6 +63,7 @@ export interface SimStoreState {
   readonly speed: SimSpeed;
   readonly paused: boolean;
   readonly actualSpeed: number;
+  readonly pendingCommands: ReadonlyMap<string, PendingCommand>;
   readonly transport: SimTransport | null;
   readonly attach: (transport: SimTransport) => void;
   readonly detach: () => void;
@@ -61,6 +76,13 @@ export interface SimStoreState {
   readonly autoPauseTriggers: ReadonlySet<string>;
   readonly lastAutoPauseTrigger: string | null;
   readonly setAutoPauseTriggers: (triggers: ReadonlySet<string>) => void;
+}
+
+let nextCommandOrdinal = 0;
+function mintCommandId(prefix: string): string {
+  const id = `${prefix}-${nextCommandOrdinal.toString()}`;
+  nextCommandOrdinal += 1;
+  return id;
 }
 
 // L0 is the founding lineage — every fresh run starts with it. The sim
@@ -131,10 +153,36 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           lastAutoPauseTrigger: event.trigger,
         });
         return;
+      case 'commandAck': {
+        // Confirm a pending command by removing it from the map. The
+        // optimistic state set when the command was sent stays — the
+        // ack just promotes it from "projected" to "confirmed".
+        const pending = new Map(get().pendingCommands);
+        if (pending.has(event.commandId)) {
+          pending.delete(event.commandId);
+          set({ pendingCommands: pending });
+        }
+        return;
+      }
+      case 'commandError': {
+        // Roll back the optimistic projection for this command. Future
+        // polish: surface the error message to the user.
+        const pending = new Map(get().pendingCommands);
+        const entry = pending.get(event.commandId);
+        if (entry !== undefined) {
+          pending.delete(event.commandId);
+          if (entry.projection?.paused === true) {
+            set({ pendingCommands: pending, paused: false });
+          } else if (entry.projection?.paused === false) {
+            set({ pendingCommands: pending, paused: true });
+          } else {
+            set({ pendingCommands: pending });
+          }
+        }
+        return;
+      }
       case 'extinction':
       case 'death':
-      case 'commandAck':
-      case 'commandError':
         // Other event kinds will populate dedicated slices as the matching
         // panels land. The tick field is the cheap update either way.
         if (event.simTick > get().simTick) set({ simTick: event.simTick });
@@ -152,6 +200,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     speed: 1,
     paused: false,
     actualSpeed: 0,
+    pendingCommands: new Map(),
     autoPauseTriggers: new Set(),
     lastAutoPauseTrigger: null,
     transport: null,
@@ -177,6 +226,13 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) {
         throw new Error('useSimStore.startRun: no transport attached');
       }
+      const commandId = mintCommandId('ui-newRun');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'newRun',
+        issuedAtMs: Date.now(),
+      });
       // Reset projected state for the new run; the store does not retain
       // population/tick state across runs.
       set({
@@ -188,39 +244,72 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         lineages: freshLineages(),
         paused: false,
         actualSpeed: 0,
+        pendingCommands: pending,
       });
-      transport.send({ kind: 'newRun', commandId: 'ui-newRun', seed });
+      transport.send({ kind: 'newRun', commandId, seed });
     },
     pause: () => {
       const transport = get().transport;
       if (transport === null) return;
+      const commandId = mintCommandId('ui-pause');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'pause',
+        issuedAtMs: Date.now(),
+        projection: { paused: true },
+      });
       // actualSpeed reads the last Tick heartbeat; once paused, no more
       // heartbeats fire and the lingering value reads as if the sim were
       // still running. Reset it explicitly.
-      set({ paused: true, actualSpeed: 0 });
-      transport.send({ kind: 'pause', commandId: 'ui-pause' });
+      set({ paused: true, actualSpeed: 0, pendingCommands: pending });
+      transport.send({ kind: 'pause', commandId });
     },
     resume: () => {
       const transport = get().transport;
       if (transport === null) return;
-      set({ paused: false });
-      transport.send({ kind: 'resume', commandId: 'ui-resume' });
+      const commandId = mintCommandId('ui-resume');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'resume',
+        issuedAtMs: Date.now(),
+        projection: { paused: false },
+      });
+      set({ paused: false, pendingCommands: pending });
+      transport.send({ kind: 'resume', commandId });
     },
     setSpeed: (speed) => {
       const transport = get().transport;
       if (transport === null) return;
-      set({ speed });
-      transport.send({ kind: 'setSpeed', commandId: 'ui-setSpeed', speed });
+      const commandId = mintCommandId('ui-setSpeed');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'setSpeed',
+        issuedAtMs: Date.now(),
+        projection: { speed },
+      });
+      set({ speed, pendingCommands: pending });
+      transport.send({ kind: 'setSpeed', commandId, speed });
     },
     save: (slot = 'default') => {
       const transport = get().transport;
       if (transport === null) return;
-      transport.send({ kind: 'save', commandId: 'ui-save', slot });
+      const commandId = mintCommandId('ui-save');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, { commandId, kind: 'save', issuedAtMs: Date.now() });
+      set({ pendingCommands: pending });
+      transport.send({ kind: 'save', commandId, slot });
     },
     load: (slot = 'default') => {
       const transport = get().transport;
       if (transport === null) return;
-      transport.send({ kind: 'load', commandId: 'ui-load', slot });
+      const commandId = mintCommandId('ui-load');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now() });
+      set({ pendingCommands: pending });
+      transport.send({ kind: 'load', commandId, slot });
     },
     setAutoPauseTriggers: (triggers) => {
       const transport = get().transport;
