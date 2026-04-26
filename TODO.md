@@ -17,6 +17,4 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Mutation: priority swap (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
 - Mutation: directive loss / gain (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
 - Lineage names: lay-person legible (currently ordinal `Lk`) — ARCHITECTURE.md open question, deferred #r0 #sim
-- Population graphs by lineage (visual chart, not just count list) #r0 #ui
-- Forensic replay: scrubable timeline #r0 #ui
-- Auto-pause trigger configuration UI #r0 #ui
+- Forensic replay: state-rewind scrub (load + advance to selected tick); the lighter event-history shape is in place #r0 #ui
