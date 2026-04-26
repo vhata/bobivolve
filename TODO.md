@@ -18,9 +18,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 ## Release 0 — Petri Dish
 
-- Probes (entity, energy, location, lineage id) #r0 #sim
-- Directive stack (ordered, parameterised, prioritised) #r0 #sim
-- Replication on energy threshold #r0 #sim
 - Mutation: parameter drift #r0 #sim
 - Mutation: priority swap #r0 #sim
 - Mutation: directive loss / gain #r0 #sim

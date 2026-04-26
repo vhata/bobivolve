@@ -1,3 +1,4 @@
+import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
@@ -10,6 +11,7 @@ export interface Probe {
   readonly id: ProbeId;
   readonly lineageId: LineageId;
   readonly bornAtTick: SimTick;
+  readonly firmware: DirectiveStack;
 }
 
 export interface SimState {
@@ -34,13 +36,17 @@ export interface SimStateSnapshot {
   readonly nextLineageOrdinal: bigint;
 }
 
-export function createInitialState(seed: Seed): SimState {
+export function createInitialState(
+  seed: Seed,
+  founderFirmware: DirectiveStack = FOUNDER_FIRMWARE,
+): SimState {
   const rng = Xoshiro256ss.fromSeed(seed);
   const founderLineage = LineageId('L0');
   const founder: Probe = {
     id: ProbeId('P0'),
     lineageId: founderLineage,
     bornAtTick: SimTick(0n),
+    firmware: founderFirmware,
   };
   return {
     simTick: SimTick(0n),
