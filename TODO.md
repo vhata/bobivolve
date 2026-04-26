@@ -13,7 +13,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - `OPFSStorage` adapter (browser-side counterpart to `NodeStorage`) #r0 #host
 - Rebuild-from-log fallback when a snapshot is missing or unreadable (ARCHITECTURE.md migration path); currently load fails fast in that case #r0 #host
 - Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
-- Add `build` step to CI once a build target exists (Vite + UI) #r0 #ci
 
 ## Release 0 — Petri Dish
 

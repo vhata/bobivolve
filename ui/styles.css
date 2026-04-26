@@ -1,0 +1,35 @@
+/* Bare baseline. The dashboard's visual language lands alongside the panels;
+   for now this just keeps the shell legible. */
+
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    sans-serif;
+  color-scheme: dark light;
+  background: #0e0f12;
+  color: #e8e9ed;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.bobivolve-app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.bobivolve-header h1 {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.bobivolve-tagline {
+  margin: 0 0 2rem;
+  color: #8a8c93;
+}
