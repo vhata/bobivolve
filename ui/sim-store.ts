@@ -58,6 +58,9 @@ export interface SimStoreState {
   readonly setSpeed: (speed: SimSpeed) => void;
   readonly save: (slot?: string) => void;
   readonly load: (slot?: string) => void;
+  readonly autoPauseTriggers: ReadonlySet<string>;
+  readonly lastAutoPauseTrigger: string | null;
+  readonly setAutoPauseTriggers: (triggers: ReadonlySet<string>) => void;
 }
 
 // L0 is the founding lineage — every fresh run starts with it. The sim
@@ -117,9 +120,15 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         set({ simTick: event.simTick, lineages });
         return;
       }
+      case 'autoPaused':
+        set({
+          simTick: event.simTick,
+          paused: true,
+          lastAutoPauseTrigger: event.trigger,
+        });
+        return;
       case 'extinction':
       case 'death':
-      case 'autoPaused':
       case 'commandAck':
       case 'commandError':
         // Other event kinds will populate dedicated slices as the matching
@@ -139,6 +148,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     speed: 1,
     paused: false,
     actualSpeed: 0,
+    autoPauseTriggers: new Set(),
+    lastAutoPauseTrigger: null,
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -203,6 +214,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const transport = get().transport;
       if (transport === null) return;
       transport.send({ kind: 'load', commandId: 'ui-load', slot });
+    },
+    setAutoPauseTriggers: (triggers) => {
+      const transport = get().transport;
+      set({ autoPauseTriggers: new Set(triggers) });
+      if (transport === null) return;
+      transport.send({
+        kind: 'configureAutoPause',
+        commandId: 'ui-configureAutoPause',
+        enabledTriggers: [...triggers],
+      });
     },
   };
 });

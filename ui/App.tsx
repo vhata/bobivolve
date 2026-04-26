@@ -1,6 +1,7 @@
 // Bobivolve dashboard shell.
 
 import { useEffect } from 'react';
+import { AutoPausePanel } from './components/AutoPausePanel.js';
 import { ControlsPanel } from './components/ControlsPanel.js';
 import { DriftTelemetryPanel } from './components/DriftTelemetryPanel.js';
 import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
@@ -41,6 +42,7 @@ export function App(): React.JSX.Element {
       <main className="dashboard">
         <RunPanel />
         <ControlsPanel />
+        <AutoPausePanel />
         <PopulationPanel />
         <LineageTreePanel />
         <ProbeInspectorPanel />
