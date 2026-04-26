@@ -221,7 +221,7 @@ test('every panel and control is visibly rendered', async ({ page }) => {
   await expect(page.locator('.run-panel input[aria-label="Seed"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Load' })).toBeVisible();
+  await expect(page.locator('.run-panel input[aria-label="Save slot name"]')).toBeVisible();
 
   // ── ControlsPanel: pause/resume + 4 speed buttons + t/s readout ───────
   await expect(page.getByRole('button', { name: /^(Pause|Resume)$/ })).toBeVisible();
@@ -275,7 +275,7 @@ test('lineage inspector renders firmware and identity for the default L0', async
   await expect(inspectorPanel).toContainText(/replicates/i);
 });
 
-test('Save shows a "saved at tick" indicator after the host acks', async ({ page }) => {
+test('Save creates a slot that appears in the saves list', async ({ page }) => {
   await page.goto('/');
   // Wait for some growth so the saved tick is meaningfully nonzero.
   await expect
@@ -289,15 +289,18 @@ test('Save shows a "saved at tick" indicator after the host acks', async ({ page
     .toBeGreaterThan(2);
 
   await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
-  // The indicator appears after the host's ack round-trips.
+  // "saved at tick" indicator appears after the ack round-trips.
   await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/, {
+    timeout: 5_000,
+  });
+  // The saves list grows by one entry that the user can click to load.
+  await expect(page.locator('.saves-list .save-load-button').first()).toBeVisible({
     timeout: 5_000,
   });
 });
 
-test('Load restores state and pauses; UI reflects it', async ({ page }) => {
+test('Load via the saves list restores state and pauses; UI reflects it', async ({ page }) => {
   await page.goto('/');
-  // Let some growth happen so a Save captures something meaningful.
   await expect
     .poll(
       async () => {
@@ -309,11 +312,14 @@ test('Load restores state and pauses; UI reflects it', async ({ page }) => {
     .toBeGreaterThan(2);
 
   await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('.run-status')).toContainText(/saved at tick/, { timeout: 5_000 });
+  await expect(page.locator('.saves-list .save-load-button').first()).toBeVisible({
+    timeout: 5_000,
+  });
 
-  // Let the run advance further so a Load should visibly snap back.
+  // Let the run advance further so the Load visibly snaps back to the
+  // saved tick.
   await page.waitForTimeout(2_000);
-  await page.locator('.run-panel').getByRole('button', { name: 'Load' }).click();
+  await page.locator('.saves-list .save-load-button').first().click();
 
   // After Load the host pauses; the UI's Resume button should appear.
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 5_000 });

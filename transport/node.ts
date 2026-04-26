@@ -77,14 +77,10 @@ export class NodeTransport implements SimTransport {
     if (this.closed) {
       return Promise.reject(new Error('NodeTransport: query after close'));
     }
-    // In-process variant: queries run synchronously against state and
-    // return a resolved Promise. The async surface keeps the
-    // SimTransport interface symmetric with cross-process variants.
-    try {
-      return Promise.resolve(this.host.executeQuery(q));
-    } catch (e) {
-      return Promise.reject(e instanceof Error ? e : new Error(String(e)));
-    }
+    // In-process variant: queries are async at the host (some need
+    // storage IO). The async surface keeps the SimTransport interface
+    // symmetric with cross-process variants.
+    return this.host.executeQuery(q);
   }
 
   close(): void {

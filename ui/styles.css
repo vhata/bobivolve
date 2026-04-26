@@ -570,6 +570,48 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.saves-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.save-load-button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  background: #1c1f25;
+  border: 1px solid #2c2f36;
+  border-radius: 4px;
+  color: #e8e9ed;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.save-load-button:hover {
+  background: #232730;
+  border-color: #3a5fa8;
+}
+
+.save-slot-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.save-meta {
+  font-size: 0.72rem;
+  color: #6e7178;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.1rem;
+}
+
 .autopause-list {
   list-style: none;
   padding: 0;

@@ -31,7 +31,7 @@ import type {
   SimEvent,
   TickEvent,
 } from '../protocol/types.js';
-import { EventLogReader, EventLogWriter } from './event-log.js';
+import { EventLogWriter } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
@@ -78,6 +78,45 @@ function logKey(runId: string): string {
 
 function snapshotKey(runId: string, tick: bigint): string {
   return `runs/${runId}/snapshots/${tick.toString()}.snap`;
+}
+
+// Named save slots live under `saves/`, separate from the active run's
+// log under `runs/`. The index file records what's in each slot so the
+// UI can list them without enumerating the storage directory directly.
+const SAVES_INDEX_KEY = 'saves/index.json';
+
+function saveSlotKey(slot: string): string {
+  // Slot names must not contain `/` (would escape the saves namespace).
+  if (slot.includes('/') || slot === '' || slot === '..' || slot === '.') {
+    throw new Error(`invalid save slot: ${JSON.stringify(slot)}`);
+  }
+  return `saves/${slot}.save`;
+}
+
+interface SaveSlotEntry {
+  readonly slot: string;
+  readonly tick: string;
+  readonly savedAtMs: number;
+}
+
+interface SavesIndex {
+  readonly saves: readonly SaveSlotEntry[];
+}
+
+async function readSavesIndex(storage: Storage): Promise<SavesIndex> {
+  const bytes = await storage.read(SAVES_INDEX_KEY);
+  if (bytes === null) return { saves: [] };
+  try {
+    const text = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(text) as { saves?: readonly SaveSlotEntry[] };
+    if (!Array.isArray(parsed.saves)) return { saves: [] };
+    return { saves: parsed.saves };
+  } catch {
+    // A corrupt index is treated as empty rather than throwing — the
+    // saves on disk are still recoverable by name; the player just
+    // can't browse them. Future polish: surface a warning.
+    return { saves: [] };
+  }
 }
 
 function directiveToInspector(directive: Directive): ProbeInspectorDirective {
@@ -152,12 +191,14 @@ export class NodeHost {
   // synchronous against in-memory state; the transport layer wraps the
   // call in a Promise for interface symmetry with cross-process variants.
   // ARCHITECTURE.md "Query: pull-only, never pushed".
-  executeQuery(query: Query): QueryResult {
+  async executeQuery(query: Query): Promise<QueryResult> {
     switch (query.kind) {
       case 'probeInspector':
         return this.queryProbeInspector(query.queryId, query.probeId);
       case 'driftTelemetry':
         return this.queryDriftTelemetry(query.queryId, query.lineageId);
+      case 'listSaves':
+        return this.queryListSaves(query.queryId);
       case 'lineageTree':
       case 'logSlice':
       case 'populationSummary':
@@ -167,6 +208,14 @@ export class NodeHost {
         // surface live for early UI integration.
         return { queryId: query.queryId, kind: query.kind } as QueryResult;
     }
+  }
+
+  private async queryListSaves(queryId: string): Promise<QueryResult> {
+    if (this.persistence === undefined) {
+      return { queryId, kind: 'listSaves', saves: [] };
+    }
+    const index = await readSavesIndex(this.persistence.storage);
+    return { queryId, kind: 'listSaves', saves: index.saves };
   }
 
   private queryDriftTelemetry(queryId: string, lineageId: string): QueryResult {
@@ -311,10 +360,10 @@ export class NodeHost {
         this.ack(cmd.commandId);
         return;
       case 'save':
-        this.handleSave(cmd.commandId);
+        this.handleSave(cmd.commandId, cmd.slot);
         return;
       case 'load':
-        this.handleLoad(cmd.commandId);
+        this.handleLoad(cmd.commandId, cmd.slot);
         return;
     }
   }
@@ -590,7 +639,7 @@ export class NodeHost {
 
   // ── Save / Load ────────────────────────────────────────────────────────────
 
-  private handleSave(commandId: string): void {
+  private handleSave(commandId: string, slot: string): void {
     if (this.persistence === undefined) {
       this.error(commandId, 'cannot save: no persistence configured');
       return;
@@ -599,56 +648,64 @@ export class NodeHost {
       this.error(commandId, 'cannot save before newRun');
       return;
     }
-    // Force a snapshot now so the save reflects current state precisely,
-    // then flush so the on-disk log includes it.
-    this.scheduleSnapshot();
+    let key: string;
+    try {
+      key = saveSlotKey(slot);
+    } catch (e) {
+      this.error(commandId, e instanceof Error ? e.message : String(e));
+      return;
+    }
+    // Capture the snapshot synchronously so it reflects the state at
+    // save-time; the actual disk write happens on the work queue.
+    const snap = snapshot(this.state);
+    const tickAt = this.state.simTick;
+    const persistence = this.persistence;
     this.enqueue(async () => {
-      if (this.logWriter !== null) await this.logWriter.flush();
+      const bytes = serializeSnapshot(snap);
+      await persistence.storage.write(key, bytes);
+      // Update the index — read existing, replace any same-named slot,
+      // write back. The whole thing is small so atomicity isn't a
+      // concern at R0 scales.
+      const existing = await readSavesIndex(persistence.storage);
+      const updated: SavesIndex = {
+        saves: [
+          ...existing.saves.filter((s) => s.slot !== slot),
+          { slot, tick: tickAt.toString(), savedAtMs: Date.now() },
+        ],
+      };
+      await persistence.storage.write(
+        SAVES_INDEX_KEY,
+        new TextEncoder().encode(JSON.stringify(updated)),
+      );
       this.ack(commandId);
     });
   }
 
-  private handleLoad(commandId: string): void {
+  private handleLoad(commandId: string, slot: string): void {
     if (this.persistence === undefined) {
       this.error(commandId, 'cannot load: no persistence configured');
       return;
     }
     this.enqueue(async () => {
-      await this.doLoad(commandId);
+      await this.doLoad(commandId, slot);
     });
   }
 
-  private async doLoad(commandId: string): Promise<void> {
+  private async doLoad(commandId: string, slot: string): Promise<void> {
     if (this.persistence === undefined) return;
     const persistence = this.persistence;
 
-    // Flush any in-flight buffer before reading; we want a consistent view
-    // of the log on disk.
-    if (this.logWriter !== null) await this.logWriter.flush();
-
-    const reader = new EventLogReader(persistence.storage, logKey(persistence.runId));
-    const allEntries = await reader.readAll();
-    if (allEntries.length === 0) {
-      this.error(commandId, `no log entries for run ${persistence.runId}`);
+    let key: string;
+    try {
+      key = saveSlotKey(slot);
+    } catch (e) {
+      this.error(commandId, e instanceof Error ? e.message : String(e));
       return;
     }
 
-    const latest = await reader.latestSnap();
-    if (latest === null) {
-      // Rebuild-from-log without a snap is the longer fallback path
-      // ARCHITECTURE.md describes for cross-version loading. R0 requires a
-      // snap (the host writes one on Save and at cadence, so this only
-      // triggers when the log was hand-edited or aborted before cadence).
-      this.error(
-        commandId,
-        `no snapshot in log for run ${persistence.runId}; rebuild-from-log is not yet implemented`,
-      );
-      return;
-    }
-
-    const snapBytes = await persistence.storage.read(latest.snapshotKey);
+    const snapBytes = await persistence.storage.read(key);
     if (snapBytes === null) {
-      this.error(commandId, `snapshot file missing: ${latest.snapshotKey}`);
+      this.error(commandId, `save slot not found: ${slot}`);
       return;
     }
 
@@ -656,36 +713,13 @@ export class NodeHost {
     this.state = restored;
     this.lastSnapAtTick = restored.simTick;
 
-    // Determine how far the log got past the latest snap, then advance the
-    // sim silently to catch up. Determinism guarantees that the events the
-    // sim re-emits during this catch-up match the ev entries already in the
-    // log; we discard them (replaying flag suppresses listener emission and
-    // log writes).
-    let maxTick = latest.tick;
-    for (const entry of allEntries) {
-      if (entry.tick > maxTick) maxTick = entry.tick;
-    }
-
-    this.replaying = true;
-    try {
-      const toAdvance = maxTick - restored.simTick;
-      if (toAdvance > 0n) {
-        const events: SimEvent[] = [];
-        for (let i = 0n; i < toAdvance; i++) {
-          events.length = 0;
-          tick(restored, events);
-        }
-      }
-    } finally {
-      this.replaying = false;
-    }
-
-    // Resume the writer so future entries don't collide with previously
-    // logged ones at the same tick.
-    if (this.logWriter !== null) {
-      const last = allEntries[allEntries.length - 1];
-      if (last !== undefined) this.logWriter.resumeAt(last.tick, last.seq + 1);
-    }
+    // Reset the active run's log — the loaded state forks the timeline,
+    // and continuing to append to the prior run's log would create a
+    // confusing discontinuity. The save slot itself is unchanged on
+    // disk; the player can save again under the same slot to update.
+    const activeLogKey = logKey(persistence.runId);
+    await persistence.storage.delete(activeLogKey);
+    this.logWriter = new EventLogWriter(persistence.storage, activeLogKey);
 
     // Pause post-load; the user is presumed to be inspecting before
     // resuming.
