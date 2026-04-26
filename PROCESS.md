@@ -30,6 +30,7 @@ No semver. This is a chronicle, not a published library.
 These rules apply across every language in the codebase, present and future. The tools used to enforce them may evolve; the rules do not.
 
 - **Tests.** New behaviour ships with tests. The full suite passes before every commit.
+- **Agent-testable.** Every change is verifiable end-to-end without manual interaction. Tests live at the layer where the behaviour does — unit tests for sim logic, integration tests for transport and host contracts, browser-driven tests for UI behaviour. The discipline keeps both human and agent contributors un-stuck: nobody has to ask anyone else "does it still work?" When a bug is surfaced by clicking around, the first move is a regression test that fails for the same reason; the fix follows. UI bugs in particular degrade fast without this — manual-only verification is how a session loses an hour to a one-line typo.
 - **Linting.** Code lints clean before every commit. Warnings are treated as errors. The mechanizable disciplines from `ARCHITECTURE.md` are encoded as lint rules wherever possible (see Code review).
 - **Formatting.** Code is auto-formatted before every commit. No formatting churn lands in feature commits.
 - **Always green, always current.** A commit that does not pass tests, lint, and format checks does not exist on `main`.
