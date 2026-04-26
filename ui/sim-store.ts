@@ -28,10 +28,22 @@ export interface LineageNode {
   readonly foundedAtTick: bigint;
 }
 
+// Sampled point in the population history. We keep a bounded rolling
+// window (HISTORY_CAPACITY) and downsample as we accumulate; sampling
+// every N-th tick keeps the chart readable across run lengths.
+export interface PopulationHistoryPoint {
+  readonly tick: bigint;
+  readonly byLineage: ReadonlyMap<string, bigint>;
+  readonly total: bigint;
+}
+
+const HISTORY_CAPACITY = 240;
+
 export interface SimStoreState {
   readonly simTick: bigint;
   readonly populationTotal: bigint;
   readonly populationByLineage: ReadonlyMap<string, bigint>;
+  readonly populationHistory: readonly PopulationHistoryPoint[];
   readonly lineages: ReadonlyMap<string, LineageNode>;
   readonly seed: bigint | null;
   readonly speed: SimSpeed;
@@ -58,14 +70,30 @@ export const useSimStore = create<SimStoreState>((set, get) => {
 
   const handleEvent = (event: SimEvent): void => {
     switch (event.kind) {
-      case 'tick':
+      case 'tick': {
+        const byLineage = new Map(Object.entries(event.populationByLineage));
+        const history = [...get().populationHistory];
+        history.push({
+          tick: event.simTick,
+          byLineage,
+          total: event.populationTotal,
+        });
+        // Bounded buffer with simple decimation: when full, drop every
+        // other entry so we keep the curve shape across longer runs.
+        if (history.length > HISTORY_CAPACITY) {
+          for (let i = 0; i < history.length - 1; i += 1) {
+            history.splice(i, 1);
+          }
+        }
         set({
           simTick: event.simTick,
           populationTotal: event.populationTotal,
-          populationByLineage: new Map(Object.entries(event.populationByLineage)),
+          populationByLineage: byLineage,
+          populationHistory: history,
           actualSpeed: event.actualSpeed,
         });
         return;
+      }
       case 'replication': {
         const next = new Map(get().populationByLineage);
         next.set(event.lineageId, (next.get(event.lineageId) ?? 0n) + 1n);
@@ -103,6 +131,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     simTick: 0n,
     populationTotal: 0n,
     populationByLineage: new Map(),
+    populationHistory: [],
     lineages: freshLineages(),
     seed: null,
     speed: 1,
@@ -138,6 +167,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
+        populationHistory: [],
         lineages: freshLineages(),
         paused: false,
         actualSpeed: 0,
