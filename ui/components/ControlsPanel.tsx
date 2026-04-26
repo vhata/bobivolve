@@ -1,40 +1,21 @@
-// Run controls. Pause/resume and speed selector. Wires the store actions
-// straight to the UI; the store is responsible for issuing the commands
-// over the transport. Pending-command tracking surfaces unconfirmed
-// pause/resume/setSpeed via a "pending" data attribute and a warning
-// when the ack hasn't arrived after 1 second.
+// Run controls. Pause/resume and speed selector. The pending indicator
+// is subtle visual feedback during the ack round-trip; recovery from a
+// dropped command happens automatically in the store via retry, so the
+// player never sees a "stuck" state requiring action on their part.
 
-import { useEffect, useState } from 'react';
 import type { SimSpeed } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
 
 const SPEEDS: readonly SimSpeed[] = [1, 4, 16, 64];
 
-const PENDING_WARN_MS = 1_000;
-
 function hasPending(
-  pendingCommands: ReadonlyMap<string, { kind: string; issuedAtMs: number }>,
+  pendingCommands: ReadonlyMap<string, { kind: string }>,
   kinds: readonly string[],
-): { pending: boolean; ageMs: number } {
-  let pending = false;
-  let oldestIssuedAt = Number.POSITIVE_INFINITY;
+): boolean {
   for (const cmd of pendingCommands.values()) {
-    if (kinds.includes(cmd.kind)) {
-      pending = true;
-      if (cmd.issuedAtMs < oldestIssuedAt) oldestIssuedAt = cmd.issuedAtMs;
-    }
+    if (kinds.includes(cmd.kind)) return true;
   }
-  return { pending, ageMs: pending ? Date.now() - oldestIssuedAt : 0 };
-}
-
-// Hook to re-render this component once a second so the "stuck > 1s"
-// warning becomes visible without an unrelated event causing a render.
-function useTickingClock(intervalMs: number): void {
-  const [, setN] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setN((n) => n + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
+  return false;
 }
 
 export function ControlsPanel(): React.JSX.Element {
@@ -46,12 +27,8 @@ export function ControlsPanel(): React.JSX.Element {
   const resume = useSimStore((s) => s.resume);
   const setSpeed = useSimStore((s) => s.setSpeed);
 
-  useTickingClock(500);
-
-  const pauseToggle = hasPending(pendingCommands, ['pause', 'resume']);
-  const speedChange = hasPending(pendingCommands, ['setSpeed']);
-  const pauseStuck = pauseToggle.pending && pauseToggle.ageMs > PENDING_WARN_MS;
-  const speedStuck = speedChange.pending && speedChange.ageMs > PENDING_WARN_MS;
+  const pauseTogglePending = hasPending(pendingCommands, ['pause', 'resume']);
+  const speedChangePending = hasPending(pendingCommands, ['setSpeed']);
 
   return (
     <section className="panel controls-panel">
@@ -65,8 +42,7 @@ export function ControlsPanel(): React.JSX.Element {
           className="control-button"
           onClick={paused ? resume : pause}
           aria-pressed={paused}
-          data-pending={pauseToggle.pending ? 'true' : 'false'}
-          data-stuck={pauseStuck ? 'true' : 'false'}
+          data-pending={pauseTogglePending ? 'true' : 'false'}
         >
           {paused ? 'Resume' : 'Pause'}
         </button>
@@ -78,18 +54,12 @@ export function ControlsPanel(): React.JSX.Element {
               className={`speed-button${s === speed ? ' speed-button-active' : ''}`}
               onClick={() => setSpeed(s)}
               aria-pressed={s === speed}
-              data-pending={speedChange.pending && s === speed ? 'true' : 'false'}
-              data-stuck={speedStuck && s === speed ? 'true' : 'false'}
+              data-pending={speedChangePending && s === speed ? 'true' : 'false'}
             >
               {s}×
             </button>
           ))}
         </div>
-        {(pauseStuck || speedStuck) && (
-          <p className="controls-warning" role="status">
-            command not yet acknowledged by the worker — it may be busy
-          </p>
-        )}
       </div>
     </section>
   );

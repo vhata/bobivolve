@@ -174,8 +174,6 @@ test('pause clears the pending indicator within a reasonable window', async ({ p
 
   // Within a healthy window, the ack arrives and pending clears.
   await expect(resumeButton).toHaveAttribute('data-pending', 'false', { timeout: 1_500 });
-  // And the "stuck" state should never appear during a healthy run.
-  await expect(resumeButton).toHaveAttribute('data-stuck', 'false');
 });
 
 test('lineage tree starts with the founder lineage L0', async ({ page }) => {
