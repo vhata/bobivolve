@@ -238,6 +238,13 @@ export interface DriftTelemetry {
   // Per-parameter drift stats. Keyed by dotted path, e.g. 'replicate.threshold',
   // so multiple directives' parameters in a richer firmware do not collide.
   readonly parameters: Readonly<Record<string, ParameterDrift>>;
+  // The speciation rule, exposed to the seam so the UI can render the
+  // boundary alongside live drift. A child speciates from its lineage
+  // when |child - reference| > reference / divergenceDivisor for any
+  // parameter; equivalently, the relative speciation threshold is
+  // 1 / divergenceDivisor (e.g. divisor 100 → ±1%). Decimal string for
+  // u64-safe transport (proto3 JSON convention).
+  readonly divergenceDivisor: string;
 }
 
 export interface ParameterDrift {

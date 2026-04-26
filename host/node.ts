@@ -15,6 +15,7 @@
 //     CommandError.
 
 import type { Directive } from '../sim/directive.js';
+import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
 import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
@@ -276,7 +277,11 @@ export class NodeHost {
       queryId,
       kind: 'driftTelemetry',
       lineageId,
-      drift: { population, parameters },
+      drift: {
+        population,
+        parameters,
+        divergenceDivisor: SPECIATION_DIVERGENCE_DIVISOR.toString(),
+      },
     };
   }
 
