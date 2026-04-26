@@ -11,10 +11,8 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - WorkerTransport (UI side wiring for the Worker host) #r0 #transport
 - Cross-process NodeTransport variant: NDJSON over stdio, symmetric with the eventual Rust binary #r0 #transport
 - `OPFSStorage` adapter (browser-side counterpart to `NodeStorage`) #r0 #host
-- Wire `NodeStorage` into `NodeHost` for save/load + event log destinations #r0 #host
-- Event log (NDJSON, append-only, keyed by `(tick, seq)`) — depends on `Storage` adapters #r0 #sim
-- Persistent snapshot mechanism (write to Storage; rebuild-from-log fallback on first open) — depends on `Storage` adapters #r0 #sim
-- Save / Load command handlers in the host run-loop (the protocol commands exist; nothing routes them) #r0 #host
+- Rebuild-from-log fallback when a snapshot is missing or unreadable (ARCHITECTURE.md migration path); currently load fails fast in that case #r0 #host
+- Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
 - Add `build` step to CI once a build target exists (Vite + UI) #r0 #ci
 
 ## Release 0 — Petri Dish
@@ -30,5 +28,3 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Forensic replay: scrubable timeline #r0 #ui
 - Auto-pause trigger configuration UI #r0 #ui
 - Speed control: 1x, 4x, 16x, 64x #r0 #ui
-- OPFS-backed event log in the browser host #r0 #host
-- Disk-backed event log in the node host #r0 #host
