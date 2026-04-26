@@ -107,7 +107,7 @@
 {"kind":"replication","simTick":"4251","parentProbeId":"P36","childProbeId":"P106","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4280","parentProbeId":"P57","childProbeId":"P107","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4286","parentProbeId":"P50","childProbeId":"P108","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"4295","parentLineageId":"L0","newLineageId":"L1","newLineageName":"Refuges"}
+{"kind":"speciation","simTick":"4295","parentLineageId":"L0","newLineageId":"L1","newLineageName":"Refuges","founderProbeId":"P109"}
 {"kind":"replication","simTick":"4295","parentProbeId":"P84","childProbeId":"P109","lineageId":"L1","mutated":true}
 {"kind":"replication","simTick":"4304","parentProbeId":"P57","childProbeId":"P110","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4305","parentProbeId":"P4","childProbeId":"P111","lineageId":"L0","mutated":false}
@@ -163,7 +163,7 @@
 {"kind":"replication","simTick":"4675","parentProbeId":"P71","childProbeId":"P161","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4679","parentProbeId":"P36","childProbeId":"P162","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4683","parentProbeId":"P49","childProbeId":"P163","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"4685","parentLineageId":"L0","newLineageId":"L2","newLineageName":"Reeds"}
+{"kind":"speciation","simTick":"4685","parentLineageId":"L0","newLineageId":"L2","newLineageName":"Reeds","founderProbeId":"P164"}
 {"kind":"replication","simTick":"4685","parentProbeId":"P20","childProbeId":"P164","lineageId":"L2","mutated":true}
 {"kind":"replication","simTick":"4686","parentProbeId":"P164","childProbeId":"P165","lineageId":"L2","mutated":false}
 {"kind":"replication","simTick":"4689","parentProbeId":"P22","childProbeId":"P166","lineageId":"L0","mutated":false}
@@ -201,7 +201,7 @@
 {"kind":"replication","simTick":"4858","parentProbeId":"P106","childProbeId":"P198","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4859","parentProbeId":"P61","childProbeId":"P199","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4864","parentProbeId":"P16","childProbeId":"P200","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"4866","parentLineageId":"L0","newLineageId":"L3","newLineageName":"Lagoons"}
+{"kind":"speciation","simTick":"4866","parentLineageId":"L0","newLineageId":"L3","newLineageName":"Lagoons","founderProbeId":"P201"}
 {"kind":"replication","simTick":"4866","parentProbeId":"P182","childProbeId":"P201","lineageId":"L3","mutated":true}
 {"kind":"replication","simTick":"4878","parentProbeId":"P185","childProbeId":"P202","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4879","parentProbeId":"P109","childProbeId":"P203","lineageId":"L1","mutated":false}
@@ -231,7 +231,7 @@
 {"kind":"replication","simTick":"4955","parentProbeId":"P186","childProbeId":"P227","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4970","parentProbeId":"P63","childProbeId":"P228","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4975","parentProbeId":"P212","childProbeId":"P229","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"4976","parentLineageId":"L0","newLineageId":"L4","newLineageName":"Veldts"}
+{"kind":"speciation","simTick":"4976","parentLineageId":"L0","newLineageId":"L4","newLineageName":"Veldts","founderProbeId":"P230"}
 {"kind":"replication","simTick":"4976","parentProbeId":"P31","childProbeId":"P230","lineageId":"L4","mutated":true}
 {"kind":"replication","simTick":"4991","parentProbeId":"P14","childProbeId":"P231","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"4993","parentProbeId":"P87","childProbeId":"P232","lineageId":"L0","mutated":false}

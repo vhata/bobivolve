@@ -47,11 +47,32 @@ function buildTree(
   return build(null);
 }
 
-function TreeNodeView({ node }: { node: TreeNode }): React.JSX.Element {
+function TreeNodeView({
+  node,
+  selectedId,
+  onSelect,
+}: {
+  node: TreeNode;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}): React.JSX.Element {
   const extinct = node.population === 0n;
+  const selected = node.lineage.id === selectedId;
+  const className = [
+    'lineage-node',
+    extinct ? 'lineage-node-extinct' : '',
+    selected ? 'lineage-node-selected' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <li className={`lineage-node${extinct ? ' lineage-node-extinct' : ''}`}>
-      <div className="lineage-node-row">
+    <li className={className}>
+      <button
+        type="button"
+        className="lineage-node-row"
+        onClick={() => onSelect(node.lineage.id)}
+        aria-pressed={selected}
+      >
         <span className="lineage-id">
           {node.lineage.name}
           {node.lineage.name !== node.lineage.id ? (
@@ -64,11 +85,16 @@ function TreeNodeView({ node }: { node: TreeNode }): React.JSX.Element {
             ? ` · forked at ${node.lineage.foundedAtTick.toString()}`
             : ''}
         </span>
-      </div>
+      </button>
       {node.children.length > 0 ? (
         <ul className="lineage-children">
           {node.children.map((child) => (
-            <TreeNodeView key={child.lineage.id} node={child} />
+            <TreeNodeView
+              key={child.lineage.id}
+              node={child}
+              selectedId={selectedId}
+              onSelect={onSelect}
+            />
           ))}
         </ul>
       ) : null}
@@ -79,6 +105,8 @@ function TreeNodeView({ node }: { node: TreeNode }): React.JSX.Element {
 export function LineageTreePanel(): React.JSX.Element {
   const lineages = useSimStore((s) => s.lineages);
   const populationByLineage = useSimStore((s) => s.populationByLineage);
+  const selectedLineageId = useSimStore((s) => s.selectedLineageId);
+  const selectLineage = useSimStore((s) => s.selectLineage);
 
   const roots = buildTree(lineages, populationByLineage);
 
@@ -94,7 +122,12 @@ export function LineageTreePanel(): React.JSX.Element {
         ) : (
           <ul className="lineage-tree">
             {roots.map((root) => (
-              <TreeNodeView key={root.lineage.id} node={root} />
+              <TreeNodeView
+                key={root.lineage.id}
+                node={root}
+                selectedId={selectedLineageId}
+                onSelect={selectLineage}
+              />
             ))}
           </ul>
         )}
