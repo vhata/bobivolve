@@ -1,0 +1,4 @@
+{"kind":"commandAck","simTick":"0","commandId":"determinism-newRun"}
+{"kind":"replication","simTick":"190","parentProbeId":"","childProbeId":"P1","lineageId":"L0","mutated":false}
+{"kind":"replication","simTick":"641","parentProbeId":"","childProbeId":"P2","lineageId":"L0","mutated":false}
+{"kind":"replication","simTick":"664","parentProbeId":"","childProbeId":"P3","lineageId":"L0","mutated":false}
