@@ -163,3 +163,47 @@ body {
   background: #2c4a8a;
   color: #ffffff;
 }
+
+.lineage-tree-panel {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.lineage-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lineage-children {
+  list-style: none;
+  margin: 0;
+  padding-left: 1.25rem;
+  border-left: 1px solid #2c2f36;
+  margin-left: 0.45rem;
+  margin-top: 0.25rem;
+}
+
+.lineage-node {
+  margin: 0.15rem 0;
+}
+
+.lineage-node-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  align-items: baseline;
+}
+
+.lineage-meta {
+  color: #6e7178;
+  font-size: 0.85rem;
+}
+
+.lineage-node-extinct .lineage-id,
+.lineage-node-extinct .lineage-meta {
+  color: #555861;
+  text-decoration: line-through;
+}

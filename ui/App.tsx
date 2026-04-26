@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { ControlsPanel } from './components/ControlsPanel.js';
+import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
@@ -36,6 +37,7 @@ export function App(): React.JSX.Element {
       <main className="dashboard">
         <ControlsPanel />
         <PopulationPanel />
+        <LineageTreePanel />
       </main>
     </div>
   );
