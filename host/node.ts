@@ -20,6 +20,7 @@ import { type SimState, createInitialState, restore, snapshot } from '../sim/sta
 import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
 import type {
+  AutoPausedEvent,
   Command,
   CommandAckEvent,
   CommandErrorEvent,
@@ -97,6 +98,12 @@ export class NodeHost {
   private readonly listeners = new Set<HostEventListener>();
   private readonly now: () => number;
   private readonly heartbeatIntervalMs: number;
+
+  // Auto-pause triggers currently armed. Updated by configureAutoPause
+  // commands; consulted after each event to decide whether to pause and
+  // emit an AutoPaused event. SPEC.md "Auto-pause triggers ... user
+  // configurable" — the host enforces; the UI offers the toggles.
+  private autoPauseTriggers = new Set<string>();
 
   // Persistence. When configured, every cmd and ev is logged; periodic
   // snapshots land at snapshotCadenceTicks. None of this fires when
@@ -289,8 +296,7 @@ export class NodeHost {
         this.handleStep(cmd.commandId, cmd.ticks);
         return;
       case 'configureAutoPause':
-        // R0 ships a fixed default trigger set; the message is accepted but
-        // has no effect until the auto-pause UI lands.
+        this.autoPauseTriggers = new Set(cmd.enabledTriggers);
         this.ack(cmd.commandId);
         return;
       case 'save':
@@ -370,8 +376,10 @@ export class NodeHost {
   // ── tick driver ────────────────────────────────────────────────────────────
 
   // Advance the sim by `n` ticks, draining the events the sim emits and
-  // forwarding each through `emit`. Ignores `paused`; the public
-  // runUntil() / step path is responsible for honoring it.
+  // forwarding each through `emit`. Auto-pause triggers are consulted
+  // after each event; if one fires, the loop bails out so the next tick
+  // does not advance past the trigger point. Ignores `paused`; the
+  // public runUntil() / step path is responsible for honoring it.
   private advanceUnpaused(n: bigint): void {
     if (this.state === null) return;
     const state = this.state;
@@ -379,9 +387,34 @@ export class NodeHost {
     for (let i = 0n; i < n; i++) {
       events.length = 0;
       tick(state, events);
-      for (const event of events) this.emit(event);
+      for (const event of events) {
+        this.emit(event);
+        if (this.maybeAutoPause(event)) return;
+      }
       this.maybeWriteSnapshot();
     }
+  }
+
+  // Returns true if an auto-pause trigger fired for this event. The host
+  // sets this.paused, emits an AutoPaused event, and the caller bails
+  // out of further advancement.
+  private maybeAutoPause(event: SimEvent): boolean {
+    if (this.replaying) return false;
+    let trigger: string | null = null;
+    // Significant-drift trigger: speciation events. Other R0-applicable
+    // triggers (lineage extinction) wait for their mechanics to land.
+    if (event.kind === 'speciation' && this.autoPauseTriggers.has('speciation')) {
+      trigger = 'speciation';
+    }
+    if (trigger === null) return false;
+    this.paused = true;
+    const autoPaused: AutoPausedEvent & { simTick: bigint } = {
+      kind: 'autoPaused',
+      simTick: event.simTick,
+      trigger,
+    };
+    this.emit(autoPaused);
+    return true;
   }
 
   // Trigger a snapshot if we've crossed the cadence boundary since the
