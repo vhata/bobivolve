@@ -14,7 +14,6 @@
 /// <reference lib="webworker" />
 
 import { NodeHost } from './node.js';
-import { OPFSStorage } from './storage-opfs.js';
 import type { Command, Query, QueryResult, SimEvent } from '../protocol/types.js';
 
 interface CommandMessage {
@@ -42,18 +41,20 @@ type IncomingMessage = CommandMessage | QueryMessage;
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
-// Default runId until the UI exposes a Start Run dialog with a slot
-// picker. All sessions write to the same slot for now; reloading the page
-// without explicit Save still loses the in-memory tail past the latest
-// snap, which is fine for R0 dashboard demo purposes.
-const DEFAULT_RUN_ID = 'default';
-
+// No persistence in the worker by default. ARCHITECTURE.md envisions
+// OPFS-backed durable runs in the browser, but auto-persistence with a
+// fixed runId means each newRun appends to the same on-disk log; a future
+// Load would try to replay multiple newRuns in sequence and re-execute
+// them, which is broken. The clean fix is a configure-on-newRun shape
+// that mints a fresh runId per run; that's a follow-up.
+//
+// The CLI's --save-dir / --run-id / --resume flags already provide the
+// correct shape for headless persistence; the dashboard's UI Save/Load
+// buttons currently dispatch their commands but the host has no
+// persistence configured, so they return commandError. Restoring those
+// buttons to working order is gated on the configure-on-newRun work.
 const host = new NodeHost({
   heartbeatHz: 60,
-  persistence: {
-    storage: new OPFSStorage({ root: 'bobivolve' }),
-    runId: DEFAULT_RUN_ID,
-  },
 });
 
 host.subscribe((event: SimEvent) => {

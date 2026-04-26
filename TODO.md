@@ -8,7 +8,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Flesh out R0 `Query` result message bodies as the dashboard UI takes shape #r0 #protocol
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Cross-process NodeTransport variant: NDJSON over stdio, symmetric with the eventual Rust binary #r0 #transport
-- Wire `OPFSStorage` into the Worker host so the dashboard's runs persist across reloads #r0 #host
 - Rebuild-from-log fallback when a snapshot is missing or unreadable (ARCHITECTURE.md migration path); currently load fails fast in that case #r0 #host
 - Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
 
