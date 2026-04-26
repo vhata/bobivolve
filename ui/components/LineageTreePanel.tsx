@@ -54,7 +54,9 @@ function TreeNodeView({ node }: { node: TreeNode }): React.JSX.Element {
       <div className="lineage-node-row">
         <span className="lineage-id">
           {node.lineage.name}
-          <span className="lineage-id-ordinal"> {node.lineage.id}</span>
+          {node.lineage.name !== node.lineage.id ? (
+            <span className="lineage-id-ordinal"> {node.lineage.id}</span>
+          ) : null}
         </span>
         <span className="lineage-meta">
           {extinct ? 'extinct' : `${node.population.toString()} probes`}

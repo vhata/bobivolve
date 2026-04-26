@@ -181,6 +181,104 @@ test('lineage tree starts with the founder lineage L0', async ({ page }) => {
   await expect(page.locator('.lineage-tree')).toContainText('L0');
 });
 
+test('lineage tree founder row does not duplicate name and id', async ({ page }) => {
+  await page.goto('/');
+  // The founder lineage's name is currently the same string as its id
+  // ("L0"); the row should render it once, not twice. A regression
+  // would print "L0 L0" verbatim, so a substring assert is sufficient.
+  const rowText = await page.locator('.lineage-tree .lineage-node-row').first().textContent();
+  expect(rowText ?? '').not.toMatch(/\bL0\s+L0\b/);
+});
+
+test('every panel and control is visibly rendered', async ({ page }) => {
+  await page.goto('/');
+
+  // ── header ────────────────────────────────────────────────────────────
+  await expect(page.locator('h1')).toBeVisible();
+  await expect(page.locator('.bobivolve-tagline')).toBeVisible();
+
+  // ── all eight panels exist and are visible ────────────────────────────
+  const panelClasses = [
+    '.run-panel',
+    '.controls-panel',
+    '.autopause-panel',
+    '.population-panel',
+    '.lineage-tree-panel',
+    '.inspector-panel',
+    '.drift-panel',
+    '.timeline-panel',
+  ];
+  for (const cls of panelClasses) {
+    await expect(page.locator(cls), `panel ${cls} should be visible`).toBeVisible();
+    // And it should have non-trivial size — anything narrower than 200px
+    // or shorter than 60px is almost certainly broken layout, not styled.
+    const box = await page.locator(cls).boundingBox();
+    expect(box, `panel ${cls} should have a bounding box`).not.toBeNull();
+    expect(box?.width ?? 0, `panel ${cls} width`).toBeGreaterThan(200);
+    expect(box?.height ?? 0, `panel ${cls} height`).toBeGreaterThan(60);
+  }
+
+  // ── RunPanel: seed input + Start + Save + Load ────────────────────────
+  await expect(page.locator('.run-panel input[aria-label="Seed"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load' })).toBeVisible();
+
+  // ── ControlsPanel: pause/resume + 4 speed buttons + t/s readout ───────
+  await expect(page.getByRole('button', { name: /^(Pause|Resume)$/ })).toBeVisible();
+  for (const speed of ['1×', '4×', '16×', '64×']) {
+    await expect(page.getByRole('button', { name: speed, exact: true })).toBeVisible();
+  }
+  await expect(page.locator('.controls-panel .panel-meta')).toBeVisible();
+
+  // ── AutoPausePanel: four trigger checkboxes ───────────────────────────
+  const autopauseRows = page.locator('.autopause-row');
+  await expect(autopauseRows).toHaveCount(4);
+  for (let i = 0; i < 4; i += 1) {
+    await expect(autopauseRows.nth(i)).toBeVisible();
+  }
+
+  // ── PopulationPanel: total + (eventually) sparkline + lineage list ────
+  await expect(page.locator('.population-total')).toBeVisible();
+  // Wait briefly for the first heartbeat to populate the lineage list
+  // and the chart.
+  await expect
+    .poll(
+      async () => {
+        return (await page.locator('.lineage-list').isVisible()) ? 'visible' : 'hidden';
+      },
+      { timeout: 10_000 },
+    )
+    .toBe('visible');
+
+  // ── LineageTreePanel: tree present, L0 visible ────────────────────────
+  await expect(page.locator('.lineage-tree')).toBeVisible();
+  await expect(page.locator('.lineage-tree')).toContainText('L0');
+
+  // ── ProbeInspectorPanel: input + Inspect button (button not clipped) ─
+  await expect(page.locator('.inspector-panel input[aria-label="Probe id"]')).toBeVisible();
+  const inspectButton = page.locator('.inspector-panel').getByRole('button', { name: 'Inspect' });
+  await expect(inspectButton).toBeVisible();
+  // Guard against the button being squeezed or clipped: it must lie
+  // wholly inside the inspector panel's content box.
+  const inspectorPanelBox = await page.locator('.inspector-panel').boundingBox();
+  const inspectButtonBox = await inspectButton.boundingBox();
+  expect(inspectorPanelBox).not.toBeNull();
+  expect(inspectButtonBox).not.toBeNull();
+  if (inspectorPanelBox !== null && inspectButtonBox !== null) {
+    expect(inspectButtonBox.x + inspectButtonBox.width).toBeLessThanOrEqual(
+      inspectorPanelBox.x + inspectorPanelBox.width + 1,
+    );
+    expect(inspectButtonBox.width).toBeGreaterThan(40);
+  }
+
+  // ── DriftTelemetryPanel: lineage selector dropdown ────────────────────
+  await expect(page.locator('.lineage-select')).toBeVisible();
+
+  // ── EventsTimelinePanel: timeline svg ─────────────────────────────────
+  await expect(page.locator('.timeline-svg')).toBeVisible();
+});
+
 test('probe inspector returns firmware for P0', async ({ page }) => {
   await page.goto('/');
   // P0 exists from tick 0, no need to wait.

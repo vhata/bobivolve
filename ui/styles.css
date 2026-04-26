@@ -254,11 +254,15 @@ body {
 .inspector-form {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
   margin-bottom: 0.75rem;
 }
 
 .inspector-input {
-  flex: 1;
+  /* min-width: 0 lets the input shrink below its intrinsic content
+     width so the button can stay fully visible in narrow panels. */
+  flex: 1 1 100px;
+  min-width: 0;
   padding: 0.4rem 0.65rem;
   background: #1c1f25;
   border: 1px solid #2c2f36;
