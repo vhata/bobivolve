@@ -56,6 +56,8 @@ export interface SimStoreState {
   readonly pause: () => void;
   readonly resume: () => void;
   readonly setSpeed: (speed: SimSpeed) => void;
+  readonly save: (slot?: string) => void;
+  readonly load: (slot?: string) => void;
 }
 
 // L0 is the founding lineage — every fresh run starts with it. The sim
@@ -191,6 +193,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       set({ speed });
       transport.send({ kind: 'setSpeed', commandId: 'ui-setSpeed', speed });
+    },
+    save: (slot = 'default') => {
+      const transport = get().transport;
+      if (transport === null) return;
+      transport.send({ kind: 'save', commandId: 'ui-save', slot });
+    },
+    load: (slot = 'default') => {
+      const transport = get().transport;
+      if (transport === null) return;
+      transport.send({ kind: 'load', commandId: 'ui-load', slot });
     },
   };
 });

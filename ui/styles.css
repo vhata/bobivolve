@@ -439,3 +439,29 @@ body {
 .timeline-description {
   color: #e8e9ed;
 }
+
+.run-body {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.run-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.run-label {
+  display: grid;
+  gap: 0.2rem;
+  flex: 1;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6e7178;
+}
+
+.run-actions {
+  display: flex;
+  gap: 0.5rem;
+}
