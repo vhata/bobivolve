@@ -160,18 +160,27 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             history.splice(i, 1);
           }
         }
-        // Suppress actualSpeed updates while paused. An in-flight
-        // runUntil that started before the pause click can emit a Tick
-        // heartbeat with a non-zero actualSpeed AFTER the pause action
-        // zeroed it; without this guard, the readout flips back to a
-        // misleading non-zero value and stays there until resume.
-        const paused = get().paused;
+        // While paused, force the readout to 0 — a stale heartbeat from
+        // an in-flight runUntil could otherwise leave the previous
+        // non-zero reading lingering on the screen.
+        //
+        // While running, a heartbeat that reports actualSpeed=0
+        // (because the pulse couldn't fit a single tick in its
+        // wall-clock budget) is a momentary measurement artefact, not a
+        // sign the sim has stopped. Hold the previous reading instead
+        // of blipping the readout to 0 and back.
+        const current = get();
+        const nextSpeed = current.paused
+          ? 0
+          : event.actualSpeed > 0
+            ? event.actualSpeed
+            : current.actualSpeed;
         set({
           simTick: event.simTick,
           populationTotal: event.populationTotal,
           populationByLineage: byLineage,
           populationHistory: history,
-          actualSpeed: paused ? 0 : event.actualSpeed,
+          actualSpeed: nextSpeed,
         });
         return;
       }

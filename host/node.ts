@@ -332,7 +332,13 @@ export class NodeHost {
   // in the postMessage queue for that whole duration.
   runUntil(untilTick: bigint, wallClockBudgetMs?: number): void {
     if (this.state === null) return;
-    this.resetHeartbeatBaseline();
+    // The heartbeat baseline is updated at end-of-emit, not at start
+    // here. Resetting at runUntil start would constrain each heartbeat
+    // to measure only the per-pulse advance, ignoring the idle gap
+    // between pulses; that produces per-pulse rates which occasionally
+    // read 0 t/s even while the sim is healthily advancing. Letting the
+    // baseline ride forward means each heartbeat reports the rate since
+    // the previous heartbeat — a more honest aggregate.
     const start = wallClockBudgetMs !== undefined ? performance.now() : 0;
     while (this.state.simTick < untilTick && !this.paused) {
       // One slice per loop iteration; heartbeat decision is between slices.
