@@ -1,4 +1,5 @@
 import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
+import type { Lineage } from './lineage.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
@@ -18,6 +19,7 @@ export interface SimState {
   simTick: SimTick;
   rng: Xoshiro256ss;
   probes: Map<ProbeId, Probe>;
+  lineages: Map<LineageId, Lineage>;
   // Monotonic counters used to mint stable IDs for new probes and lineages.
   // Kept separate from rng so they survive without consuming randomness.
   nextProbeOrdinal: bigint;
@@ -32,6 +34,7 @@ export interface SimStateSnapshot {
   readonly simTick: bigint;
   readonly rngState: Xoshiro256State;
   readonly probes: readonly Probe[];
+  readonly lineages: readonly Lineage[];
   readonly nextProbeOrdinal: bigint;
   readonly nextLineageOrdinal: bigint;
 }
@@ -41,17 +44,26 @@ export function createInitialState(
   founderFirmware: DirectiveStack = FOUNDER_FIRMWARE,
 ): SimState {
   const rng = Xoshiro256ss.fromSeed(seed);
-  const founderLineage = LineageId('L0');
+  const founderLineageId = LineageId('L0');
+  const founderProbeId = ProbeId('P0');
   const founder: Probe = {
-    id: ProbeId('P0'),
-    lineageId: founderLineage,
+    id: founderProbeId,
+    lineageId: founderLineageId,
     bornAtTick: SimTick(0n),
     firmware: founderFirmware,
+  };
+  const founderLineage: Lineage = {
+    id: founderLineageId,
+    founderProbeId,
+    parentLineageId: null,
+    referenceFirmware: founderFirmware,
+    foundedAtTick: SimTick(0n),
   };
   return {
     simTick: SimTick(0n),
     rng,
     probes: new Map([[founder.id, founder]]),
+    lineages: new Map([[founderLineage.id, founderLineage]]),
     nextProbeOrdinal: 1n,
     nextLineageOrdinal: 1n,
   };
@@ -62,6 +74,7 @@ export function snapshot(state: SimState): SimStateSnapshot {
     simTick: state.simTick,
     rngState: state.rng.state(),
     probes: [...state.probes.values()],
+    lineages: [...state.lineages.values()],
     nextProbeOrdinal: state.nextProbeOrdinal,
     nextLineageOrdinal: state.nextLineageOrdinal,
   };
@@ -72,6 +85,7 @@ export function restore(snap: SimStateSnapshot): SimState {
     simTick: SimTick(snap.simTick),
     rng: Xoshiro256ss.fromState(snap.rngState),
     probes: new Map(snap.probes.map((p) => [p.id, p])),
+    lineages: new Map(snap.lineages.map((l) => [l.id, l])),
     nextProbeOrdinal: snap.nextProbeOrdinal,
     nextLineageOrdinal: snap.nextLineageOrdinal,
   };

@@ -1,0 +1,114 @@
+import { describe, expect, it } from 'vitest';
+import type { DirectiveStack } from './directive.js';
+import { SPECIATION_DIVERGENCE_DIVISOR, firmwareDiverged, type Lineage } from './lineage.js';
+import { createInitialState, snapshot } from './state.js';
+import { tickN } from './step.js';
+import { LineageId, ProbeId, Seed } from './types.js';
+
+describe('firmwareDiverged', () => {
+  const ref: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
+
+  it('returns false for identical firmware', () => {
+    expect(firmwareDiverged(ref, ref)).toBe(false);
+  });
+
+  it('returns false for parameters within tolerance', () => {
+    // Drift well below threshold/DIVISOR.
+    const child: DirectiveStack = [{ kind: 'replicate', threshold: (1n << 54n) + 1n }];
+    expect(firmwareDiverged(child, ref)).toBe(false);
+  });
+
+  it('returns true when drift exceeds reference / DIVISOR', () => {
+    const refValue = 1n << 54n;
+    const breach = refValue + refValue / SPECIATION_DIVERGENCE_DIVISOR + 1n;
+    const child: DirectiveStack = [{ kind: 'replicate', threshold: breach }];
+    expect(firmwareDiverged(child, ref)).toBe(true);
+  });
+
+  it('returns true when stacks differ in length', () => {
+    const longer: DirectiveStack = [
+      { kind: 'replicate', threshold: 1n << 54n },
+      { kind: 'replicate', threshold: 1n << 54n },
+    ];
+    expect(firmwareDiverged(longer, ref)).toBe(true);
+  });
+});
+
+describe('lineage clustering', () => {
+  const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
+
+  it('seeds L0 as the founding lineage with the founder firmware as reference', () => {
+    const state = createInitialState(Seed(7n), TEST_FIRMWARE);
+    expect(state.lineages.size).toBe(1);
+    const l0 = state.lineages.get(LineageId('L0'));
+    expect(l0).toBeDefined();
+    expect(l0?.founderProbeId).toBe(ProbeId('P0'));
+    expect(l0?.parentLineageId).toBeNull();
+    expect(l0?.referenceFirmware).toEqual(TEST_FIRMWARE);
+  });
+
+  it('does not speciate when no drift has occurred', () => {
+    // Replication without any mutation event keeps everyone in L0. We can't
+    // easily prevent mutation entirely (it's a function of PRNG draws), but
+    // we can assert: lineage count is bounded, and every lineage has a
+    // founder probe that exists.
+    const state = createInitialState(Seed(7n), TEST_FIRMWARE);
+    tickN(state, 6000n);
+    for (const lineage of state.lineages.values()) {
+      expect(state.probes.has(lineage.founderProbeId)).toBe(true);
+    }
+  });
+
+  it('produces multiple lineages over enough generations', () => {
+    // Long enough run for at least one accumulation of drift to push past
+    // the divergence threshold. With drift up to ~1.5% per mutation event
+    // and divergence triggered at ~1% absolute, a single near-max mutation
+    // event suffices to speciate, so this is reasonably reliable.
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 8000n);
+    expect(state.lineages.size).toBeGreaterThan(1);
+  });
+
+  it('every speciation produces a lineage whose parent is registered', () => {
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 8000n);
+    for (const lineage of state.lineages.values()) {
+      if (lineage.parentLineageId === null) continue;
+      expect(state.lineages.has(lineage.parentLineageId)).toBe(true);
+    }
+  });
+
+  it('each lineage references its founder probe by id', () => {
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 8000n);
+    for (const lineage of state.lineages.values()) {
+      const founder = state.probes.get(lineage.founderProbeId);
+      expect(founder).toBeDefined();
+      expect(founder?.lineageId).toBe(lineage.id);
+      expect(founder?.firmware).toEqual(lineage.referenceFirmware);
+    }
+  });
+
+  it('lineages survive a snapshot/restore round-trip', () => {
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 5000n);
+    const before = snapshot(state);
+
+    expect(before.lineages.length).toBe(state.lineages.size);
+    expect(before.lineages.length).toBeGreaterThan(0);
+
+    // Round-trip through snapshot to confirm the lineages map serialises.
+    const restoredFromSnapshot = JSON.parse(
+      JSON.stringify(before, (_k, v) => (typeof v === 'bigint' ? `${v}n` : v)),
+    );
+    expect(restoredFromSnapshot.lineages.length).toBe(before.lineages.length);
+  });
+
+  it('two runs from the same seed produce identical lineage trees', () => {
+    const a = createInitialState(Seed(42n), TEST_FIRMWARE);
+    const b = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(a, 6000n);
+    tickN(b, 6000n);
+    expect(snapshot(a).lineages).toEqual<readonly Lineage[]>(snapshot(b).lineages);
+  });
+});

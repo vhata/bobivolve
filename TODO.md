@@ -20,8 +20,8 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 - Mutation: priority swap (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
 - Mutation: directive loss / gain (needs ≥2 directive kinds in firmware to be meaningful) #r0 #sim
-- Lineage clustering against a reference genome #r0 #sim
-- Speciation event when drift exceeds threshold #r0 #sim
+- Speciation `SimEvent` (data path is in place; emit via the event log when that lands) #r0 #sim
+- Lineage names: lay-person legible (currently ordinal `Lk`) — ARCHITECTURE.md open question, deferred #r0 #sim
 - Dashboard shell (React) #r0 #ui
 - Population graphs by lineage #r0 #ui
 - Lineage tree view with named clades and divergence markers #r0 #ui

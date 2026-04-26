@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DirectiveStack } from './directive.js';
 import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
-import { LineageId, ProbeId, Seed, SimTick } from './types.js';
+import { ProbeId, Seed, SimTick } from './types.js';
 
 // Replication tests. R0 mechanic: probes execute their firmware once per tick
 // and may replicate based on a per-tick threshold draw against the seeded
@@ -29,15 +29,16 @@ describe('replication', () => {
     expect(founder?.firmware).toEqual(TEST_FIRMWARE);
   });
 
-  it('children inherit parent lineage; firmware shape is preserved', () => {
-    // Lineage clustering hasn't landed yet, so all descendants share L0.
-    // Firmware may drift via parameter mutation but keeps the same shape
-    // (one replicate directive) for now — directive loss / gain comes later.
+  it('every probe belongs to a registered lineage; firmware shape is preserved', () => {
+    // With lineage clustering, descendants may speciate into new lineages
+    // when their firmware drifts past the divergence threshold. The
+    // invariant tested here is that every probe's lineageId is registered
+    // in state.lineages — orphaned lineage IDs would be a bug.
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, TEST_TICKS);
     expect(state.probes.size).toBeGreaterThan(1);
     for (const probe of state.probes.values()) {
-      expect(probe.lineageId).toBe(LineageId('L0'));
+      expect(state.lineages.has(probe.lineageId)).toBe(true);
       expect(probe.firmware).toHaveLength(1);
       expect(probe.firmware[0]?.kind).toBe('replicate');
     }

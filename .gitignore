@@ -31,6 +31,9 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
+# Worktrees created by background agents — never tracked.
+.claude/worktrees/
+
 # Editors / OS
 .DS_Store
 Thumbs.db
