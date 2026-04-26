@@ -1,19 +1,55 @@
-// PopulationPanel — first panel. Shows simTick, population total, and a
-// per-lineage breakdown. Reads only what it needs from the store, so a
-// per-replication event that updates the map will rerender this panel
-// but not unrelated ones.
+// PopulationPanel — population summary with a sparkline-style total-over
+// time chart and a per-lineage count list below. The chart reads from the
+// store's bounded populationHistory buffer; the list reads the latest
+// snapshot.
 
 import { useSimStore } from '../sim-store.js';
+import type { PopulationHistoryPoint } from '../sim-store.js';
+
+const CHART_WIDTH = 400;
+const CHART_HEIGHT = 80;
+
+function buildAreaPath(history: readonly PopulationHistoryPoint[]): string | null {
+  if (history.length < 2) return null;
+  const first = history[0];
+  const last = history[history.length - 1];
+  if (first === undefined || last === undefined) return null;
+
+  const minTick = first.tick;
+  const maxTick = last.tick;
+  const tickRange = maxTick > minTick ? maxTick - minTick : 1n;
+  let maxTotal = 1n;
+  for (const point of history) {
+    if (point.total > maxTotal) maxTotal = point.total;
+  }
+
+  const xOf = (tick: bigint): number => {
+    const num = (tick - minTick) * BigInt(CHART_WIDTH * 1000);
+    return Number(num / tickRange) / 1000;
+  };
+  const yOf = (value: bigint): number => {
+    const num = value * BigInt(CHART_HEIGHT * 1000);
+    return CHART_HEIGHT - Number(num / maxTotal) / 1000;
+  };
+
+  const points = history
+    .map((p) => `${xOf(p.tick).toFixed(2)},${yOf(p.total).toFixed(2)}`)
+    .join(' L');
+  return `M0,${CHART_HEIGHT.toString()} L${points} L${CHART_WIDTH.toString()},${CHART_HEIGHT.toString()} Z`;
+}
 
 export function PopulationPanel(): React.JSX.Element {
   const simTick = useSimStore((s) => s.simTick);
   const populationTotal = useSimStore((s) => s.populationTotal);
   const populationByLineage = useSimStore((s) => s.populationByLineage);
+  const populationHistory = useSimStore((s) => s.populationHistory);
 
   const lineages = [...populationByLineage.entries()].sort((a, b) => {
     if (a[1] !== b[1]) return Number(b[1] - a[1]);
     return a[0].localeCompare(b[0]);
   });
+
+  const areaPath = buildAreaPath(populationHistory);
 
   return (
     <section className="panel population-panel">
@@ -23,6 +59,19 @@ export function PopulationPanel(): React.JSX.Element {
       </header>
       <div className="panel-body">
         <p className="population-total">{populationTotal.toString()} probes</p>
+        {areaPath !== null ? (
+          <svg
+            className="population-chart"
+            viewBox={`0 0 ${CHART_WIDTH.toString()} ${CHART_HEIGHT.toString()}`}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label="Population over time"
+          >
+            <path d={areaPath} className="population-chart-area" />
+          </svg>
+        ) : (
+          <div className="population-chart-placeholder" aria-hidden="true" />
+        )}
         {lineages.length === 0 ? (
           <p className="panel-empty">awaiting first heartbeat…</p>
         ) : (
