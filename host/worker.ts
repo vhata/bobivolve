@@ -59,28 +59,48 @@ host.subscribe((event: SimEvent) => {
   ctx.postMessage(msg);
 });
 
-// Pacing. Each pulse advances exactly speedTicksPerPulse ticks, then
-// yields. The next pulse is scheduled only after the current one
-// completes (recursive setTimeout, not setInterval), so a slow pulse
-// doesn't queue the next one and the worker's event loop always gets a
-// chance to drain incoming messages (pause, setSpeed, queries) between
-// pulses.
+// Pacing. Each pulse advances at most `speedTicksPerPulse` ticks AND at
+// most enough to fit in PULSE_BUDGET_MS of wall-clock work, whichever is
+// smaller. Without the budget cap, one runUntil at fat populations can
+// run for hundreds of milliseconds while the worker's event loop is
+// blocked, and a Pause click sits in the message queue. Adapting the
+// budget to observed ms-per-tick keeps message dispatch responsive
+// regardless of population scale; achieved speed drops honestly under
+// load and the Tick heartbeat reports it.
 //
-// Achieved speed = speedTicksPerPulse / (max(PULSE_INTERVAL_MS,
-// duration-of-pulse) / 1000). At fat populations the duration grows
-// past PULSE_INTERVAL_MS and achieved speed honestly drops below the
-// target; the Tick heartbeat reports it.
+// The next pulse is scheduled only after the current one completes
+// (recursive setTimeout, not setInterval), so a slow pulse doesn't queue
+// the next one.
 
 const PULSE_INTERVAL_MS = 16;
+// Wall-clock target for one pulse's tick work. The remaining ~4ms of a
+// 16ms frame is reserved for message dispatch, OPFS writes, and event
+// emission.
+const PULSE_BUDGET_MS = 12;
 let speedTicksPerPulse = 1;
 let pulseHandle: ReturnType<typeof setTimeout> | null = null;
 let running = false;
+// EWMA of observed ms-per-tick. Initialised at 0.05ms so a fresh run at
+// small population can saturate at the requested speed; the average
+// adapts upward as ticks slow with growing population.
+let msPerTickEWMA = 0.05;
 
 function pulse(): void {
   if (!running) return;
   const current = host.currentTick();
   if (current !== null) {
-    host.runUntil(current + BigInt(speedTicksPerPulse));
+    const allowedByBudget = Math.max(1, Math.floor(PULSE_BUDGET_MS / msPerTickEWMA));
+    const budget = Math.min(speedTicksPerPulse, allowedByBudget);
+    const start = performance.now();
+    host.runUntil(current + BigInt(budget));
+    const elapsed = performance.now() - start;
+    if (budget > 0) {
+      const observed = elapsed / budget;
+      // Lean toward fast adaptation when we exceed the budget so a
+      // sudden population jump doesn't take many pulses to react to.
+      const alpha = observed > msPerTickEWMA ? 0.6 : 0.2;
+      msPerTickEWMA = msPerTickEWMA * (1 - alpha) + observed * alpha;
+    }
   }
   if (running) {
     pulseHandle = setTimeout(pulse, PULSE_INTERVAL_MS);
