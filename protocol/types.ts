@@ -181,12 +181,17 @@ export interface PopulationSummaryQueryBody {
   readonly kind: 'populationSummary';
 }
 
+export interface ListSavesQueryBody {
+  readonly kind: 'listSaves';
+}
+
 export type QueryBody =
   | LineageTreeQueryBody
   | ProbeInspectorQueryBody
   | DriftTelemetryQueryBody
   | LogSliceQueryBody
-  | PopulationSummaryQueryBody;
+  | PopulationSummaryQueryBody
+  | ListSavesQueryBody;
 
 export type Query = QueryBody & {
   readonly queryId: string;
@@ -253,12 +258,27 @@ export interface PopulationSummaryResult {
   readonly kind: 'populationSummary';
 }
 
+export interface ListSavesResult {
+  readonly kind: 'listSaves';
+  readonly saves: readonly SaveSummary[];
+}
+
+export interface SaveSummary {
+  readonly slot: string;
+  // Tick at which the save was taken; decimal string (proto3 JSON
+  // convention for u64).
+  readonly tick: string;
+  // Wall-clock millis since epoch when the save was written.
+  readonly savedAtMs: number;
+}
+
 export type QueryResultBody =
   | LineageTreeResult
   | ProbeInspectorResult
   | DriftTelemetryResult
   | LogSliceResult
-  | PopulationSummaryResult;
+  | PopulationSummaryResult
+  | ListSavesResult;
 
 export type QueryResult = QueryResultBody & {
   readonly queryId: string;

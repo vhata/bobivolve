@@ -107,9 +107,14 @@ function stopPulsing(): void {
 
 ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
   if (e.data.type === 'query') {
-    const result = host.executeQuery(e.data.query);
-    const reply: QueryResultMessage = { type: 'queryResult', queryId: result.queryId, result };
-    ctx.postMessage(reply);
+    void host.executeQuery(e.data.query).then((result) => {
+      const reply: QueryResultMessage = {
+        type: 'queryResult',
+        queryId: result.queryId,
+        result,
+      };
+      ctx.postMessage(reply);
+    });
     return;
   }
 

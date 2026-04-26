@@ -9,7 +9,7 @@
 // tree views.
 
 import { create } from 'zustand';
-import type { SimEvent } from '../protocol/types.js';
+import type { ListSavesResult, SaveSummary, SimEvent } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
 
 export interface LineagePopulation {
@@ -87,6 +87,9 @@ export interface SimStoreState {
   // host. Cleared when a fresh Save dispatches; the RunPanel uses this
   // to render a "saved at tick N" indicator.
   readonly lastSaveAtTick: bigint | null;
+  // List of save slots written to OPFS. Refreshed via refreshSaves().
+  readonly saves: readonly SaveSummary[];
+  readonly refreshSaves: () => Promise<void>;
   // The Lineage Inspector reads this; clicking a lineage in the tree
   // updates it. Defaults to L0 once the founder lineage is seeded.
   readonly selectedLineageId: string;
@@ -241,6 +244,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           pending.delete(event.commandId);
           if (ackedEntry.kind === 'save') {
             set({ pendingCommands: pending, lastSaveAtTick: event.simTick });
+            // Refresh the saves list so the new entry appears in the UI
+            // without the player needing to hit a Refresh button.
+            void get().refreshSaves();
           } else {
             set({ pendingCommands: pending });
           }
@@ -288,6 +294,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     lastAutoPauseTrigger: null,
     selectedLineageId: 'L0',
     lastSaveAtTick: null,
+    saves: [],
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -431,6 +438,20 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     },
     selectLineage: (id) => {
       set({ selectedLineageId: id });
+    },
+    refreshSaves: async () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      try {
+        const result = (await transport.query({
+          kind: 'listSaves',
+          queryId: '',
+        })) as ListSavesResult & { queryId: string };
+        set({ saves: result.saves });
+      } catch {
+        // Swallow — saves remain at the previous value. The RunPanel
+        // can show stale data without a panic.
+      }
     },
     setAutoPauseTriggers: (triggers) => {
       const transport = get().transport;

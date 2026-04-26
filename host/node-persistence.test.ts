@@ -83,10 +83,9 @@ describe('NodeHost persistence', () => {
     await host.flush();
 
     expect(acks).toContain('save-1');
-    const reader = new EventLogReader(storage, 'runs/saved-run/log.ndjson');
-    const latest = await reader.latestSnap();
-    expect(latest).not.toBeNull();
-    expect(latest?.tick).toBe(800n);
+    // Save writes a named slot under saves/, not into the active log.
+    expect(await storage.exists('saves/default.save')).toBe(true);
+    expect(await storage.exists('saves/index.json')).toBe(true);
   });
 
   it('Save before newRun fails with commandError', async () => {
@@ -144,18 +143,32 @@ describe('NodeHost persistence', () => {
     expect(domainEvents(events1)).toEqual(domainEvents(events2));
   });
 
-  it('Load fails when no log entries exist for the runId', async () => {
+  it('Load fails when the named slot does not exist', async () => {
     const host = makeHost('never-existed');
     const errors: string[] = [];
     host.subscribe((e: SimEvent) => {
       if (e.kind === 'commandError') errors.push(e.message);
     });
 
-    host.send({ kind: 'load', commandId: 'load-1', slot: 'default' });
+    host.send({ kind: 'load', commandId: 'load-1', slot: 'no-such-slot' });
     await host.flush();
 
     expect(errors.length).toBe(1);
-    expect(errors[0]).toMatch(/no log entries/);
+    expect(errors[0]).toMatch(/save slot not found: no-such-slot/);
+  });
+
+  it('listSaves query returns slots written by Save', async () => {
+    const host = makeHost('with-saves');
+    host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+    host.runUntil(500n);
+    host.send({ kind: 'save', commandId: 'save-1', slot: 'first' });
+    host.runUntil(1000n);
+    host.send({ kind: 'save', commandId: 'save-2', slot: 'second' });
+    await host.flush();
+
+    const result = await host.executeQuery({ kind: 'listSaves', queryId: 'q1' });
+    if (result.kind !== 'listSaves') throw new Error('unexpected result kind');
+    expect(result.saves.map((s) => s.slot).sort()).toEqual(['first', 'second']);
   });
 
   it('Save / Load cleanup: snapshot files persist alongside the log', async () => {
