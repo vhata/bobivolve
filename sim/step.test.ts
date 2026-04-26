@@ -6,8 +6,9 @@ import { LineageId, ProbeId, Seed, SimTick } from './types.js';
 
 // Replication tests. R0 mechanic: probes execute their firmware once per tick
 // and may replicate based on a per-tick threshold draw against the seeded
-// PRNG. No mutation yet — children inherit firmware verbatim. No death yet
-// — once spawned, probes persist for the run.
+// PRNG. Children may inherit drifted firmware (sim/mutation.ts). No death
+// yet — once spawned, probes persist for the run; lineage clustering also
+// pending, so all descendants stay in L0.
 //
 // The golden population numbers below are the byte-for-byte determinism
 // contract: the TypeScript implementation defines them, and any future
@@ -28,14 +29,28 @@ describe('replication', () => {
     expect(founder?.firmware).toEqual(TEST_FIRMWARE);
   });
 
-  it('children inherit parent lineage and firmware', () => {
+  it('children inherit parent lineage; firmware shape is preserved', () => {
+    // Lineage clustering hasn't landed yet, so all descendants share L0.
+    // Firmware may drift via parameter mutation but keeps the same shape
+    // (one replicate directive) for now — directive loss / gain comes later.
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, TEST_TICKS);
     expect(state.probes.size).toBeGreaterThan(1);
     for (const probe of state.probes.values()) {
       expect(probe.lineageId).toBe(LineageId('L0'));
-      expect(probe.firmware).toEqual(TEST_FIRMWARE);
+      expect(probe.firmware).toHaveLength(1);
+      expect(probe.firmware[0]?.kind).toBe('replicate');
     }
+  });
+
+  it('parameter drift produces firmware variation across the population', () => {
+    // Long enough for drift to be statistically inevitable at the seeded
+    // rates. The exact distribution is locked by the determinism contract
+    // — we don't assert what the variation looks like, only that it exists.
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 6000n);
+    const thresholds = new Set([...state.probes.values()].map((p) => p.firmware[0]?.threshold));
+    expect(thresholds.size).toBeGreaterThan(1);
   });
 
   it('children have unique IDs minted from the ordinal counter', () => {
