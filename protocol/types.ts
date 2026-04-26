@@ -201,6 +201,22 @@ export interface LineageTreeResult {
 
 export interface ProbeInspectorResult {
   readonly kind: 'probeInspector';
+  // null when the probe id was not found in the current state.
+  readonly probe: ProbeInspectorProbe | null;
+}
+
+export interface ProbeInspectorProbe {
+  readonly id: string;
+  readonly lineageId: string;
+  readonly bornAtTick: bigint;
+  readonly firmware: readonly ProbeInspectorDirective[];
+}
+
+export interface ProbeInspectorDirective {
+  readonly kind: string;
+  // Numeric parameters serialised as decimal strings to preserve u64
+  // values across the seam (proto3 JSON convention).
+  readonly params: Readonly<Record<string, string>>;
 }
 
 export interface DriftTelemetryResult {

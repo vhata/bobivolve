@@ -15,27 +15,48 @@ interface CommandMessage {
   readonly cmd: Command;
 }
 
+interface QueryMessage {
+  readonly type: 'query';
+  readonly query: Query;
+}
+
 interface EventMessage {
   readonly type: 'event';
   readonly event: SimEvent;
 }
 
-type WorkerMessage = EventMessage;
+interface QueryResultMessage {
+  readonly type: 'queryResult';
+  readonly queryId: string;
+  readonly result: QueryResult;
+}
+
+type WorkerMessage = EventMessage | QueryResultMessage;
 
 export class WorkerTransport implements SimTransport {
   private readonly worker: Worker;
   private readonly handlers = new Set<SimEventHandler>();
   private readonly listener: (e: MessageEvent<WorkerMessage>) => void;
+  private readonly pendingQueries = new Map<string, (result: QueryResult) => void>();
+  private nextQueryOrdinal = 0;
   private closed = false;
 
   constructor(worker: Worker) {
     this.worker = worker;
     this.listener = (e: MessageEvent<WorkerMessage>) => {
-      if (e.data.type !== 'event') return;
-      // Snapshot the handler set so a handler that unsubscribes during
-      // dispatch does not perturb iteration.
-      for (const handler of [...this.handlers]) {
-        handler(e.data.event);
+      if (e.data.type === 'event') {
+        // Snapshot the handler set so a handler that unsubscribes during
+        // dispatch does not perturb iteration.
+        for (const handler of [...this.handlers]) {
+          handler(e.data.event);
+        }
+        return;
+      }
+      if (e.data.type === 'queryResult') {
+        const resolve = this.pendingQueries.get(e.data.queryId);
+        if (resolve === undefined) return;
+        this.pendingQueries.delete(e.data.queryId);
+        resolve(e.data.result);
       }
     };
     this.worker.addEventListener('message', this.listener);
@@ -55,13 +76,19 @@ export class WorkerTransport implements SimTransport {
     };
   }
 
-  query(_q: Query): Promise<QueryResult> {
+  query(q: Query): Promise<QueryResult> {
     if (this.closed) {
       return Promise.reject(new Error('WorkerTransport: query after close'));
     }
-    // Query routing matches NodeTransport's stub — schema.proto's Query
-    // result bodies are placeholders awaiting dashboard work.
-    return Promise.reject(new Error('WorkerTransport: queries not yet implemented'));
+    // Mint a queryId if the caller did not supply one (the API allows it
+    // but we need uniqueness per-transport for reply correlation).
+    const queryId = q.queryId !== '' ? q.queryId : this.mintQueryId();
+    const sent: Query = { ...q, queryId };
+    return new Promise<QueryResult>((resolve) => {
+      this.pendingQueries.set(queryId, resolve);
+      const msg: QueryMessage = { type: 'query', query: sent };
+      this.worker.postMessage(msg);
+    });
   }
 
   close(): void {
@@ -69,6 +96,13 @@ export class WorkerTransport implements SimTransport {
     this.closed = true;
     this.worker.removeEventListener('message', this.listener);
     this.handlers.clear();
+    this.pendingQueries.clear();
     this.worker.terminate();
+  }
+
+  private mintQueryId(): string {
+    const id = `wt-${this.nextQueryOrdinal.toString()}`;
+    this.nextQueryOrdinal += 1;
+    return id;
   }
 }
