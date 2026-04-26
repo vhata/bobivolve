@@ -59,25 +59,47 @@ host.subscribe((event: SimEvent) => {
   ctx.postMessage(msg);
 });
 
-// Pacing. 1x ≈ one sim tick per UI frame at 60 Hz; speed multiplies the
-// per-pulse budget. Adaptive: if the inner loop can't keep up, achieved
-// speed drifts below target and the Tick heartbeat reports it honestly.
+// Pacing. 1× ≈ one sim tick per UI frame at 60 Hz; speed multiplies the
+// per-pulse budget. The pulser is a recursive setTimeout (not setInterval)
+// so a slow pulse doesn't queue up the next one — and it caps work at a
+// wall-clock budget per pulse so the worker's event loop always gets a
+// chance to drain incoming messages (pause, setSpeed, queries) between
+// slices. Without that, a fat population can block message dispatch and
+// the user's Pause click sits in the queue indefinitely.
+
 const PULSE_INTERVAL_MS = 16;
+// Wall-clock cap on a single pulse's tick work. Leaves the rest of the
+// 16ms frame for message dispatch, OPFS writes, and event emission.
+const PULSE_BUDGET_MS = 8;
 let speedTicksPerPulse = 1;
-let pulseHandle: ReturnType<typeof setInterval> | null = null;
+let pulseHandle: ReturnType<typeof setTimeout> | null = null;
+let running = false;
+
+function pulse(): void {
+  if (!running) return;
+  const start = performance.now();
+  while (running && performance.now() - start < PULSE_BUDGET_MS) {
+    const current = host.currentTick();
+    if (current === null) break;
+    // Advance in small slices so the time-budget check stays accurate
+    // and a pause arriving mid-pulse can interrupt promptly.
+    host.runUntil(current + BigInt(speedTicksPerPulse));
+  }
+  if (running) {
+    pulseHandle = setTimeout(pulse, PULSE_INTERVAL_MS);
+  }
+}
 
 function startPulsing(): void {
-  if (pulseHandle !== null) return;
-  pulseHandle = setInterval(() => {
-    const current = host.currentTick();
-    if (current === null) return;
-    host.runUntil(current + BigInt(speedTicksPerPulse));
-  }, PULSE_INTERVAL_MS);
+  if (running) return;
+  running = true;
+  pulseHandle = setTimeout(pulse, 0);
 }
 
 function stopPulsing(): void {
+  running = false;
   if (pulseHandle !== null) {
-    clearInterval(pulseHandle);
+    clearTimeout(pulseHandle);
     pulseHandle = null;
   }
 }
