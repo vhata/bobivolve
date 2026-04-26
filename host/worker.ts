@@ -59,30 +59,27 @@ host.subscribe((event: SimEvent) => {
   ctx.postMessage(msg);
 });
 
-// Pacing. 1× ≈ one sim tick per UI frame at 60 Hz; speed multiplies the
-// per-pulse budget. The pulser is a recursive setTimeout (not setInterval)
-// so a slow pulse doesn't queue up the next one — and it caps work at a
-// wall-clock budget per pulse so the worker's event loop always gets a
+// Pacing. Each pulse advances exactly speedTicksPerPulse ticks, then
+// yields. The next pulse is scheduled only after the current one
+// completes (recursive setTimeout, not setInterval), so a slow pulse
+// doesn't queue the next one and the worker's event loop always gets a
 // chance to drain incoming messages (pause, setSpeed, queries) between
-// slices. Without that, a fat population can block message dispatch and
-// the user's Pause click sits in the queue indefinitely.
+// pulses.
+//
+// Achieved speed = speedTicksPerPulse / (max(PULSE_INTERVAL_MS,
+// duration-of-pulse) / 1000). At fat populations the duration grows
+// past PULSE_INTERVAL_MS and achieved speed honestly drops below the
+// target; the Tick heartbeat reports it.
 
 const PULSE_INTERVAL_MS = 16;
-// Wall-clock cap on a single pulse's tick work. Leaves the rest of the
-// 16ms frame for message dispatch, OPFS writes, and event emission.
-const PULSE_BUDGET_MS = 8;
 let speedTicksPerPulse = 1;
 let pulseHandle: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 
 function pulse(): void {
   if (!running) return;
-  const start = performance.now();
-  while (running && performance.now() - start < PULSE_BUDGET_MS) {
-    const current = host.currentTick();
-    if (current === null) break;
-    // Advance in small slices so the time-budget check stays accurate
-    // and a pause arriving mid-pulse can interrupt promptly.
+  const current = host.currentTick();
+  if (current !== null) {
     host.runUntil(current + BigInt(speedTicksPerPulse));
   }
   if (running) {
