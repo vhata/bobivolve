@@ -51,8 +51,8 @@ describe('maybeMutate', () => {
     let mutated = 0;
     const trials = 10000;
     for (let i = 0; i < trials; i++) {
-      const out = maybeMutate(rng, firmware);
-      if (out[0]?.threshold !== firmware[0]?.threshold) mutated++;
+      const result = maybeMutate(rng, firmware);
+      if (result.mutated) mutated++;
     }
     // Expected mutation rate ≈ 1/16. Allow generous slack to keep the
     // test robust against the deterministic stream's local fluctuations.
@@ -63,10 +63,27 @@ describe('maybeMutate', () => {
   it('preserves directive count and kind', () => {
     const rng = Xoshiro256ss.fromSeed(1n);
     for (let i = 0; i < 500; i++) {
-      const out = maybeMutate(rng, firmware);
-      expect(out).toHaveLength(1);
-      expect(out[0]?.kind).toBe('replicate');
+      const result = maybeMutate(rng, firmware);
+      expect(result.firmware).toHaveLength(1);
+      expect(result.firmware[0]?.kind).toBe('replicate');
     }
+  });
+
+  it('returns the original firmware reference unchanged when no directive mutated', () => {
+    // Choose a seed where the first draw is reliably above the drift
+    // threshold; the easiest way is to fix the seed and assert.
+    const rng = Xoshiro256ss.fromSeed(1n);
+    let sawIdentity = false;
+    for (let i = 0; i < 500; i++) {
+      const result = maybeMutate(rng, firmware);
+      if (!result.mutated) {
+        // No mutation: same array reference, so callers can avoid
+        // allocation in the common case.
+        expect(result.firmware).toBe(firmware);
+        sawIdentity = true;
+      }
+    }
+    expect(sawIdentity).toBe(true);
   });
 
   it('PARAMETER_DRIFT_THRESHOLD is below 2^64', () => {

@@ -28,11 +28,26 @@ export const PARAMETER_DRIFT_THRESHOLD = 1n << 60n;
 // drifts by ±2^48-ish, while a probe with threshold 2^40 drifts by ±2^34-ish.
 export const DRIFT_DIVISOR = 64n;
 
+// Result of a mutation pass. `mutated` is true if at least one directive
+// rolled into a different value; the parent's `mutated` flag on the
+// resulting Replication event is wired from this. When no directive
+// mutated, the original firmware reference is returned unchanged so
+// inheritance is allocation-free in the common case.
+export interface MutationResult {
+  readonly firmware: DirectiveStack;
+  readonly mutated: boolean;
+}
+
 // Per replication, mutate each directive in the firmware independently.
-// Returns a fresh array; structural equality of the snapshot is what
-// matters at the seam, not reference equality.
-export function maybeMutate(rng: Xoshiro256ss, firmware: DirectiveStack): DirectiveStack {
-  return firmware.map((directive) => maybeMutateDirective(rng, directive));
+export function maybeMutate(rng: Xoshiro256ss, firmware: DirectiveStack): MutationResult {
+  const next: Directive[] = [];
+  let mutated = false;
+  for (const directive of firmware) {
+    const result = maybeMutateDirective(rng, directive);
+    next.push(result);
+    if (result !== directive) mutated = true;
+  }
+  return { firmware: mutated ? next : firmware, mutated };
 }
 
 function maybeMutateDirective(rng: Xoshiro256ss, directive: Directive): Directive {

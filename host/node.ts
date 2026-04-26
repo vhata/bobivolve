@@ -7,19 +7,12 @@
 // Responsibilities:
 //   - Drive sim/step.ts forward through commands (newRun, setSpeed, pause,
 //     resume, step).
-//   - Translate state diffs into SimEvents that cross the seam: Replication
-//     events from probe-id deltas; Tick heartbeats from population summaries.
+//   - Forward SimEvents the sim emits across the seam (Replication, Speciation
+//     today; future mechanics extend the set). Tick heartbeats are
+//     synthesised here, not in the sim — they are wall-clock-cadenced and
+//     best-effort.
 //   - Acknowledge each command with CommandAck or, on validation failure,
 //     CommandError.
-//
-// Determinism contract: this host imports nothing from sim that mutates the
-// state in ways the proto-defined commands do not describe. The probe-id
-// snapshot diffing approach (see deriveReplicationEvents) is deliberately
-// indirect — it observes state changes from outside rather than instrumenting
-// sim/step.ts. Limitation: it cannot tell mutated children from non-mutated
-// children, so the `mutated` flag on Replication is reported as `false` until
-// the sim itself starts emitting these events. This is acceptable for R0; the
-// design question R0 is testing is drift-as-data, not the per-event UI feed.
 
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState } from '../sim/state.js';
@@ -28,7 +21,6 @@ import type {
   Command,
   CommandAckEvent,
   CommandErrorEvent,
-  ReplicationEvent,
   SimEvent,
   TickEvent,
 } from '../protocol/types.js';
@@ -193,45 +185,17 @@ export class NodeHost {
 
   // ── tick driver ────────────────────────────────────────────────────────────
 
-  // Advance the sim by `n` ticks, emitting Replication events for every probe
-  // that appeared in the probe map during the slice. Ignores `paused`; the
-  // public advance() / runUntil() / step path is responsible for honoring it.
+  // Advance the sim by `n` ticks, draining the events the sim emits and
+  // forwarding each through `emit`. Ignores `paused`; the public
+  // runUntil() / step path is responsible for honoring it.
   private advanceUnpaused(n: bigint): void {
     if (this.state === null) return;
     const state = this.state;
-
+    const events: SimEvent[] = [];
     for (let i = 0n; i < n; i++) {
-      const before = new Set(state.probes.keys());
-      tick(state);
-      this.deriveReplicationEvents(before);
-    }
-  }
-
-  // Derive Replication events by diffing the probe-id set before/after a tick.
-  // Approach (a) from the brief: clean but indirect. Limitations:
-  //   - The `mutated` flag is always false. The host cannot observe mutation
-  //     without instrumenting sim/step.ts; mutation visibility waits for the
-  //     sim to emit these events itself.
-  //   - The parent_probe_id is unknown. The probe-id ordinal is monotonic
-  //     across all parents, so a child's id reveals nothing about its origin
-  //     without sim-side instrumentation. Reported as the empty string for
-  //     now; the field stays in the schema.
-  //   - Correctness depends on probe ids being unique and never reused. The
-  //     sim's nextProbeOrdinal contract guarantees this (sim/state.ts).
-  private deriveReplicationEvents(before: Set<string>): void {
-    if (this.state === null) return;
-    const state = this.state;
-    for (const [id, probe] of state.probes) {
-      if (before.has(id)) continue;
-      const event: ReplicationEvent & { simTick: bigint } = {
-        kind: 'replication',
-        simTick: state.simTick,
-        parentProbeId: '',
-        childProbeId: id,
-        lineageId: probe.lineageId,
-        mutated: false,
-      };
-      this.emit(event);
+      events.length = 0;
+      tick(state, events);
+      for (const event of events) this.emit(event);
     }
   }
 
