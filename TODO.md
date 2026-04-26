@@ -14,7 +14,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Persistent snapshot mechanism (write to Storage; rebuild-from-log fallback) #r0 #sim
 - Determinism golden test: `(seed, command-log) → event-log` diffed against checked-in golden, wired into CI #r0 #ci
 - Add `build` step to CI once a build target exists (Vite + UI) #r0 #ci
-- Project-aware code review skill (PROCESS.md Layer 2) #r0 #process
 
 ## Release 0 — Petri Dish
 
