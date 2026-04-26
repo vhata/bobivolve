@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runCli } from './node-cli.js';
 
@@ -100,5 +103,56 @@ describe('node-cli', () => {
     expect(codeA).toBe(0);
     expect(codeB).toBe(0);
     expect(stdoutA).toBe(stdoutB);
+  });
+
+  // ── persistence flags ────────────────────────────────────────────────────
+
+  it('exits 2 when --save-dir is given without --run-id', async () => {
+    const code = await runCli(['--seed', '42', '--ticks', '10', '--save-dir', '/tmp/whatever']);
+    expect(code).toBe(2);
+    expect(io.stderr).toMatch(/run-id/);
+  });
+
+  it('exits 2 when --resume is given without --save-dir', async () => {
+    const code = await runCli(['--ticks', '10', '--resume']);
+    expect(code).toBe(2);
+    expect(io.stderr).toMatch(/resume requires/);
+  });
+
+  it('exits 2 when --seed and --resume are both given', async () => {
+    const code = await runCli([
+      '--seed',
+      '42',
+      '--ticks',
+      '10',
+      '--resume',
+      '--save-dir',
+      '/tmp/whatever',
+      '--run-id',
+      'foo',
+    ]);
+    expect(code).toBe(2);
+    expect(io.stderr).toMatch(/mutually exclusive/);
+  });
+
+  it('writes a log file under save-dir when --save-dir + --run-id are given', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bobivolve-cli-'));
+    try {
+      const code = await runCli([
+        '--seed',
+        '42',
+        '--ticks',
+        '500',
+        '--no-heartbeat',
+        '--save-dir',
+        dir,
+        '--run-id',
+        'cli-run',
+      ]);
+      expect(code).toBe(0);
+      expect(existsSync(join(dir, 'runs', 'cli-run', 'log.ndjson'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
