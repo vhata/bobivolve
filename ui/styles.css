@@ -200,18 +200,6 @@ body {
   outline-offset: 2px;
 }
 
-.control-button[data-stuck='true'],
-.speed-button[data-stuck='true'] {
-  outline: 1px solid #ffb347;
-  outline-offset: 2px;
-}
-
-.controls-warning {
-  color: #ffb347;
-  font-size: 0.78rem;
-  margin: 0.5rem 0 0;
-}
-
 .lineage-tree-panel {
   grid-column: span 2;
   min-width: 0;

@@ -42,16 +42,22 @@ const HISTORY_CAPACITY = 240;
 // In-flight command tracking. ACK-based confirmation is the only way to
 // tell whether the worker actually applied a command — without it the UI
 // can flip its button text to "Resume" while the sim merrily keeps
-// running because the message never made it through.
+// running because the message never made it through. When an ack
+// doesn't arrive within RETRY_AFTER_MS, the store re-sends idempotent
+// commands automatically; the player never has to handle the failure.
 export interface PendingCommand {
   readonly commandId: string;
   readonly kind: 'pause' | 'resume' | 'setSpeed' | 'newRun' | 'save' | 'load';
   readonly issuedAtMs: number;
+  readonly retryCount: number;
   // Optimistic effect summary. The UI reads it to render the projected
   // state while the ack is in flight; on ack the projection is confirmed
   // and the entry is removed.
   readonly projection?: { readonly paused?: boolean; readonly speed?: SimSpeed };
 }
+
+const RETRY_AFTER_MS = 1_000;
+const MAX_RETRIES = 5;
 
 export interface SimStoreState {
   readonly simTick: bigint;
@@ -94,6 +100,48 @@ function freshLineages(): Map<string, LineageNode> {
 
 export const useSimStore = create<SimStoreState>((set, get) => {
   let unsubscribe: (() => void) | null = null;
+  let retryHandle: ReturnType<typeof setInterval> | null = null;
+
+  function retryStalePending(): void {
+    const state = get();
+    const transport = state.transport;
+    if (transport === null) return;
+    const now = Date.now();
+    const updated = new Map(state.pendingCommands);
+    let changed = false;
+    for (const cmd of state.pendingCommands.values()) {
+      if (now - cmd.issuedAtMs < RETRY_AFTER_MS) continue;
+      if (cmd.retryCount >= MAX_RETRIES) continue;
+      // Only commands that are safe to repeat without changing semantics.
+      // pause/resume are idempotent state toggles; setSpeed re-asserts a
+      // value. newRun, save, and load have side effects that shouldn't
+      // be repeated silently.
+      if (cmd.kind !== 'pause' && cmd.kind !== 'resume' && cmd.kind !== 'setSpeed') continue;
+      console.error(
+        `SimStore: command ${cmd.commandId} (${cmd.kind}) unacked after ${
+          now - cmd.issuedAtMs
+        }ms; retrying (attempt ${(cmd.retryCount + 1).toString()}/${MAX_RETRIES.toString()})`,
+      );
+      updated.set(cmd.commandId, {
+        ...cmd,
+        retryCount: cmd.retryCount + 1,
+        issuedAtMs: now,
+      });
+      changed = true;
+      if (cmd.kind === 'pause') {
+        transport.send({ kind: 'pause', commandId: cmd.commandId });
+      } else if (cmd.kind === 'resume') {
+        transport.send({ kind: 'resume', commandId: cmd.commandId });
+      } else if (cmd.kind === 'setSpeed' && cmd.projection?.speed !== undefined) {
+        transport.send({
+          kind: 'setSpeed',
+          commandId: cmd.commandId,
+          speed: cmd.projection.speed,
+        });
+      }
+    }
+    if (changed) set({ pendingCommands: updated });
+  }
 
   const handleEvent = (event: SimEvent): void => {
     switch (event.kind) {
@@ -211,6 +259,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         previous.close();
       }
       unsubscribe = transport.onEvent(handleEvent);
+      if (retryHandle === null) {
+        retryHandle = setInterval(retryStalePending, 500);
+      }
       set({ transport });
     },
     detach: () => {
@@ -218,8 +269,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       unsubscribe?.();
       unsubscribe = null;
+      if (retryHandle !== null) {
+        clearInterval(retryHandle);
+        retryHandle = null;
+      }
       transport.close();
-      set({ transport: null });
+      // Pending commands sent to the now-closed transport will never see
+      // their ack — drop them so the retry loop doesn't try to re-send
+      // them through some future transport. (React StrictMode exercises
+      // this on every dev-mode mount/unmount cycle.)
+      set({ transport: null, pendingCommands: new Map() });
     },
     startRun: (seed) => {
       const transport = get().transport;
@@ -232,6 +291,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         commandId,
         kind: 'newRun',
         issuedAtMs: Date.now(),
+        retryCount: 0,
       });
       // Reset projected state for the new run; the store does not retain
       // population/tick state across runs.
@@ -257,6 +317,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         commandId,
         kind: 'pause',
         issuedAtMs: Date.now(),
+        retryCount: 0,
         projection: { paused: true },
       });
       // actualSpeed reads the last Tick heartbeat; once paused, no more
@@ -274,6 +335,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         commandId,
         kind: 'resume',
         issuedAtMs: Date.now(),
+        retryCount: 0,
         projection: { paused: false },
       });
       set({ paused: false, pendingCommands: pending });
@@ -288,6 +350,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         commandId,
         kind: 'setSpeed',
         issuedAtMs: Date.now(),
+        retryCount: 0,
         projection: { speed },
       });
       set({ speed, pendingCommands: pending });
@@ -298,7 +361,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-save');
       const pending = new Map(get().pendingCommands);
-      pending.set(commandId, { commandId, kind: 'save', issuedAtMs: Date.now() });
+      pending.set(commandId, { commandId, kind: 'save', issuedAtMs: Date.now(), retryCount: 0 });
       set({ pendingCommands: pending });
       transport.send({ kind: 'save', commandId, slot });
     },
@@ -307,7 +370,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-load');
       const pending = new Map(get().pendingCommands);
-      pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now() });
+      pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now(), retryCount: 0 });
       set({ pendingCommands: pending });
       transport.send({ kind: 'load', commandId, slot });
     },
