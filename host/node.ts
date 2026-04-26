@@ -692,6 +692,13 @@ export class NodeHost {
     this.paused = true;
     this.resetHeartbeatBaseline();
 
+    // Emit a heartbeat so the UI's projected state catches up to the
+    // restored sim state. Without this, the dashboard keeps rendering
+    // whatever it had before the Load and looks like nothing happened.
+    if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+      this.emitHeartbeat();
+    }
+
     this.ack(commandId);
   }
 

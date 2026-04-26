@@ -563,6 +563,13 @@ body {
   gap: 0.5rem;
 }
 
+.run-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6e7178;
+  font-variant-numeric: tabular-nums;
+}
+
 .autopause-list {
   list-style: none;
   padding: 0;
