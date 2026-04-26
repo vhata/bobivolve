@@ -8,6 +8,12 @@ Companion to `SPEC.md` and `ARCHITECTURE.md`. Captures development discipline. T
 - Public repository on GitHub.
 - MIT licensed.
 
+## Canonical commands
+
+A `Makefile` at the repository root names the common workflows: install, dev, build, the umbrella `check`, the unit and end-to-end test suites, the headless sim. The principle is that every routine workflow has a single named entrypoint that is stable across language and tooling churn — contributors and agents do not memorise the current package manager's invocation, they call `make test`. The underlying tool may change; the names do not.
+
+Run `make` for the list.
+
 ## Living documents
 
 Four documents are updated *in the same commit as the change they describe*. A commit that alters player-visible behaviour, or that completes a tracked TODO, without touching the relevant document is a bug to be amended.
