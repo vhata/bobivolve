@@ -1,6 +1,7 @@
 // Bobivolve dashboard shell.
 
 import { useEffect } from 'react';
+import { ControlsPanel } from './components/ControlsPanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
@@ -33,6 +34,7 @@ export function App(): React.JSX.Element {
         </p>
       </header>
       <main className="dashboard">
+        <ControlsPanel />
         <PopulationPanel />
       </main>
     </div>

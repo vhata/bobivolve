@@ -17,15 +17,23 @@ export interface LineagePopulation {
   readonly count: bigint;
 }
 
+export type SimSpeed = 1 | 4 | 16 | 64;
+
 export interface SimStoreState {
   readonly simTick: bigint;
   readonly populationTotal: bigint;
   readonly populationByLineage: ReadonlyMap<string, bigint>;
   readonly seed: bigint | null;
+  readonly speed: SimSpeed;
+  readonly paused: boolean;
+  readonly actualSpeed: number;
   readonly transport: SimTransport | null;
   readonly attach: (transport: SimTransport) => void;
   readonly detach: () => void;
   readonly startRun: (seed: bigint) => void;
+  readonly pause: () => void;
+  readonly resume: () => void;
+  readonly setSpeed: (speed: SimSpeed) => void;
 }
 
 export const useSimStore = create<SimStoreState>((set, get) => {
@@ -38,6 +46,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           simTick: event.simTick,
           populationTotal: event.populationTotal,
           populationByLineage: new Map(Object.entries(event.populationByLineage)),
+          actualSpeed: event.actualSpeed,
         });
         return;
       case 'replication': {
@@ -68,6 +77,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     populationTotal: 0n,
     populationByLineage: new Map(),
     seed: null,
+    speed: 1,
+    paused: false,
+    actualSpeed: 0,
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -98,8 +110,28 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
+        paused: false,
+        actualSpeed: 0,
       });
       transport.send({ kind: 'newRun', commandId: 'ui-newRun', seed });
+    },
+    pause: () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      set({ paused: true });
+      transport.send({ kind: 'pause', commandId: 'ui-pause' });
+    },
+    resume: () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      set({ paused: false });
+      transport.send({ kind: 'resume', commandId: 'ui-resume' });
+    },
+    setSpeed: (speed) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      set({ speed });
+      transport.send({ kind: 'setSpeed', commandId: 'ui-setSpeed', speed });
     },
   };
 });
