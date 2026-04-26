@@ -9,6 +9,8 @@ import SimWorker from '../host/worker.ts?worker';
 export function App(): React.JSX.Element {
   const attach = useSimStore((s) => s.attach);
   const detach = useSimStore((s) => s.detach);
+  const startRun = useSimStore((s) => s.startRun);
+  const seed = useSimStore((s) => s.seed);
 
   useEffect(() => {
     const transport = new WorkerTransport(new SimWorker());
@@ -16,17 +18,19 @@ export function App(): React.JSX.Element {
     // Kick off a default run so a freshly-loaded page shows something.
     // Future commits will wire this through a "Start Run" panel rather
     // than auto-starting.
-    transport.send({ kind: 'newRun', commandId: 'ui-newRun', seed: 42n });
+    startRun(42n);
     return () => {
       detach();
     };
-  }, [attach, detach]);
+  }, [attach, detach, startRun]);
 
   return (
     <div className="bobivolve-app">
       <header className="bobivolve-header">
         <h1>Bobivolve</h1>
-        <p className="bobivolve-tagline">A real-time evolutionary simulation.</p>
+        <p className="bobivolve-tagline">
+          {seed === null ? 'A real-time evolutionary simulation.' : `seed ${seed.toString()}`}
+        </p>
       </header>
       <main className="dashboard">
         <PopulationPanel />
