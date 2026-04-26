@@ -57,7 +57,11 @@ test('pause stops population growth and resets the speed readout', async ({ page
   // Button text flips to Resume.
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
 
-  // Speed readout should reset to 0 t/s.
+  // Speed readout should reset to 0 t/s — and STAY there. A stale Tick
+  // heartbeat from an in-flight runUntil that completes after the click
+  // can otherwise overwrite the zeroed value back to a non-zero reading.
+  await expect(page.locator('.controls-panel .panel-meta')).toHaveText(/^0\s*t\/s$/);
+  await page.waitForTimeout(750);
   await expect(page.locator('.controls-panel .panel-meta')).toHaveText(/^0\s*t\/s$/);
 
   // Population should not grow over a one-second window. Allow ±1 for
@@ -105,6 +109,43 @@ test('1× speed advances slower than 16×', async ({ page }) => {
   // 16× should grow at least as fast as 1× — strictly more in expectation,
   // but allow equality so tiny early-tick jitter doesn't flake.
   expect(growthAt16x).toBeGreaterThanOrEqual(growthAt1x);
+});
+
+test('pause actually halts growth at 64× with a busy worker', async ({ page }) => {
+  await page.goto('/');
+  // Crank speed up so the worker has substantial in-flight work; this
+  // is the scenario where pause has historically failed.
+  await page.getByRole('button', { name: '64×' }).click();
+
+  // Wait for population to climb meaningfully so growth-vs-no-growth is
+  // observable across a 2-second window.
+  await expect
+    .poll(
+      async () => {
+        const text = (await page.locator('.population-total').textContent()) ?? '';
+        return readNumeric(text);
+      },
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(50);
+
+  // Pause.
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+
+  // Read population once pause has had a beat to register.
+  await page.waitForTimeout(500);
+  const popJustAfterPause = readNumeric(
+    (await page.locator('.population-total').textContent()) ?? '',
+  );
+
+  // Wait long enough for any non-honoured pause to be obvious; at 64×
+  // a missed pause would add tens or hundreds of probes per second.
+  await page.waitForTimeout(2_000);
+  const popLater = readNumeric((await page.locator('.population-total').textContent()) ?? '');
+
+  // Tolerate a handful of in-flight ticks that completed between the
+  // click and pause taking effect.
+  expect(popLater - popJustAfterPause).toBeLessThanOrEqual(5);
 });
 
 test('lineage tree starts with the founder lineage L0', async ({ page }) => {
