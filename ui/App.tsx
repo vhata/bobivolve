@@ -7,6 +7,7 @@ import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { ProbeInspectorPanel } from './components/ProbeInspectorPanel.js';
+import { RunPanel } from './components/RunPanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
 import SimWorker from '../host/worker.ts?worker';
@@ -38,6 +39,7 @@ export function App(): React.JSX.Element {
         </p>
       </header>
       <main className="dashboard">
+        <RunPanel />
         <ControlsPanel />
         <PopulationPanel />
         <LineageTreePanel />
