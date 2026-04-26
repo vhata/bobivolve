@@ -357,14 +357,13 @@ body {
 }
 
 .directive-params > li {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0.5rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
 }
 
-.directive-params .param-value {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.directive-params .param-key::after {
+  content: ':';
 }
 
 .param-key {
