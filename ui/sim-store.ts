@@ -21,9 +21,11 @@ export interface SimStoreState {
   readonly simTick: bigint;
   readonly populationTotal: bigint;
   readonly populationByLineage: ReadonlyMap<string, bigint>;
+  readonly seed: bigint | null;
   readonly transport: SimTransport | null;
   readonly attach: (transport: SimTransport) => void;
   readonly detach: () => void;
+  readonly startRun: (seed: bigint) => void;
 }
 
 export const useSimStore = create<SimStoreState>((set, get) => {
@@ -65,6 +67,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     simTick: 0n,
     populationTotal: 0n,
     populationByLineage: new Map(),
+    seed: null,
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -82,6 +85,21 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       unsubscribe = null;
       transport.close();
       set({ transport: null });
+    },
+    startRun: (seed) => {
+      const transport = get().transport;
+      if (transport === null) {
+        throw new Error('useSimStore.startRun: no transport attached');
+      }
+      // Reset projected state for the new run; the store does not retain
+      // population/tick state across runs.
+      set({
+        seed,
+        simTick: 0n,
+        populationTotal: 0n,
+        populationByLineage: new Map(),
+      });
+      transport.send({ kind: 'newRun', commandId: 'ui-newRun', seed });
     },
   };
 });
