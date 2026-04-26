@@ -205,6 +205,11 @@ body {
   min-width: 0;
 }
 
+.inspector-panel {
+  grid-column: span 2;
+  min-width: 0;
+}
+
 .lineage-tree {
   list-style: none;
   margin: 0;

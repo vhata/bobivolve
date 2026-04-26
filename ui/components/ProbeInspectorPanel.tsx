@@ -119,6 +119,14 @@ export function ProbeInspectorPanel(): React.JSX.Element {
                   {probe.firmware.map((directive, index) => (
                     <li key={index}>
                       <div className="directive-summary">{describeDirective(directive)}</div>
+                      <ul className="directive-params">
+                        {Object.entries(directive.params).map(([k, v]) => (
+                          <li key={k}>
+                            <span className="param-key">{k}</span>
+                            <span className="param-value">{v}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </li>
                   ))}
                 </ul>
