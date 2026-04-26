@@ -33,3 +33,73 @@ body {
   margin: 0 0 2rem;
   color: #8a8c93;
 }
+
+.dashboard {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.panel {
+  background: #16181d;
+  border: 1px solid #23252b;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b6b8be;
+}
+
+.panel-meta {
+  font-size: 0.8rem;
+  color: #6e7178;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-empty {
+  color: #6e7178;
+  margin: 0;
+}
+
+.population-total {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.lineage-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineage-id {
+  color: #b6b8be;
+}
+
+.lineage-count {
+  color: #e8e9ed;
+}
