@@ -229,7 +229,7 @@ test('every panel and control is visibly rendered', async ({ page }) => {
   await expect(page.locator('.run-panel input[aria-label="Seed"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
-  await expect(page.locator('.run-panel input[aria-label="Save slot name"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load' })).toBeVisible();
 
   // ── ControlsPanel: pause/resume + 4 speed buttons + t/s readout ───────
   await expect(page.getByRole('button', { name: /^(Pause|Resume)$/ })).toBeVisible();
@@ -311,7 +311,7 @@ test('substrate panel renders the lattice and at least one probe dot', async ({ 
   await expect.poll(async () => page.locator('.substrate-svg circle').count()).toBeGreaterThan(0);
 });
 
-test('Save creates a slot that appears in the saves list', async ({ page }) => {
+test('Save click pauses the sim and prompts for a slot name', async ({ page }) => {
   await page.goto('/');
   // Wait for some growth so the saved tick is meaningfully nonzero.
   await expect
@@ -324,18 +324,27 @@ test('Save creates a slot that appears in the saves list', async ({ page }) => {
     )
     .toBeGreaterThan(2);
 
-  await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
-  // "saved at tick" indicator appears after the ack round-trips.
-  await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/, {
-    timeout: 5_000,
+  // The Save click triggers a window.prompt; accept it with a custom
+  // slot name. Set the dialog handler before the click so we don't
+  // race the prompt.
+  let promptedDefault = '';
+  page.once('dialog', (dialog) => {
+    promptedDefault = dialog.defaultValue();
+    void dialog.accept('e2e-save');
   });
-  // The saves list grows by one entry that the user can click to load.
-  await expect(page.locator('.saves-list .save-load-button').first()).toBeVisible({
+  await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
+
+  // The suggested filename uses seed + tick.
+  expect(promptedDefault).toMatch(/^seed42-tick\d+$/);
+
+  // After save, the sim is paused and the saved-at indicator appears.
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/, {
     timeout: 5_000,
   });
 });
 
-test('Load via the saves list restores state and pauses; UI reflects it', async ({ page }) => {
+test('Load click pauses the sim, lists saves, and restores on selection', async ({ page }) => {
   await page.goto('/');
   await expect
     .poll(
@@ -347,19 +356,33 @@ test('Load via the saves list restores state and pauses; UI reflects it', async 
     )
     .toBeGreaterThan(2);
 
+  // Save first so there's a slot to load. Accept the prompt with a
+  // known name.
+  page.once('dialog', (dialog) => {
+    void dialog.accept('e2e-load-fixture');
+  });
   await page.locator('.run-panel').getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('.saves-list .save-load-button').first()).toBeVisible({
+  await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/, {
     timeout: 5_000,
   });
+  // Resume so we can check Load pauses again.
+  await page.getByRole('button', { name: /^Resume$/ }).click();
 
-  // Let the run advance further so the Load visibly snaps back to the
-  // saved tick.
-  await page.waitForTimeout(2_000);
-  await page.locator('.saves-list .save-load-button').first().click();
+  // Let the run advance so Load is observably restoring older state.
+  await page.waitForTimeout(1_000);
 
-  // After Load the host pauses; the UI's Resume button should appear.
+  // Load click reveals the picker, with the sim paused.
+  await page.getByRole('button', { name: 'Load' }).click();
+  await expect(page.locator('.load-picker')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+
+  // Pick the only slot.
+  await page.locator('.load-picker .save-load-button').first().click();
+
+  // After Load the host pauses; the picker has closed; the population
+  // panel re-rendered from the post-Load heartbeat.
+  await expect(page.locator('.load-picker')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 5_000 });
-  // The post-Load heartbeat repopulates the population panel — non-empty.
   await expect(page.locator('.population-total')).toContainText(/\d+ probes/);
 });
 

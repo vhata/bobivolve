@@ -703,8 +703,44 @@ body {
   padding: 0;
   display: grid;
   gap: 0.25rem;
-  max-height: 8rem;
+  max-height: 12rem;
   overflow-y: auto;
+}
+
+.load-picker {
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  background: #1c1f25;
+  border: 1px solid #2c2f36;
+  border-radius: 4px;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.load-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6e7178;
+}
+
+.load-picker-cancel {
+  background: transparent;
+  border: 1px solid #2c2f36;
+  color: #b6b8be;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.load-picker-cancel:hover {
+  background: #232730;
+  color: #e8e9ed;
 }
 
 .save-load-button {
