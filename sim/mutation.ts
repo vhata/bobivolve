@@ -122,16 +122,20 @@ export function maybeMutate(rng: Xoshiro256ss, firmware: DirectiveStack): Mutati
 }
 
 // Same parameter drift as the per-directive mutation path, but always
-// applied (no decision draw). Used by directive gain so the duplicate
-// is meaningfully different from the original.
+// applied (no decision draw) and always producing a strictly-different
+// value. Used by directive gain so the duplicate is meaningfully
+// different from the original — SPEC.md "a duplicate is inserted with
+// altered parameters." Calls forceDriftU64 which consumes one draw
+// for the natural drift and (only when that drift was a no-op) one
+// more for a sign perturbation.
 function forceMutateDirective(rng: Xoshiro256ss, directive: Directive): Directive {
   switch (directive.kind) {
     case 'replicate':
-      return { kind: 'replicate', threshold: driftU64(rng, directive.threshold) };
+      return { kind: 'replicate', threshold: forceDriftU64(rng, directive.threshold) };
     case 'gather':
-      return { kind: 'gather', rate: driftU64(rng, directive.rate) };
+      return { kind: 'gather', rate: forceDriftU64(rng, directive.rate) };
     case 'explore':
-      return { kind: 'explore', threshold: driftU64(rng, directive.threshold) };
+      return { kind: 'explore', threshold: forceDriftU64(rng, directive.threshold) };
   }
 }
 
@@ -163,13 +167,19 @@ function maybeMutateDirective(rng: Xoshiro256ss, directive: Directive): Directiv
 // bit of the PRNG draw, magnitude from the upper bits modulo the allowed
 // range. Modulo introduces a small bias when range is not a power of two,
 // which is acceptable here — the bias is deterministic and irrelevant to
-// the design question R0 is exploring.
+// the design question.
+//
+// One PRNG draw consumed unconditionally — even on a zero-value input
+// where the result is fixed. Skipping the draw on a "trivial" path
+// would make the PRNG-consumption count depend on input value, which
+// is a determinism trap waiting for a future directive whose parameter
+// can legitimately be zero.
 //
 // Exported for tests; internal callers go through maybeMutate.
 export function driftU64(rng: Xoshiro256ss, value: bigint): bigint {
+  const r = rng.nextU64();
   if (value === 0n) return 0n;
 
-  const r = rng.nextU64();
   const max = value / DRIFT_DIVISOR;
   if (max === 0n) return value;
 
@@ -178,8 +188,25 @@ export function driftU64(rng: Xoshiro256ss, value: bigint): bigint {
   let next = value + sign * magnitude;
 
   // Floor at 1 — a threshold of 0 yields an inert lineage and we want
-  // mutation to drift, not extinguish. Lineage death is selection's job (R1).
+  // mutation to drift, not extinguish. Lineage death is selection's job.
   if (next < 1n) next = 1n;
   if (next > U64_MAX) next = U64_MAX;
+  return next;
+}
+
+// Drift a u64 parameter and guarantee a change. Used by directive gain
+// where SPEC.md requires "a duplicate is inserted with altered
+// parameters." Natural drift can land at zero magnitude (small values
+// where value/DRIFT_DIVISOR floors to zero, or randomly when magnitude
+// modulo lands at 0); when that happens we consume one more PRNG draw
+// to pick a sign and shift by 1.
+function forceDriftU64(rng: Xoshiro256ss, value: bigint): bigint {
+  const drifted = driftU64(rng, value);
+  if (drifted !== value) return drifted;
+  // Natural drift was a no-op. One more draw, sign-bit only.
+  const sign = (rng.nextU64() & 1n) === 0n ? 1n : -1n;
+  const next = value + sign;
+  if (next < 1n) return 1n;
+  if (next > U64_MAX) return U64_MAX;
   return next;
 }
