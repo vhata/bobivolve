@@ -228,6 +228,9 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
   const lineages = useSimStore((s) => s.lineages);
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
+  const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
+  const quarantine = useSimStore((s) => s.quarantine);
+  const releaseQuarantine = useSimStore((s) => s.releaseQuarantine);
 
   const [drift, setDrift] = useState<DriftTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -285,6 +288,18 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const divisorStr = drift?.divergenceDivisor ?? null;
   const thresholdPct = divisorStr === null ? 0 : thresholdPercent(divisorStr);
   const isSolo = drift !== null && drift.population === 1n;
+  const isQuarantined = quarantinedLineages.has(selectedLineageId);
+  // Quarantine is a no-op on extinct lineages, but the button stays
+  // enabled — the host validates and replies CommandError if the target
+  // is unknown. Subscribing to populationByLineage here would force a
+  // re-render on every heartbeat, which at 64× speed pulled the panel
+  // out of "stable" for Playwright's click-stability check; not worth
+  // the cost for a UX nicety.
+  const isLineageKnown = lineage !== undefined;
+  const onToggleQuarantine = (): void => {
+    if (isQuarantined) releaseQuarantine(selectedLineageId);
+    else quarantine(selectedLineageId);
+  };
   // Plain-language firmware summary, one bullet per parameter the
   // lineage's reference firmware carries.
   const firmwareLines: readonly string[] =
@@ -300,6 +315,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
           <span className="panel-meta">
             {lineage.name}
             {lineage.name !== lineage.id ? ` · ${lineage.id}` : ''}
+            {isQuarantined ? ' · quarantined' : ''}
           </span>
         ) : null}
       </header>
@@ -310,6 +326,23 @@ export function LineageInspectorPanel(): React.JSX.Element {
           <p className="panel-empty">unknown lineage {selectedLineageId}</p>
         ) : (
           <>
+            <div className="inspector-actions">
+              <button
+                type="button"
+                className={
+                  isQuarantined ? 'lineage-action lineage-action-active' : 'lineage-action'
+                }
+                onClick={onToggleQuarantine}
+                disabled={!isLineageKnown}
+                title={
+                  isQuarantined
+                    ? 'Release this lineage; replication resumes from the next tick.'
+                    : "Suspend this lineage's replication. Reversible."
+                }
+              >
+                {isQuarantined ? 'Release quarantine' : 'Quarantine'}
+              </button>
+            </div>
             <dl className="inspector-detail">
               <div>
                 <dt>founder</dt>

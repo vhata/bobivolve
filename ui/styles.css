@@ -311,6 +311,67 @@ body {
   color: #c8d4ec;
 }
 
+.lineage-quarantine-pip {
+  display: inline-block;
+  margin-right: 0.35rem;
+  color: #d18a2a;
+  font-weight: 600;
+}
+
+.lineage-node-quarantined > .lineage-node-row {
+  border-color: #5a4220;
+  background: #25201a;
+}
+
+.lineage-node-quarantined > .lineage-node-row .lineage-id {
+  color: #d18a2a;
+}
+
+.lineage-node-quarantined.lineage-node-selected > .lineage-node-row {
+  background: #4a3a18;
+  border-color: #d18a2a;
+  color: #ffffff;
+}
+
+.inspector-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lineage-action {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid #2c3038;
+  background: #1c1f25;
+  color: #d6d8de;
+  cursor: pointer;
+}
+
+.lineage-action:hover:not(:disabled) {
+  background: #25282f;
+  border-color: #3a3e48;
+}
+
+.lineage-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lineage-action-active {
+  background: #4a3a18;
+  border-color: #d18a2a;
+  color: #ffe1ad;
+}
+
+.lineage-action-active:hover:not(:disabled) {
+  background: #5a4520;
+  border-color: #e6a04a;
+}
+
 .subhead {
   margin: 1rem 0 0.5rem;
   font-size: 0.78rem;

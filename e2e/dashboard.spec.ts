@@ -396,3 +396,25 @@ test('clicking a lineage in the tree selects it in the inspector', async ({ page
   await expect(l0Row).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.inspector-panel')).toContainText('P0');
 });
+
+test('quarantine toggle flips the inspector and the tree pip', async ({ page }) => {
+  // Player intervention smoke: select L0, hit Quarantine, see the
+  // inspector flip its meta and the tree row carry the quarantine pip;
+  // hit Release, see both back to normal.
+  await page.goto('/');
+  const l0Row = page.locator('.lineage-tree button[aria-pressed]').first();
+  await l0Row.click();
+
+  const quarantineButton = page.locator('.lineage-action');
+  await expect(quarantineButton).toContainText('Quarantine');
+
+  await quarantineButton.click();
+  await expect(page.locator('.inspector-panel .panel-meta')).toContainText('quarantined');
+  await expect(quarantineButton).toContainText('Release quarantine');
+  await expect(page.locator('.lineage-tree .lineage-quarantine-pip').first()).toBeVisible();
+
+  await quarantineButton.click();
+  await expect(page.locator('.inspector-panel .panel-meta')).not.toContainText('quarantined');
+  await expect(quarantineButton).toContainText('Quarantine');
+  await expect(page.locator('.lineage-tree .lineage-quarantine-pip')).toHaveCount(0);
+});
