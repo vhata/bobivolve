@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
+import { DecreeComposerModal } from './DecreeComposerModal.js';
 import { PatchEditorModal } from './PatchEditorModal.js';
 
 const BAR_PX = 220;
@@ -236,6 +237,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const [drift, setDrift] = useState<DriftTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [patchEditorOpen, setPatchEditorOpen] = useState(false);
+  const [decreeComposerOpen, setDecreeComposerOpen] = useState(false);
   // Per-lineage sparkline buffers. Held in a ref so a render does not
   // discard the history; we surface a render counter to push samples
   // through to the children.
@@ -355,6 +357,17 @@ export function LineageInspectorPanel(): React.JSX.Element {
               >
                 Apply patch
               </button>
+              <button
+                type="button"
+                className="lineage-action"
+                onClick={() => {
+                  setDecreeComposerOpen(true);
+                }}
+                disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
+                title="Queue a conditional patch that fires when its trigger condition holds."
+              >
+                Queue decree
+              </button>
             </div>
             <dl className="inspector-detail">
               <div>
@@ -437,6 +450,16 @@ export function LineageInspectorPanel(): React.JSX.Element {
           initialFirmware={drift.referenceFirmware}
           onClose={() => {
             setPatchEditorOpen(false);
+          }}
+        />
+      ) : null}
+      {decreeComposerOpen && lineage !== undefined && drift !== null ? (
+        <DecreeComposerModal
+          defaultTriggerLineageId={lineage.id}
+          defaultPatchTargetLineageId={lineage.id}
+          initialFirmware={drift.referenceFirmware}
+          onClose={() => {
+            setDecreeComposerOpen(false);
           }}
         />
       ) : null}

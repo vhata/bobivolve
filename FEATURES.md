@@ -7,9 +7,9 @@ Updated in the same commit as any feature whose status changes.
 ## Release 2 — The Engineer's Console
 
 - ✓ Quarantine — a player can suspend a lineage's replication from the inspector; the suspension is reversible and the tree marks quarantined lineages with a pip
-- ⋯ Origin compute — renewable budget regenerates per tick; patch and decree authoring consume it; the dashboard shows what's affordable
+- ✓ Origin compute — renewable budget regenerates per tick; patch and decree authoring each consume a one-shot cost, held quarantines drain a per-tick maintenance cost; the dashboard shows the budget bar and the current drain
 - ✓ Patches — the lineage inspector opens a modal directive editor on click; submitted patches replace the lineage's reference firmware and every extant probe, with PATCH_AUTHORING_COST charged against Origin compute; descendants inherit and drift like any firmware
-- ⋯ Decrees — conditional patches queued to fire when their triggers match (R2 ships a narrow trigger set)
+- ✓ Decrees — modal composer queues a conditional patch (trigger + target lineage + firmware); R2's trigger set is "lineage population below threshold"; the queue panel lists pending decrees and lets the player revoke before firing
 - ⋯ Intervention-versioned lineage tree — the tree shows when a patch landed and which clades inherited it
 - ✓ PatchSaturated auto-pause — fires once when a player-authored patch's carriers exceed 50% of the population; lineages inherit patches at speciation so the saturation count tracks descendant clades automatically
 

@@ -1,4 +1,5 @@
 import type {
+  DecreeFiredEvent,
   DeathEvent,
   ExtinctionEvent,
   PatchSaturatedEvent,
@@ -7,12 +8,13 @@ import type {
   SpeciationEvent,
 } from '../protocol/types.js';
 import { applyComputeTick } from './compute.js';
+import { triggerFires } from './decree.js';
 import type { Directive } from './directive.js';
 import { BASAL_DRAIN_PER_TICK, REPLICATION_COST_ENERGY } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
-import { checkPatchSaturation } from './patch.js';
+import { applyPatch, checkPatchSaturation } from './patch.js';
 import type { Probe, SimState } from './state.js';
 import {
   LATTICE_CELL_COUNT,
@@ -174,6 +176,49 @@ export function tick(state: SimState, events?: SimEvent[]): void {
       } satisfies PatchSaturatedEvent & { simTick: bigint };
       events.push(event);
     }
+  }
+
+  // Phase 6: queued decrees. Walk in declaration order; the first
+  // decree whose trigger fires applies its patch and is removed.
+  // Multiple decrees can fire in a single tick if their triggers all
+  // hold, but the patches apply sequentially so the second decree
+  // sees the result of the first. Skipped when the queue is empty —
+  // R0/R1 runs pay no cost.
+  if (state.queuedDecrees.length > 0) {
+    const remaining: typeof state.queuedDecrees = [];
+    for (const decree of state.queuedDecrees) {
+      if (!triggerFires(state, decree.trigger)) {
+        remaining.push(decree);
+        continue;
+      }
+      // Trigger condition met: apply the patch. The target lineage
+      // may have gone extinct since queue time — applyPatch throws
+      // in that case, which we catch and treat as a quiet drop with
+      // a DecreeFired event recording that the patch could not land.
+      // This preserves the player's authorship in the event log
+      // even when timing left the patch homeless.
+      let landed = false;
+      let probesAffected = 0;
+      try {
+        const result = applyPatch(state, decree.patchTargetLineageId, decree.patchFirmware);
+        landed = true;
+        probesAffected = result.probesAffected;
+      } catch {
+        landed = false;
+      }
+      if (events !== undefined) {
+        const event: SimEvent = {
+          kind: 'decreeFired',
+          simTick: state.simTick,
+          decreeId: decree.id,
+          patchTargetLineageId: decree.patchTargetLineageId,
+          landed,
+          probesAffected: BigInt(probesAffected),
+        } satisfies DecreeFiredEvent & { simTick: bigint };
+        events.push(event);
+      }
+    }
+    state.queuedDecrees = remaining;
   }
 }
 

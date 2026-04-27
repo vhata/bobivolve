@@ -9,7 +9,13 @@
 // tree views.
 
 import { create } from 'zustand';
-import type { DirectiveSpec, ListSavesResult, SaveSummary, SimEvent } from '../protocol/types.js';
+import type {
+  DecreeTriggerSpec,
+  DirectiveSpec,
+  ListSavesResult,
+  SaveSummary,
+  SimEvent,
+} from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
 
 export interface LineagePopulation {
@@ -111,6 +117,16 @@ export interface SimStoreState {
   // transport. The host is responsible for charging compute and
   // validating; the store does not pre-check.
   readonly applyPatch: (lineageId: string, firmware: readonly DirectiveSpec[]) => void;
+  // Queue a decree (conditional patch). Fire-and-forget; success and
+  // failure surface via DecreeQueued and CommandError events.
+  readonly queueDecree: (
+    trigger: DecreeTriggerSpec,
+    patchTargetLineageId: string,
+    patchFirmware: readonly DirectiveSpec[],
+  ) => void;
+  // Cancel a queued decree by id. Idempotent at the host (no-op ack
+  // for an unknown id).
+  readonly revokeDecree: (decreeId: string) => void;
 }
 
 let nextCommandOrdinal = 0;
@@ -319,6 +335,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // The host's auto-pause path will follow up with an
         // AutoPaused event when the player has the trigger armed; the
         // store does not need additional state here today.
+        return;
+      case 'decreeQueued':
+      case 'decreeFired':
+      case 'decreeRevoked':
+        // The decrees panel re-polls the queue via a query; events
+        // are surfaced in the events timeline. No store state today.
         return;
     }
   };
@@ -529,6 +551,24 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-applyPatch');
       transport.send({ kind: 'applyPatch', commandId, lineageId, firmware });
+    },
+    queueDecree: (trigger, patchTargetLineageId, patchFirmware) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-queueDecree');
+      transport.send({
+        kind: 'queueDecree',
+        commandId,
+        trigger,
+        patchTargetLineageId,
+        patchFirmware,
+      });
+    },
+    revokeDecree: (decreeId) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-revokeDecree');
+      transport.send({ kind: 'revokeDecree', commandId, decreeId });
     },
     refreshSaves: async () => {
       const transport = get().transport;

@@ -1,4 +1,5 @@
 import { ORIGIN_COMPUTE_MAX } from './compute.js';
+import type { QueuedDecree } from './decree.js';
 import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import { INITIAL_ENERGY } from './energy.js';
 import type { Lineage } from './lineage.js';
@@ -71,6 +72,13 @@ export interface SimState {
   // Monotonic counter so patch ids are stable across runs of the
   // same (seed, command-log).
   nextPatchOrdinal: bigint;
+  // Queued decrees, in insertion order. Per-tick the engine checks
+  // each in declaration order; the first whose trigger fires applies
+  // its patch and is removed. The check is O(decrees × population) —
+  // small at R2 scale; future tightening can index by trigger type.
+  queuedDecrees: QueuedDecree[];
+  // Monotonic counter for decree ids.
+  nextDecreeOrdinal: bigint;
 }
 
 export interface AppliedPatchRecord {
@@ -100,6 +108,8 @@ export interface SimStateSnapshot {
   readonly originCompute: bigint;
   readonly appliedPatches: readonly AppliedPatchRecord[];
   readonly nextPatchOrdinal: bigint;
+  readonly queuedDecrees: readonly QueuedDecree[];
+  readonly nextDecreeOrdinal: bigint;
 }
 
 export interface CreateInitialStateOptions {
@@ -183,6 +193,8 @@ export function createInitialState(
     originCompute: ORIGIN_COMPUTE_MAX,
     appliedPatches: new Map(),
     nextPatchOrdinal: 0n,
+    queuedDecrees: [],
+    nextDecreeOrdinal: 0n,
   };
 }
 
@@ -206,6 +218,8 @@ export function snapshot(state: SimState): SimStateSnapshot {
     originCompute: state.originCompute,
     appliedPatches: [...state.appliedPatches.values()],
     nextPatchOrdinal: state.nextPatchOrdinal,
+    queuedDecrees: state.queuedDecrees.slice(),
+    nextDecreeOrdinal: state.nextDecreeOrdinal,
   };
 }
 
@@ -227,5 +241,7 @@ export function restore(snap: SimStateSnapshot): SimState {
     originCompute: snap.originCompute ?? ORIGIN_COMPUTE_MAX,
     appliedPatches: new Map((snap.appliedPatches ?? []).map((p) => [p.id, p])),
     nextPatchOrdinal: snap.nextPatchOrdinal ?? 0n,
+    queuedDecrees: (snap.queuedDecrees ?? []).slice(),
+    nextDecreeOrdinal: snap.nextDecreeOrdinal ?? 0n,
   };
 }
