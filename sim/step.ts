@@ -116,9 +116,12 @@ export function tick(state: SimState, events?: SimEvent[]): void {
   }
 
   // Phase 4: extinction events. A lineage that just lost members AND
-  // now has zero extant probes triggers ExtinctionEvent. We only check
-  // lineages affected this tick — most ticks have none, so the cost is
-  // bounded by the number of deaths, not the total lineage count.
+  // now has zero extant probes triggers ExtinctionEvent. We walk every
+  // surviving probe once to build a per-lineage tally, then check only
+  // the lineages that lost a member this tick — most ticks have no
+  // deaths and skip this phase entirely. The walk is O(survivors) not
+  // O(deaths); incremental per-lineage counts could push it down to
+  // O(deaths) but the constant is fine at R1 population.
   if (events !== undefined && lineagesThatLostProbes.size > 0) {
     const extantByLineage = new Map<LineageId, number>();
     for (const probe of state.probes.values()) {
@@ -173,10 +176,13 @@ function gather(state: SimState, probe: Probe, rate: bigint): void {
 }
 
 function explore(state: SimState, probe: Probe, threshold: bigint): void {
-  // Two PRNG draws on a successful move — one to gate, one to pick a
-  // direction. Boundary moves are no-ops (no draw is "wasted" on a
-  // refused direction; the second draw still consumes determinism so
-  // the same seed produces identical streams across runs).
+  // PRNG-draw count is deterministic in (decision, threshold) only:
+  //   gate-fail  → 1 draw  (decision)
+  //   gate-pass  → 2 draws (decision + direction)
+  // The direction draw is consumed on every gate-pass, including
+  // boundary refusals — refusing the move does not "save" a draw,
+  // because the PRNG state must advance identically across runs of
+  // the same seed regardless of where the probe stood at the time.
   const decision = state.rng.nextU64();
   if (decision >= threshold) return;
   const dirRoll = state.rng.nextU64();

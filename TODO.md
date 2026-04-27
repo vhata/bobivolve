@@ -16,3 +16,4 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 ## Release 2 — The Engineer's Console
 
 - Forensic replay: state-rewind scrub UI (load nearest snapshot + advance to selected tick); the events-timeline shape is in place, the data path supports it, the affordance waits on richer events for R2's player intervention #r2 #ui
+- Tune gather-rate drift to be observable at the founder value (currently 2 with DRIFT_DIVISOR=64 floors drift to zero; a meaningful divisor change or a higher founder rate would let gather drift bite) #r2 #sim

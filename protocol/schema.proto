@@ -117,6 +117,10 @@ message Speciation {
   string parent_lineage_id = 1;
   string new_lineage_id = 2;
   string new_lineage_name = 3;
+  // The probe whose replication-with-drift triggered this speciation.
+  // Stored on the lineage record as `founder_probe_id` so the dashboard
+  // can render lineage origin without joining against the event log.
+  string founder_probe_id = 4;
 }
 
 message Extinction {
@@ -156,6 +160,7 @@ message Query {
     LogSliceQuery log_slice = 5;
     PopulationSummaryQuery population_summary = 6;
     SubstrateQuery substrate = 7;
+    ListSavesQuery list_saves = 8;
   }
 }
 
@@ -169,6 +174,7 @@ message QueryResult {
     LogSlice log_slice = 5;
     PopulationSummary population_summary = 6;
     Substrate substrate = 7;
+    ListSaves list_saves = 8;
   }
 }
 
@@ -185,12 +191,33 @@ message LogSliceQuery {
 }
 message PopulationSummaryQuery {}
 message SubstrateQuery {}
+message ListSavesQuery {}
 
 // Result message bodies. Shapes evolve alongside the dashboard
 // implementation. Bodies still marked `{}` are placeholders to be
 // fleshed out when the matching UI panel lands.
 message LineageTree {}
-message ProbeInspector {}
+
+// ProbeInspector — per-probe identity and firmware. The `probe`
+// field is unset (proto3 default) when the probe id was not found
+// in the current state.
+message ProbeInspector {
+  ProbeInspectorProbe probe = 1;
+}
+
+message ProbeInspectorProbe {
+  string id = 1;
+  string lineage_id = 2;
+  uint64 born_at_tick = 3;
+  repeated ProbeInspectorDirective firmware = 4;
+}
+
+message ProbeInspectorDirective {
+  string kind = 1;
+  // Numeric parameters serialised as decimal strings to preserve u64
+  // values across the seam (proto3 JSON convention).
+  map<string, string> params = 2;
+}
 
 // DriftTelemetry — per-lineage drift statistics for the lineage
 // inspector. Numeric values use decimal strings to preserve u64
@@ -222,6 +249,24 @@ message ParameterDrift {
 
 message LogSlice {}
 message PopulationSummary {}
+
+// ListSaves — index of named save slots written by the host. The
+// dashboard renders this in the Run panel so a player can browse and
+// click to load.
+message ListSaves {
+  repeated SaveSummary saves = 1;
+}
+
+message SaveSummary {
+  string slot = 1;
+  // Tick at which the save was taken; decimal string (proto3 JSON
+  // convention for u64 over JSON-encoded transports).
+  string tick = 2;
+  // Wall-clock millis since epoch when the save was written. Number
+  // values fit comfortably in a JS double; uint64 here so the proto
+  // encoding does not lose precision on far-future timestamps.
+  uint64 saved_at_ms = 3;
+}
 
 // Substrate — current spatial state of the simulation. Carries the
 // per-cell resource grid and the position of every extant probe so

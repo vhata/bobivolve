@@ -1,10 +1,4 @@
-import type {
-  Directive,
-  DirectiveStack,
-  ExploreDirective,
-  GatherDirective,
-  ReplicateDirective,
-} from './directive.js';
+import type { Directive, DirectiveStack } from './directive.js';
 import type { LineageId, ProbeId, SimTick } from './types.js';
 
 // Lineage clustering. SPEC.md: probes are clustered into lineages based on
@@ -56,13 +50,22 @@ export function firmwareDiverged(child: DirectiveStack, reference: DirectiveStac
 
 function directiveDiverged(child: Directive, reference: Directive): boolean {
   if (child.kind !== reference.kind) return true;
-  switch (child.kind) {
+  // Same kind on both sides — extract the parameter via a typed helper
+  // so we don't have to cast across the union arms.
+  return parameterDiverged(directiveParameter(child), directiveParameter(reference));
+}
+
+// Numeric parameter exposed for divergence comparison. Each R1 directive
+// kind carries a single u64 parameter; R2+ may extend this to a tuple,
+// at which point divergence becomes per-parameter and this helper goes.
+function directiveParameter(d: Directive): bigint {
+  switch (d.kind) {
     case 'replicate':
-      return parameterDiverged(child.threshold, (reference as ReplicateDirective).threshold);
+      return d.threshold;
     case 'gather':
-      return parameterDiverged(child.rate, (reference as GatherDirective).rate);
+      return d.rate;
     case 'explore':
-      return parameterDiverged(child.threshold, (reference as ExploreDirective).threshold);
+      return d.threshold;
   }
 }
 

@@ -89,6 +89,28 @@ describe('snapshot / restore', () => {
     expect(snapshot(restored)).toEqual(snap);
   });
 
+  it('does not drift when the live state advances afterwards', () => {
+    // Probe.energy and Probe.position mutate in place each tick. The
+    // snapshot path takes a shallow copy of every probe so a saved
+    // view stays frozen — this test asserts that contract directly.
+    // If the copy is ever lost (regression in state.ts:snapshot),
+    // every saved view would silently update with the live state and
+    // this test fails.
+    const state = createInitialState(Seed(7n));
+    const beforeEnergy = state.probes.get(ProbeId('P0'))?.energy;
+    expect(beforeEnergy).toBeDefined();
+    const snap = snapshot(state);
+    tickN(state, 100n);
+    expect(snap.probes[0]?.energy).toBe(beforeEnergy);
+    // Resources mutate in place too; snapshot slice should be a frozen
+    // copy of the substrate at snap time.
+    const resourceSumLive = state.resources.reduce((s, r) => s + r, 0n);
+    const resourceSumSnap = snap.resources.reduce((s, r) => s + r, 0n);
+    // After 100 ticks of regen + diffusion + a probe absorbing, the
+    // sums must not match — the snapshot stayed put.
+    expect(resourceSumLive).not.toBe(resourceSumSnap);
+  });
+
   it('produces identical post-restore behaviour', () => {
     const a = createInitialState(Seed(2024n));
     tickN(a, 50n);
