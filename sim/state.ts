@@ -2,6 +2,7 @@ import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import { INITIAL_ENERGY } from './energy.js';
 import type { Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
+import { MIN_FIRMWARE_LENGTH } from './mutation.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
 import {
   LATTICE_CELL_COUNT,
@@ -84,6 +85,15 @@ export function createInitialState(
     : (founderFirmwareOrOptions as CreateInitialStateOptions);
   const founderFirmware = opts.founderFirmware ?? FOUNDER_FIRMWARE;
   const founderEnergy = opts.founderEnergy ?? INITIAL_ENERGY;
+  // The mutation path floors firmware length at MIN_FIRMWARE_LENGTH;
+  // a founder below that floor would create an inert lineage that
+  // mutation could not recover from. Catch it at construction so the
+  // bad input shows up at the seam, not deep in the run loop.
+  if (founderFirmware.length < MIN_FIRMWARE_LENGTH) {
+    throw new Error(
+      `founder firmware must contain at least ${MIN_FIRMWARE_LENGTH.toString()} directive(s)`,
+    );
+  }
 
   const rng = Xoshiro256ss.fromSeed(seed);
   const founderLineageId = LineageId('L0');

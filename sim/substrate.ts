@@ -19,9 +19,10 @@ export const LATTICE_SIDE = 32;
 // Total cell count; helpful for sizing the flat resource grid.
 export const LATTICE_CELL_COUNT = LATTICE_SIDE * LATTICE_SIDE;
 
-// Carrying capacity of a single cell. Regen accumulates up to this value;
-// excess is discarded. Tuned alongside ABSORPTION_PER_PROBE_PER_TICK and
-// BASAL_DRAIN_PER_TICK so a few-probe density is sustainable per cell.
+// Carrying capacity of a single cell. Regen accumulates up to this
+// value; excess is discarded. Tuned alongside the gather directive's
+// rate parameter (firmware-controlled) and BASAL_DRAIN_PER_TICK so a
+// few-probe density is sustainable per cell.
 export const MAX_RESOURCE_PER_CELL = 1000n;
 
 // Resources gained by every cell each tick, capped at MAX_RESOURCE_PER_CELL.
@@ -91,10 +92,12 @@ export interface Position {
   readonly y: number;
 }
 
-// Centre of the lattice. Founder probe spawns here; new runs always start
-// from the centre so seed-determined behaviour does not depend on geometry
-// boundary effects in the early ticks.
-export const LATTICE_CENTRE: Position = {
+// Centre of the lattice. Founder probe spawns here; new runs always
+// start from the centre so seed-determined behaviour does not depend
+// on geometry boundary effects in the early ticks. Frozen — every
+// founder probe shares this object reference, and a runtime mutation
+// of either field would clobber every probe's view of "centre."
+export const LATTICE_CENTRE: Position = Object.freeze({
   x: Math.floor(LATTICE_SIDE / 2),
   y: Math.floor(LATTICE_SIDE / 2),
-};
+});

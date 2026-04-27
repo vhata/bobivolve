@@ -21,9 +21,11 @@ export const BASAL_DRAIN_PER_TICK = 1n;
 
 // Energy transferred from parent to child on every successful
 // replication. The parent loses this amount; the child begins life
-// with exactly this much. Combined with the directive's threshold this
-// gates the rate at which a probe can fund offspring — a probe in a
-// steady cell of net (ABSORPTION - DRAIN) earns the cost back every
-// COST / net ticks. Selection pressure favours lineages whose firmware
-// lets them earn the cost faster than their neighbours.
+// with exactly this much. Combined with the replicate directive's
+// threshold this gates the rate at which a probe can fund offspring
+// — a probe in a steady cell of net (gather.rate - BASAL_DRAIN) earns
+// the cost back every COST / net ticks. Selection pressure favours
+// lineages whose firmware (a tunable, mutable input — gather.rate
+// drifts across generations) lets them earn the cost faster than
+// their neighbours.
 export const REPLICATION_COST_ENERGY = 1000n;
