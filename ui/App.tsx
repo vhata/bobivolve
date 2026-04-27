@@ -8,6 +8,7 @@ import { LineageInspectorPanel } from './components/LineageInspectorPanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { RunPanel } from './components/RunPanel.js';
+import { SubstratePanel } from './components/SubstratePanel.js';
 import { useSimStore } from './sim-store.js';
 import { WorkerTransport } from '../transport/worker.js';
 import SimWorker from '../host/worker.ts?worker';
@@ -45,6 +46,7 @@ export function App(): React.JSX.Element {
         <ControlsPanel />
         <AutoPausePanel />
         <PopulationPanel />
+        <SubstratePanel />
         <LineageTreePanel />
         <LineageInspectorPanel />
         <EventsTimelinePanel />
