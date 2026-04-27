@@ -19,10 +19,10 @@ The list for a release is fleshed out when work on that release begins; speculat
 - `✓` Probes — entities with identity, lineage, and directive-driven behavior
 - `✓` Directive stacks — at least one directive kind, parameterised
 - `✓` Replication — children inherit firmware deterministically from the seed
-- `⋯` Mutation — parameter drift only. Priority swap and directive loss/gain need ≥2 directive kinds in the firmware to be meaningful; with the single `replicate` kind in R0 they reduce to no-ops or trivially destructive cases. Carrying them as deferred is honest.
+- `✓` Mutation — parameter drift on inherited firmware. Priority swap and directive loss/gain are deferred to R1: with a single `replicate` directive kind they reduce to no-ops or trivially destructive cases, so they need richer firmware to be meaningful.
 - `✓` Lineage clustering — clades emerge, named lay-person legibly, and split at the divergence threshold; the lineage tree records descent
 - `✓` Dashboard — always-on UI: run controls, sim controls, auto-pause, population, lineage tree, lineage inspector, events timeline
-- `⋯` Forensic replay — light shape shipped (events timeline of significant events); full state-rewind scrub stays as a polish item. The data path (host Save/Load + snapshot replay) is in place; the UI affordance is what's missing.
+- `—` Forensic replay — events-timeline shape shipped; full state-rewind scrub deferred. The data path (host Save/Load + snapshot replay) is already in place; the UI affordance is gated on R1+ producing more events worth rewinding to (death, extinction, contact). Building it now would polish a button with little to do.
 
 ### Implicit (from ARCHITECTURE.md and PROCESS.md)
 
@@ -48,4 +48,4 @@ If they can do that, the design question — does the firmware-as-data idea prod
 
 ### Verdict
 
-Pending sign-off. The two `⋯` items are honestly carried: extra mutation kinds are gated on richer firmware (arguably an R1 prerequisite); state-rewind scrub is a polish item the data path already supports. R0 is otherwise fundamentally shippable.
+Shipped as `r0-petri-dish`. Two items deferred with rationale: extra mutation kinds (gated on R1's richer firmware) and the state-rewind scrub UI (gated on later releases producing more events worth rewinding to). The R0 design question — does firmware-as-data drift produce something interesting on its own — is answerable by playing the dashboard.
