@@ -11,7 +11,7 @@ Updated in the same commit as any feature whose status changes.
 - ✓ Patches — the lineage inspector opens a modal directive editor on click; submitted patches replace the lineage's reference firmware and every extant probe, with PATCH_AUTHORING_COST charged against Origin compute; descendants inherit and drift like any firmware
 - ⋯ Decrees — conditional patches queued to fire when their triggers match (R2 ships a narrow trigger set)
 - ⋯ Intervention-versioned lineage tree — the tree shows when a patch landed and which clades inherited it
-- ⋯ PatchSaturated auto-pause — fires when a player-authored patch reaches X% of the population
+- ✓ PatchSaturated auto-pause — fires once when a player-authored patch's carriers exceed 50% of the population; lineages inherit patches at speciation so the saturation count tracks descendant clades automatically
 
 ## Release 1 — Scarcity
 

@@ -199,6 +199,18 @@ export interface PatchAppliedEvent {
   // Count of extant probes whose firmware was overwritten when the
   // patch landed. bigint for u64-safe transport.
   readonly probesAffected: bigint;
+  // Stable id minted by the sim. Correlates with the matching
+  // PatchSaturated event when the patch later spreads.
+  readonly patchId: string;
+}
+
+export interface PatchSaturatedEvent {
+  readonly kind: 'patchSaturated';
+  // Patch whose carriers just crossed the saturation threshold.
+  readonly patchId: string;
+  // Counts at the moment of firing.
+  readonly carrierPopulation: bigint;
+  readonly totalPopulation: bigint;
 }
 
 export type SimEventBody =
@@ -212,7 +224,8 @@ export type SimEventBody =
   | CommandErrorEvent
   | QuarantineImposedEvent
   | QuarantineLiftedEvent
-  | PatchAppliedEvent;
+  | PatchAppliedEvent
+  | PatchSaturatedEvent;
 
 export type SimEvent = SimEventBody & {
   // Integer time. Floats are forbidden in tick fields (ARCHITECTURE.md).

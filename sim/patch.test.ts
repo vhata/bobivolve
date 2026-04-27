@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { SimEvent } from '../protocol/types.js';
 import type { DirectiveStack } from './directive.js';
-import { applyPatch, validatePatchFirmware } from './patch.js';
+import { applyPatch, checkPatchSaturation, validatePatchFirmware } from './patch.js';
 import { createInitialState } from './state.js';
 import { tickN } from './step.js';
 import { LineageId, ProbeId, Seed } from './types.js';
@@ -100,5 +101,43 @@ describe('applyPatch', () => {
       if (probe.lineageId === LineageId('L0')) continue;
       expect(probe.firmware).toEqual(before.get(probe.id));
     }
+  });
+
+  it('appends the patch id to the lineage patches list', () => {
+    const state = createInitialState(Seed(42n), FIRMWARE_GATHER_REPLICATE);
+    const r1 = applyPatch(state, LineageId('L0'), FIRMWARE_GATHER_REPLICATE);
+    expect(state.lineages.get(LineageId('L0'))?.patches).toEqual([r1.patchId]);
+
+    const r2 = applyPatch(state, LineageId('L0'), [
+      { kind: 'gather', rate: 7n },
+      { kind: 'replicate', threshold: 600n },
+    ]);
+    expect(state.lineages.get(LineageId('L0'))?.patches).toEqual([r1.patchId, r2.patchId]);
+  });
+});
+
+describe('checkPatchSaturation', () => {
+  it('fires once when the carrier population exceeds 50%', () => {
+    // L0 is the only lineage; applying any patch makes 100% of the
+    // population a carrier, so saturation fires the next time we check.
+    const state = createInitialState(Seed(42n), FIRMWARE_GATHER_REPLICATE);
+    const r = applyPatch(state, LineageId('L0'), FIRMWARE_GATHER_REPLICATE);
+    const firings = checkPatchSaturation(state);
+    expect(firings).toHaveLength(1);
+    expect(firings[0]?.patchId).toBe(r.patchId);
+    expect(firings[0]?.totalPopulation).toBe(1n);
+    expect(firings[0]?.carrierPopulation).toBe(1n);
+
+    // A second check returns nothing — the patch was marked saturated.
+    expect(checkPatchSaturation(state)).toHaveLength(0);
+  });
+
+  it('emits PatchSaturated through the tick path', () => {
+    const state = createInitialState(Seed(42n), FIRMWARE_GATHER_REPLICATE);
+    applyPatch(state, LineageId('L0'), FIRMWARE_GATHER_REPLICATE);
+    const events: SimEvent[] = [];
+    tickN(state, 1n, events);
+    const saturated = events.filter((e) => e.kind === 'patchSaturated');
+    expect(saturated).toHaveLength(1);
   });
 });

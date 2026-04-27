@@ -21,9 +21,9 @@
 
 import { firmwareDiverged } from './lineage.js';
 import { MIN_FIRMWARE_LENGTH } from './mutation.js';
-import type { SimState } from './state.js';
+import type { AppliedPatchRecord, SimState } from './state.js';
 import type { DirectiveStack } from './directive.js';
-import type { LineageId } from './types.js';
+import { type LineageId, SimTick } from './types.js';
 
 // Validate a candidate firmware before it lands. Mirrors the floor that
 // createInitialState enforces on the founder — a sub-floor stack would
@@ -49,6 +49,9 @@ export function validatePatchFirmware(firmware: DirectiveStack): string | null {
 export interface PatchApplyResult {
   readonly previousFirmware: DirectiveStack;
   readonly probesAffected: number;
+  // Stable id minted for this patch; carried on the PatchApplied event
+  // and used by the dashboard for intervention history.
+  readonly patchId: string;
   // True when the patched firmware differs from the lineage's current
   // reference. False is a player no-op — the host can choose to surface
   // it as a CommandError or accept it; current host behaviour treats it
@@ -68,14 +71,29 @@ export function applyPatch(
   const previousFirmware = lineage.referenceFirmware;
   const changed = firmwareDiverged(newFirmware, previousFirmware);
 
-  // Update the lineage's reference firmware to the patched value. The
-  // lineage record is otherwise readonly, so we replace the entry with
-  // a fresh object rather than mutating in place — keeps any
-  // outstanding snapshot views consistent.
+  // Mint a stable patch id from the monotonic counter. Derived from
+  // (seed, command-log) and so identical between two runs sharing the
+  // same input. "P" prefix avoids collision with probe ids ("P0", "P1",
+  // ...) — patches use "PT" to mean "patch".
+  const patchId = `PT${state.nextPatchOrdinal.toString()}`;
+  state.nextPatchOrdinal += 1n;
+
+  // Append the patch id to the target lineage's patches list. Replace
+  // the lineage record (otherwise readonly fields) with a fresh object
+  // so any outstanding snapshot view stays consistent.
   state.lineages.set(lineageId, {
     ...lineage,
     referenceFirmware: newFirmware,
+    patches: [...lineage.patches, patchId],
   });
+
+  const record: AppliedPatchRecord = {
+    id: patchId,
+    targetLineageId: lineageId,
+    appliedAtTick: state.simTick,
+    saturatedAtTick: null,
+  };
+  state.appliedPatches.set(patchId, record);
 
   // Overwrite firmware on every extant probe in the lineage. SPEC: the
   // patched directives are inherited by descendants — extant probes
@@ -92,5 +110,61 @@ export function applyPatch(
     probesAffected += 1;
   }
 
-  return { previousFirmware, probesAffected, changed };
+  return { previousFirmware, probesAffected, patchId, changed };
+}
+
+// Saturation threshold: PatchSaturated fires when a patch's carrier
+// population exceeds this fraction of total population. Tunable;
+// 0.5 (50%) reads cleanly as "the patch has taken over the swarm."
+export const PATCH_SATURATION_PERCENT_NUMERATOR = 50n;
+export const PATCH_SATURATION_PERCENT_DENOMINATOR = 100n;
+
+export interface SaturationFiring {
+  readonly patchId: string;
+  readonly carrierPopulation: bigint;
+  readonly totalPopulation: bigint;
+}
+
+// Check every applied-but-not-yet-saturated patch and return any that
+// crossed the threshold this tick. Mutates state to mark each firing
+// patch as saturated so the event does not refire. Pure integer
+// arithmetic; deterministic.
+//
+// Cost is O(probes + patches × lineages); patches × lineages is small
+// (R2 expectations: tens of patches, tens of lineages). Tighter
+// indexing (per-patch carrier counts maintained incrementally) is a
+// future optimisation.
+export function checkPatchSaturation(state: SimState): SaturationFiring[] {
+  if (state.appliedPatches.size === 0) return [];
+
+  // Build a per-lineage population map and total in one pass.
+  const populationByLineage = new Map<LineageId, bigint>();
+  let total = 0n;
+  for (const probe of state.probes.values()) {
+    populationByLineage.set(probe.lineageId, (populationByLineage.get(probe.lineageId) ?? 0n) + 1n);
+    total += 1n;
+  }
+  if (total === 0n) return [];
+
+  const firings: SaturationFiring[] = [];
+  for (const record of state.appliedPatches.values()) {
+    if (record.saturatedAtTick !== null) continue;
+    let carriers = 0n;
+    for (const lineage of state.lineages.values()) {
+      if (!lineage.patches.includes(record.id)) continue;
+      carriers += populationByLineage.get(lineage.id) ?? 0n;
+    }
+    // carriers / total > num / den  ↔  carriers * den > total * num
+    if (
+      carriers * PATCH_SATURATION_PERCENT_DENOMINATOR >
+      total * PATCH_SATURATION_PERCENT_NUMERATOR
+    ) {
+      state.appliedPatches.set(record.id, {
+        ...record,
+        saturatedAtTick: SimTick(state.simTick),
+      });
+      firings.push({ patchId: record.id, carrierPopulation: carriers, totalPopulation: total });
+    }
+  }
+  return firings;
 }

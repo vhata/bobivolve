@@ -557,6 +557,7 @@ export class NodeHost {
       simTick: this.state.simTick,
       lineageId,
       probesAffected: BigInt(result.probesAffected),
+      patchId: result.patchId,
     };
     this.emit(event);
     this.ack(commandId);
@@ -749,6 +750,8 @@ export class NodeHost {
       trigger = 'speciation';
     } else if (event.kind === 'extinction' && this.autoPauseTriggers.has('lineageExtinction')) {
       trigger = 'lineageExtinction';
+    } else if (event.kind === 'patchSaturated' && this.autoPauseTriggers.has('patchSaturated')) {
+      trigger = 'patchSaturated';
     }
     if (trigger === null) return false;
     this.paused = true;

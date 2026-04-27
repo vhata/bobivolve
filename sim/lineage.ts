@@ -28,6 +28,11 @@ export interface Lineage {
   readonly parentLineageId: LineageId | null;
   readonly referenceFirmware: DirectiveStack;
   readonly foundedAtTick: SimTick;
+  // Patch ids inherited by this lineage. A child lineage inherits its
+  // parent's patches at speciation (snapshot of the parent's list at
+  // the moment of birth); a patch applied to a lineage is appended to
+  // that lineage's list. Used for PatchSaturated tracking.
+  readonly patches: readonly string[];
 }
 
 // Speciation threshold: a parameter is considered "diverged" when its

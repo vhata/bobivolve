@@ -315,6 +315,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // dedicated store state needed at V1; future work will track
         // applied patches for the lineage tree's intervention history.
         return;
+      case 'patchSaturated':
+        // The host's auto-pause path will follow up with an
+        // AutoPaused event when the player has the trigger armed; the
+        // store does not need additional state here today.
+        return;
     }
   };
 
