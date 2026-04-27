@@ -38,22 +38,22 @@ describe('replication', () => {
     expect(founder?.firmware).toEqual(TEST_FIRMWARE);
   });
 
-  it('every probe belongs to a registered lineage; firmware shape is preserved', () => {
-    // With lineage clustering, descendants may speciate into new lineages
-    // when their firmware drifts past the divergence threshold. The
-    // invariant tested here is that every probe's lineageId is registered
-    // in state.lineages — orphaned lineage IDs would be a bug. Firmware
-    // length and directive kinds match the fixture's shape (gather,
-    // replicate); mutation drifts parameters but does not change the
-    // shape under simple parameter-drift mutation.
+  it('every probe belongs to a registered lineage; firmware kinds stay in the founder set', () => {
+    // With lineage clustering, descendants may speciate into new
+    // lineages when their firmware drifts past the divergence
+    // threshold. Structural mutations (priority swap, loss, gain) can
+    // also reorder, shorten, or grow firmware, so we no longer assert
+    // an exact directive list — only that lineageId is registered and
+    // that no foreign directive kind appears in any probe.
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, TEST_TICKS);
     expect(state.probes.size).toBeGreaterThan(1);
+    const founderKinds = new Set(TEST_FIRMWARE.map((d) => d.kind));
     for (const probe of state.probes.values()) {
       expect(state.lineages.has(probe.lineageId)).toBe(true);
-      expect(probe.firmware).toHaveLength(TEST_FIRMWARE.length);
-      const kinds = probe.firmware.map((d) => d.kind);
-      expect(kinds).toEqual(['gather', 'replicate']);
+      for (const directive of probe.firmware) {
+        expect(founderKinds.has(directive.kind)).toBe(true);
+      }
     }
   });
 
@@ -154,7 +154,7 @@ describe('replication', () => {
 const GOLDEN_POP_SEED_42_TEST = 35;
 // Total probes ever spawned in the same run (used by tests that assert
 // against the ordinal counter, which never decreases).
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 191n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 187n;
 
 describe('metabolism', () => {
   it('a probe in a full cell nets gather rate − basal drain per tick', () => {
