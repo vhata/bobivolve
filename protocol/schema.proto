@@ -135,9 +135,7 @@ message SimEvent {
     Extinction extinction = 5;
     Death death = 6;
     // 7..8 reserved: R3+ FirstContact, TreatyViolation.
-    // 9 reserved: R2+ PatchSaturated — fires when a player-authored
-    // patch reaches X% of the population. Detection logic and the
-    // event payload land alongside per-patch propagation tracking.
+    PatchSaturated patch_saturated = 9;
     AutoPaused auto_paused = 10;
     CommandAck command_ack = 11;
     CommandError command_error = 12;
@@ -151,8 +149,8 @@ message SimEvent {
     PatchApplied patch_applied = 15;
   }
 
-  reserved 7, 8, 9;
-  reserved "first_contact", "treaty_violation", "patch_saturated";
+  reserved 7, 8;
+  reserved "first_contact", "treaty_violation";
 }
 
 message Tick {
@@ -229,6 +227,19 @@ message PatchApplied {
   // patch landed. Decimal string for u64-safety on JSON-encoded
   // transports.
   string probes_affected = 2;
+  // Stable id minted by the sim. Carried on the matching
+  // PatchSaturated event so the dashboard can correlate.
+  string patch_id = 3;
+}
+
+message PatchSaturated {
+  // Patch whose carriers just crossed the saturation threshold (50%
+  // of population). Fires once per patch — the saturation flag is
+  // sticky.
+  string patch_id = 1;
+  // Counts at the moment of firing; decimal strings for u64 safety.
+  string carrier_population = 2;
+  string total_population = 3;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

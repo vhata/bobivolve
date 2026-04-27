@@ -1,6 +1,7 @@
 import type {
   DeathEvent,
   ExtinctionEvent,
+  PatchSaturatedEvent,
   ReplicationEvent,
   SimEvent,
   SpeciationEvent,
@@ -11,6 +12,7 @@ import { BASAL_DRAIN_PER_TICK, REPLICATION_COST_ENERGY } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
+import { checkPatchSaturation } from './patch.js';
 import type { Probe, SimState } from './state.js';
 import {
   LATTICE_CELL_COUNT,
@@ -153,6 +155,26 @@ export function tick(state: SimState, events?: SimEvent[]): void {
       }
     }
   }
+
+  // Phase 5: patch saturation. Each applied-but-not-yet-saturated
+  // patch is checked against the current population; if its carriers
+  // exceed PATCH_SATURATION_PERCENT, the host receives a
+  // PatchSaturatedEvent. Skipped if no patches have been applied —
+  // R0/R1 runs pay no cost. Mutates state to mark fired patches
+  // saturated; the next tick's check sees them as already-saturated
+  // and ignores them.
+  if (events !== undefined && state.appliedPatches.size > 0) {
+    for (const firing of checkPatchSaturation(state)) {
+      const event: SimEvent = {
+        kind: 'patchSaturated',
+        simTick: state.simTick,
+        patchId: firing.patchId,
+        carrierPopulation: firing.carrierPopulation,
+        totalPopulation: firing.totalPopulation,
+      } satisfies PatchSaturatedEvent & { simTick: bigint };
+      events.push(event);
+    }
+  }
 }
 
 export function tickN(state: SimState, n: bigint, events?: SimEvent[]): void {
@@ -263,6 +285,12 @@ function maybeReplicate(
       parentLineageId: parent.lineageId,
       referenceFirmware: childFirmware,
       foundedAtTick: state.simTick,
+      // Inherit the parent lineage's patches at the moment of
+      // speciation. Patches applied to the parent AFTER this point
+      // will not propagate to this child — by design, the child's
+      // reference firmware is frozen now and the parent's future
+      // intervention does not retroactively touch it.
+      patches: parentLineage.patches.slice(),
     };
     state.lineages.set(childLineageId, newLineage);
 

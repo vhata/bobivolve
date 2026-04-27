@@ -75,9 +75,14 @@ function bigintReviver(key: string, value: unknown): unknown {
     case 'rate':
     case 'nextProbeOrdinal':
     case 'nextLineageOrdinal':
+    case 'nextPatchOrdinal':
     case 'originCompute':
     case 'originComputeMax':
     case 'probesAffected':
+    case 'carrierPopulation':
+    case 'totalPopulation':
+    case 'appliedAtTick':
+    case 'saturatedAtTick':
       return BigInt(value);
     default:
       return value;

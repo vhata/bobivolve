@@ -27,6 +27,12 @@ const TRIGGERS: readonly TriggerDef[] = [
     available: true,
   },
   {
+    id: 'patchSaturated',
+    label: 'Patch saturated',
+    description: 'Pause when a player-authored patch reaches 50% of the population.',
+    available: true,
+  },
+  {
     id: 'firstContact',
     label: 'First contact',
     description: 'R3+ — first contact with a new species.',

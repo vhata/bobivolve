@@ -62,6 +62,25 @@ export interface SimState {
   // per tick toward ORIGIN_COMPUTE_MAX; held quarantines drain it.
   // Pure integer arithmetic; no PRNG draws.
   originCompute: bigint;
+  // Player-applied patches indexed by their patchId. The host mints
+  // sequential ids; each record carries enough metadata for the
+  // dashboard to show the intervention history. Patches whose
+  // saturation event has fired carry `saturatedAtTick` so we don't
+  // fire twice.
+  appliedPatches: Map<string, AppliedPatchRecord>;
+  // Monotonic counter so patch ids are stable across runs of the
+  // same (seed, command-log).
+  nextPatchOrdinal: bigint;
+}
+
+export interface AppliedPatchRecord {
+  readonly id: string;
+  readonly targetLineageId: LineageId;
+  readonly appliedAtTick: SimTick;
+  // Tick at which PatchSaturated fired for this patch, or null if it
+  // hasn't fired yet. Set once when crossing the threshold; the event
+  // never re-fires for the same patch.
+  readonly saturatedAtTick: SimTick | null;
 }
 
 // Snapshotable shape of SimState. Used for save/load and the rebuild-from-log
@@ -79,6 +98,8 @@ export interface SimStateSnapshot {
   readonly resourceCaps: readonly bigint[];
   readonly quarantinedLineages: readonly LineageId[];
   readonly originCompute: bigint;
+  readonly appliedPatches: readonly AppliedPatchRecord[];
+  readonly nextPatchOrdinal: bigint;
 }
 
 export interface CreateInitialStateOptions {
@@ -139,6 +160,7 @@ export function createInitialState(
     parentLineageId: null,
     referenceFirmware: founderFirmware,
     foundedAtTick: SimTick(0n),
+    patches: [],
   };
   // Each cell starts at its own cap — system centres are bountiful,
   // void cells are dead — so probes leaving the founder's home system
@@ -159,6 +181,8 @@ export function createInitialState(
     // Player begins with a full budget so the first intervention does
     // not have to wait for regen.
     originCompute: ORIGIN_COMPUTE_MAX,
+    appliedPatches: new Map(),
+    nextPatchOrdinal: 0n,
   };
 }
 
@@ -180,6 +204,8 @@ export function snapshot(state: SimState): SimStateSnapshot {
     resourceCaps: state.resourceCaps.slice(),
     quarantinedLineages: [...state.quarantinedLineages],
     originCompute: state.originCompute,
+    appliedPatches: [...state.appliedPatches.values()],
+    nextPatchOrdinal: state.nextPatchOrdinal,
   };
 }
 
@@ -199,5 +225,7 @@ export function restore(snap: SimStateSnapshot): SimState {
     // Some snapshots predate this field; default to a full budget so
     // older saves still load. New snapshots always carry it.
     originCompute: snap.originCompute ?? ORIGIN_COMPUTE_MAX,
+    appliedPatches: new Map((snap.appliedPatches ?? []).map((p) => [p.id, p])),
+    nextPatchOrdinal: snap.nextPatchOrdinal ?? 0n,
   };
 }
