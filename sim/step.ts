@@ -108,6 +108,9 @@ function maybeReplicate(
     lineageId: childLineageId,
     bornAtTick: state.simTick,
     firmware: childFirmware,
+    // Children spawn at the parent's cell. Movement (if it ever lands)
+    // is a directive's job, not replication's.
+    position: parent.position,
   };
   state.probes.set(childId, child);
 

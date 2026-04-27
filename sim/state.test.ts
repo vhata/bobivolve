@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, restore, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
+import { LATTICE_CENTRE } from './substrate.js';
 import { ProbeId, Seed, SimTick } from './types.js';
 
 describe('createInitialState', () => {
@@ -11,6 +12,24 @@ describe('createInitialState', () => {
     const founder = state.probes.get(ProbeId('P0'));
     expect(founder).toBeDefined();
     expect(founder?.bornAtTick).toBe(SimTick(0n));
+  });
+
+  it('spawns the founder at the lattice centre', () => {
+    const state = createInitialState(Seed(42n));
+    const founder = state.probes.get(ProbeId('P0'));
+    expect(founder?.position).toEqual(LATTICE_CENTRE);
+  });
+
+  it('spawns children at their parent cell', () => {
+    // Run long enough for at least one replication so we can confirm
+    // children inherit position. Replication probability is small, so
+    // give it enough ticks.
+    const state = createInitialState(Seed(42n));
+    tickN(state, 2000n);
+    expect(state.probes.size).toBeGreaterThan(1);
+    for (const probe of state.probes.values()) {
+      expect(probe.position).toEqual(LATTICE_CENTRE);
+    }
   });
 
   it('is deterministic across constructions with the same seed', () => {
