@@ -212,6 +212,13 @@ function maybeReplicate(
   threshold: bigint,
   events: SimEvent[] | undefined,
 ): void {
+  // Player intervention: a quarantined lineage stops replicating. The
+  // gate runs before any side effect — no energy spent, no PRNG draw
+  // consumed, no events emitted. A run with a quarantine command in
+  // its log diverges from one without; runs that share their command
+  // log stay byte-for-byte identical, which is the determinism
+  // contract.
+  if (state.quarantinedLineages.has(parent.lineageId)) return;
   // Energy-threshold gating per SPEC.md: "Probes replicate when their
   // internal energy passes a directive-defined threshold." A probe must
   // also be able to fund the replication cost; without it, the act

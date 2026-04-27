@@ -31,14 +31,21 @@ message Command {
     Pause pause = 4;
     Resume resume = 5;
     Step step = 6;
-    // 7..9 reserved: R2+ ApplyPatch, QueueDecree, Quarantine.
+    // 7..8 reserved: R2+ ApplyPatch, QueueDecree.
+    Quarantine quarantine = 9;
     ConfigureAutoPause configure_auto_pause = 10;
     Save save = 11;
     Load load = 12;
+    // Quarantine and ReleaseQuarantine are a symmetric verb pair, the same
+    // shape as Pause / Resume. Single-purpose messages keep the discriminated
+    // union readable on both sides of the seam and leave room for either
+    // command to grow parameters independently (a hold-duration on
+    // Quarantine, or an audit reason on ReleaseQuarantine, etc.).
+    ReleaseQuarantine release_quarantine = 13;
   }
 
-  reserved 7, 8, 9;
-  reserved "apply_patch", "queue_decree", "quarantine";
+  reserved 7, 8;
+  reserved "apply_patch", "queue_decree";
 }
 
 message NewRun {
@@ -74,6 +81,20 @@ message ConfigureAutoPause {
   repeated string enabled_triggers = 1;
 }
 
+message Quarantine {
+  // Target lineage. The command is idempotent — quarantining an already-
+  // quarantined lineage is a no-op and still receives a CommandAck.
+  // Idempotence keeps the UI free to resend the same command without
+  // bookkeeping (e.g. on transport reconnect).
+  string lineage_id = 1;
+}
+
+message ReleaseQuarantine {
+  // Target lineage. Idempotent: releasing a lineage that is not under
+  // quarantine succeeds as a no-op and still receives a CommandAck.
+  string lineage_id = 1;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SimEvent — sim → UI. Two delivery tiers (heartbeat vs domain events) are an
 // implementation concern of the transport layer, not of the schema.
@@ -94,6 +115,10 @@ message SimEvent {
     AutoPaused auto_paused = 10;
     CommandAck command_ack = 11;
     CommandError command_error = 12;
+    // Quarantine state changes ride a symmetric verb pair that mirrors
+    // the Quarantine / ReleaseQuarantine commands.
+    QuarantineImposed quarantine_imposed = 13;
+    QuarantineLifted quarantine_lifted = 14;
   }
 
   reserved 7, 8, 9;
@@ -144,6 +169,20 @@ message CommandAck {
 message CommandError {
   string command_id = 1;
   string message = 2;
+}
+
+message QuarantineImposed {
+  // Lineage now under quarantine. Emitted only when state actually
+  // flips — an idempotent Quarantine command that finds the lineage
+  // already suspended emits a CommandAck but no QuarantineImposed.
+  string lineage_id = 1;
+}
+
+message QuarantineLifted {
+  // Lineage whose quarantine was just released. Emitted only when state
+  // actually flips — an idempotent ReleaseQuarantine on a lineage not
+  // under quarantine emits a CommandAck but no QuarantineLifted.
+  string lineage_id = 1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

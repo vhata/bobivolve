@@ -230,6 +230,100 @@ describe('NodeHost pause / resume / step', () => {
   });
 });
 
+describe('NodeHost quarantine', () => {
+  it('Quarantine command flips state and emits QuarantineImposed', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({ kind: 'quarantine', commandId: 'q-1', lineageId: 'L0' });
+
+    const imposed = events.filter((e) => e.kind === 'quarantineImposed');
+    expect(imposed).toHaveLength(1);
+    const change = imposed[0];
+    if (change?.kind === 'quarantineImposed') {
+      expect(change.lineageId).toBe('L0');
+    }
+    const ack = events.find((e) => e.kind === 'commandAck' && e.commandId === 'q-1');
+    expect(ack).toBeDefined();
+  });
+
+  it('ReleaseQuarantine on a quarantined lineage emits QuarantineLifted', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({ kind: 'quarantine', commandId: '', lineageId: 'L0' });
+    events.length = 0;
+    host.send({ kind: 'releaseQuarantine', commandId: '', lineageId: 'L0' });
+
+    const lifted = events.filter((e) => e.kind === 'quarantineLifted');
+    expect(lifted).toHaveLength(1);
+    const change = lifted[0];
+    if (change?.kind === 'quarantineLifted') {
+      expect(change.lineageId).toBe('L0');
+    }
+  });
+
+  it('redundant Quarantine acks but emits no event', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({ kind: 'quarantine', commandId: '', lineageId: 'L0' });
+    events.length = 0;
+    host.send({ kind: 'quarantine', commandId: 'redundant', lineageId: 'L0' });
+
+    expect(events.find((e) => e.kind === 'quarantineImposed')).toBeUndefined();
+    const ack = events.find((e) => e.kind === 'commandAck' && e.commandId === 'redundant');
+    expect(ack).toBeDefined();
+  });
+
+  it('redundant ReleaseQuarantine acks but emits no event', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    events.length = 0;
+    host.send({ kind: 'releaseQuarantine', commandId: 'no-op', lineageId: 'L0' });
+
+    expect(events.find((e) => e.kind === 'quarantineLifted')).toBeUndefined();
+    const ack = events.find((e) => e.kind === 'commandAck' && e.commandId === 'no-op');
+    expect(ack).toBeDefined();
+  });
+
+  it('errors when called before newRun', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'quarantine', commandId: 'q-pre', lineageId: 'L0' });
+    const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'q-pre');
+    expect(err).toBeDefined();
+  });
+
+  it('errors when the target lineage is unknown', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({ kind: 'quarantine', commandId: 'q-bad', lineageId: 'L999' });
+    const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'q-bad');
+    expect(err).toBeDefined();
+  });
+
+  it('halts further replication for the quarantined lineage during runUntil', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(1500n);
+    host.send({ kind: 'quarantine', commandId: '', lineageId: 'L0' });
+    const before = events.length;
+    host.runUntil(2500n);
+    const minted = events
+      .slice(before)
+      .filter(
+        (e): e is ReplicationEvent & { simTick: bigint; kind: 'replication' } =>
+          e.kind === 'replication',
+      )
+      .filter((e) => e.lineageId === 'L0');
+    expect(minted).toHaveLength(0);
+  });
+});
+
 describe('NodeHost listener safety', () => {
   it('a throwing listener does not bring down the run-loop or other listeners', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });

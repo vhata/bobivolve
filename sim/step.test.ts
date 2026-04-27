@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../protocol/types.js';
 import type { DirectiveStack } from './directive.js';
 import { BASAL_DRAIN_PER_TICK } from './energy.js';
-import { createInitialState, snapshot } from './state.js';
+import { createInitialState, restore, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
-import { ProbeId, Seed, SimTick } from './types.js';
+import { LineageId, ProbeId, Seed, SimTick } from './types.js';
 
 // Replication tests. R1 mechanic: a probe replicates when its energy
 // reaches the directive threshold; the cost (REPLICATION_COST_ENERGY)
@@ -207,5 +207,93 @@ describe('metabolism', () => {
     tickN(b, 500n, events2);
     expect(events1).toEqual(events2);
     expect(snapshot(a)).toEqual(snapshot(b));
+  });
+});
+
+describe('quarantine', () => {
+  // Player intervention: a quarantined lineage's probes skip replication
+  // entirely. Other directives still run — gather still gathers, explore
+  // still walks. The lineage just stops propagating until released.
+
+  it('halts replication for the quarantined lineage', () => {
+    // Bootstrap a small population so the founder lineage has multiple
+    // candidates to replicate, then quarantine and confirm no new
+    // children land. 1500 ticks at TEST_FIRMWARE produces a handful
+    // before quarantine kicks in.
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 1500n);
+    const populationBefore = state.probes.size;
+    expect(populationBefore).toBeGreaterThan(1);
+
+    state.quarantinedLineages.add(LineageId('L0'));
+    const events: SimEvent[] = [];
+    tickN(state, 500n, events);
+
+    // No replication events for the quarantined lineage. Death events
+    // are still permitted (quarantined probes are not immortal — they
+    // still drain), and so are replication events for any non-L0
+    // lineage that sprung up before quarantine.
+    for (const ev of events) {
+      if (ev.kind === 'replication' && ev.lineageId === 'L0') {
+        throw new Error(
+          `quarantined lineage L0 minted child ${ev.childProbeId} at tick ${ev.simTick.toString()}`,
+        );
+      }
+    }
+  });
+
+  it('quarantined probes still gather and explore', () => {
+    // A quarantined founder, alone on the lattice, should still pull
+    // resources from its cell each tick — gather is independent of
+    // the replicate gate.
+    const state = createInitialState(Seed(42n), [
+      { kind: 'gather', rate: 2n },
+      { kind: 'replicate', threshold: 1000n },
+    ]);
+    state.quarantinedLineages.add(LineageId('L0'));
+    const founder = state.probes.get(ProbeId('P0'));
+    expect(founder).toBeDefined();
+    if (founder === undefined) return;
+    const energyBefore = founder.energy;
+    tickN(state, 10n);
+    // Net energy delta over 10 ticks is (gather - drain) × 10. Gather
+    // pulls up to 2 per tick from a non-empty cell; basal drain is its
+    // own constant. The exact arithmetic is locked by the determinism
+    // contract — this test just asserts the founder is still alive
+    // and metabolising.
+    const after = state.probes.get(ProbeId('P0'));
+    expect(after).toBeDefined();
+    expect(after?.energy).not.toBe(energyBefore);
+  });
+
+  it('lifting the quarantine resumes replication for that lineage', () => {
+    // Spin up enough population that L0 is reliably replicating, then
+    // quarantine, observe zero L0 replications during the suspension,
+    // lift, and observe L0 replications resume.
+    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    tickN(state, 1500n);
+
+    state.quarantinedLineages.add(LineageId('L0'));
+    const duringEvents: SimEvent[] = [];
+    tickN(state, 300n, duringEvents);
+    const duringL0 = duringEvents.filter((e) => e.kind === 'replication' && e.lineageId === 'L0');
+    expect(duringL0).toHaveLength(0);
+
+    state.quarantinedLineages.delete(LineageId('L0'));
+    const afterEvents: SimEvent[] = [];
+    tickN(state, 500n, afterEvents);
+    const afterL0 = afterEvents.filter((e) => e.kind === 'replication' && e.lineageId === 'L0');
+    expect(afterL0.length).toBeGreaterThan(0);
+  });
+
+  it('snapshot / restore round-trips the quarantined set', () => {
+    const state = createInitialState(Seed(42n));
+    state.quarantinedLineages.add(LineageId('L0'));
+    state.quarantinedLineages.add(LineageId('L7'));
+    const snap = snapshot(state);
+    const restored = restore(snap);
+    expect(restored.quarantinedLineages.has(LineageId('L0'))).toBe(true);
+    expect(restored.quarantinedLineages.has(LineageId('L7'))).toBe(true);
+    expect(restored.quarantinedLineages.has(LineageId('L1'))).toBe(false);
   });
 });

@@ -48,6 +48,14 @@ export interface SimState {
   // void carry zero. Regen replenishes up to this cap; diffusion is
   // not cap-aware and can transiently push a cell above its own cap.
   resourceCaps: bigint[];
+  // Lineages currently under player quarantine. R2 intervention: a
+  // probe whose lineageId is in this set skips replication entirely —
+  // no energy cost, no PRNG draws, no offspring. Other directives
+  // (gather, explore) run normally; the lineage simply stops
+  // propagating until the player lifts the suspension. Mutating in
+  // place is intentional: the set is small and the cost of recopying
+  // a Set on every command would be silly.
+  quarantinedLineages: Set<LineageId>;
 }
 
 // Snapshotable shape of SimState. Used for save/load and the rebuild-from-log
@@ -63,6 +71,7 @@ export interface SimStateSnapshot {
   readonly nextLineageOrdinal: bigint;
   readonly resources: readonly bigint[];
   readonly resourceCaps: readonly bigint[];
+  readonly quarantinedLineages: readonly LineageId[];
 }
 
 export interface CreateInitialStateOptions {
@@ -139,6 +148,7 @@ export function createInitialState(
     nextLineageOrdinal: 1n,
     resources,
     resourceCaps,
+    quarantinedLineages: new Set(),
   };
 }
 
@@ -158,6 +168,7 @@ export function snapshot(state: SimState): SimStateSnapshot {
     // resourceCaps are immutable post-construction, but copying keeps
     // the snapshot independent of any future mutation by mistake.
     resourceCaps: state.resourceCaps.slice(),
+    quarantinedLineages: [...state.quarantinedLineages],
   };
 }
 
@@ -173,5 +184,6 @@ export function restore(snap: SimStateSnapshot): SimState {
     nextLineageOrdinal: snap.nextLineageOrdinal,
     resources: snap.resources.slice(),
     resourceCaps: snap.resourceCaps.slice(),
+    quarantinedLineages: new Set(snap.quarantinedLineages),
   };
 }
