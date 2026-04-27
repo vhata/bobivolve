@@ -101,6 +101,11 @@ export interface SimStoreState {
   readonly quarantinedLineages: ReadonlySet<string>;
   readonly quarantine: (lineageId: string) => void;
   readonly releaseQuarantine: (lineageId: string) => void;
+  // Origin compute, updated from the Tick heartbeat. Null until the
+  // first heartbeat arrives. Heartbeats can drop under load; treat a
+  // gap as "value unchanged", not "value zero".
+  readonly originCompute: bigint | null;
+  readonly originComputeMax: bigint | null;
 }
 
 let nextCommandOrdinal = 0;
@@ -211,6 +216,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           populationByLineage: byLineage,
           populationHistory: history,
           actualSpeed: nextSpeed,
+          originCompute: event.originCompute,
+          originComputeMax: event.originComputeMax,
         });
         return;
       }
@@ -317,6 +324,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     lastSaveAtTick: null,
     saves: [],
     quarantinedLineages: new Set(),
+    originCompute: null,
+    originComputeMax: null,
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -373,6 +382,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         pendingCommands: pending,
         selectedLineageId: 'L0',
         quarantinedLineages: new Set(),
+        originCompute: null,
+        originComputeMax: null,
       });
       transport.send({ kind: 'newRun', commandId, seed });
     },
@@ -462,6 +473,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // work logged in TODO.md will surface the restored set so the
         // dashboard can render it correctly post-Load.
         quarantinedLineages: new Set(),
+        // Cleared so the panel does not display the pre-Load reading;
+        // the next heartbeat (the host emits one at end of Load) lands
+        // the restored value.
+        originCompute: null,
+        originComputeMax: null,
       });
       transport.send({ kind: 'load', commandId, slot });
     },

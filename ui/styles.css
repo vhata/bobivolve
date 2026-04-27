@@ -959,3 +959,46 @@ body {
   color: #6e7178;
   font-size: 0.78rem;
 }
+
+.origin-bar {
+  width: 220px;
+  max-width: 100%;
+  height: 10px;
+  background: #1c1f25;
+  border: 1px solid #2c2f36;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.6rem;
+}
+
+.origin-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #608aff, #8aaaff);
+  transition: width 200ms ease;
+}
+
+.origin-stats {
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.origin-stats > div {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 0.5rem;
+}
+
+.origin-stats dt {
+  color: #6e7178;
+}
+
+.origin-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.origin-net-negative {
+  color: #e6a04a;
+}

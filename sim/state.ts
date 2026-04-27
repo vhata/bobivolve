@@ -1,3 +1,4 @@
+import { ORIGIN_COMPUTE_MAX } from './compute.js';
 import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import { INITIAL_ENERGY } from './energy.js';
 import type { Lineage } from './lineage.js';
@@ -56,6 +57,11 @@ export interface SimState {
   // place is intentional: the set is small and the cost of recopying
   // a Set on every command would be silly.
   quarantinedLineages: Set<LineageId>;
+  // Origin compute. The meta-game budget that gates every player
+  // intervention (SPEC.md "Player Intervention (R2+)"). Regenerates
+  // per tick toward ORIGIN_COMPUTE_MAX; held quarantines drain it.
+  // Pure integer arithmetic; no PRNG draws.
+  originCompute: bigint;
 }
 
 // Snapshotable shape of SimState. Used for save/load and the rebuild-from-log
@@ -72,6 +78,7 @@ export interface SimStateSnapshot {
   readonly resources: readonly bigint[];
   readonly resourceCaps: readonly bigint[];
   readonly quarantinedLineages: readonly LineageId[];
+  readonly originCompute: bigint;
 }
 
 export interface CreateInitialStateOptions {
@@ -149,6 +156,9 @@ export function createInitialState(
     resources,
     resourceCaps,
     quarantinedLineages: new Set(),
+    // Player begins with a full budget so the first intervention does
+    // not have to wait for regen.
+    originCompute: ORIGIN_COMPUTE_MAX,
   };
 }
 
@@ -169,6 +179,7 @@ export function snapshot(state: SimState): SimStateSnapshot {
     // the snapshot independent of any future mutation by mistake.
     resourceCaps: state.resourceCaps.slice(),
     quarantinedLineages: [...state.quarantinedLineages],
+    originCompute: state.originCompute,
   };
 }
 
@@ -185,5 +196,8 @@ export function restore(snap: SimStateSnapshot): SimState {
     resources: snap.resources.slice(),
     resourceCaps: snap.resourceCaps.slice(),
     quarantinedLineages: new Set(snap.quarantinedLineages),
+    // Some snapshots predate this field; default to a full budget so
+    // older saves still load. New snapshots always carry it.
+    originCompute: snap.originCompute ?? ORIGIN_COMPUTE_MAX,
   };
 }

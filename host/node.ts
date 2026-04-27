@@ -14,6 +14,7 @@
 //   - Acknowledge each command with CommandAck or, on validation failure,
 //     CommandError.
 
+import { ORIGIN_COMPUTE_MAX } from '../sim/compute.js';
 import type { Directive } from '../sim/directive.js';
 import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
 import { tick } from '../sim/step.js';
@@ -712,6 +713,8 @@ export class NodeHost {
       actualSpeed,
       populationTotal: BigInt(state.probes.size),
       populationByLineage,
+      originCompute: state.originCompute,
+      originComputeMax: ORIGIN_COMPUTE_MAX,
     };
     this.emit(event);
 
