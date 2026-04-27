@@ -43,6 +43,69 @@ describe('driftU64', () => {
   });
 });
 
+describe('structural mutations', () => {
+  const triFirmware: DirectiveStack = [
+    { kind: 'gather', rate: 64n },
+    { kind: 'explore', threshold: 1n << 60n },
+    { kind: 'replicate', threshold: 1000n },
+  ];
+
+  it('produces an identical mutation sequence for the same seed', () => {
+    const a = Xoshiro256ss.fromSeed(123n);
+    const b = Xoshiro256ss.fromSeed(123n);
+    for (let i = 0; i < 200; i++) {
+      const ra = maybeMutate(a, triFirmware);
+      const rb = maybeMutate(b, triFirmware);
+      expect(rb.firmware).toEqual(ra.firmware);
+      expect(rb.mutated).toBe(ra.mutated);
+    }
+  });
+
+  it('keeps firmware length within the configured bounds', () => {
+    const rng = Xoshiro256ss.fromSeed(99n);
+    let firmware = triFirmware;
+    for (let i = 0; i < 5000; i++) {
+      const result = maybeMutate(rng, firmware);
+      expect(result.firmware.length).toBeGreaterThanOrEqual(1);
+      expect(result.firmware.length).toBeLessThanOrEqual(8);
+      firmware = result.firmware;
+    }
+  });
+
+  it('directive gain produces a strictly-different copy of the chosen directive', () => {
+    // Walk a long stream looking for gain events. A gain inserts at
+    // i+1 a directive whose kind matches working[i] but whose
+    // parameter has changed. Whenever we see two adjacent
+    // same-kind directives in the result, their parameters must
+    // differ — that is the SPEC's "altered parameters" guarantee.
+    const rng = Xoshiro256ss.fromSeed(2024n);
+    let firmware = triFirmware;
+    let sawGain = false;
+    for (let i = 0; i < 5000 && !sawGain; i++) {
+      const result = maybeMutate(rng, firmware);
+      if (result.firmware.length > firmware.length) {
+        for (let j = 0; j < result.firmware.length - 1; j++) {
+          const a = result.firmware[j];
+          const b = result.firmware[j + 1];
+          if (a === undefined || b === undefined) continue;
+          if (a.kind === b.kind) {
+            sawGain = true;
+            // Same-kind adjacent pair — parameters must differ.
+            const aParam =
+              a.kind === 'gather' ? a.rate : a.kind === 'explore' ? a.threshold : a.threshold;
+            const bParam =
+              b.kind === 'gather' ? b.rate : b.kind === 'explore' ? b.threshold : b.threshold;
+            expect(aParam).not.toBe(bParam);
+            break;
+          }
+        }
+      }
+      firmware = result.firmware;
+    }
+    expect(sawGain).toBe(true);
+  });
+});
+
 describe('maybeMutate', () => {
   const firmware: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
 
