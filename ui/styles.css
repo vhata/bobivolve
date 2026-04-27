@@ -600,13 +600,64 @@ body {
 .substrate-svg {
   display: block;
   width: 100%;
-  max-width: 360px;
-  margin: 0 auto;
   aspect-ratio: 1 / 1;
   background: #0e0f12;
   border: 1px solid #23252b;
   border-radius: 4px;
   shape-rendering: crispEdges;
+}
+
+/* The substrate panel is a button so the whole grid is clickable. */
+.substrate-trigger {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: zoom-in;
+}
+
+.substrate-trigger:focus-visible {
+  outline: 2px solid #3a5fa8;
+  outline-offset: 2px;
+}
+
+.substrate-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.substrate-modal {
+  background: #16181d;
+  border: 1px solid #23252b;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: min(95vw, 800px);
+  max-height: 95vh;
+}
+
+.substrate-modal-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #b6b8be;
+  font-variant-numeric: tabular-nums;
+}
+
+.substrate-modal .substrate-svg {
+  width: min(80vh, 720px);
+  max-width: 100%;
 }
 
 .timeline-svg {
