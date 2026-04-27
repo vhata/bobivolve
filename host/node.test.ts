@@ -17,12 +17,13 @@ import type { Command, ReplicationEvent, SimEvent, TickEvent } from '../protocol
 const SEED_42 = 42n;
 const TICKS_3000 = 3000n;
 // Live population at end of run, FOUNDER_FIRMWARE (gather + explore +
-// replicate). Probes spread across the lattice, so per-cell carrying
-// capacity multiplies into a much larger global figure than the
-// no-explore TEST_FIRMWARE in sim/step.test.ts.
-const GOLDEN_LIVE_POP_SEED_42 = 965n;
+// replicate) on the procedural-systems substrate. Probes still pile
+// at the founder's home system; the slowed explore directive plus
+// resource-poor void mean total spawned and live counts are lower
+// than they were on the uniform-MAX 32×32 lattice.
+const GOLDEN_LIVE_POP_SEED_42 = 1266n;
 // Total probes ever spawned across the same run.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 6214n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 4054n;
 
 function makeFakeClock(): () => number {
   // Returns a clock whose readings advance by 1ms per call, deterministically.

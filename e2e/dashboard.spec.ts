@@ -305,9 +305,9 @@ test('substrate panel renders the lattice and at least one probe dot', async ({ 
       { timeout: 10_000 },
     )
     .toBeGreaterThan(0);
-  // 32×32 = 1024 cells; the founder is on the lattice from tick 0.
+  // 64×64 = 4096 cells; the founder is on the lattice from tick 0.
   const cellCount = await page.locator('.substrate-svg rect').count();
-  expect(cellCount).toBe(1024);
+  expect(cellCount).toBe(4096);
   await expect.poll(async () => page.locator('.substrate-svg circle').count()).toBeGreaterThan(0);
 });
 

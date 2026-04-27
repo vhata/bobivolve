@@ -4,12 +4,7 @@ import type { Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { MIN_FIRMWARE_LENGTH } from './mutation.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
-import {
-  LATTICE_CELL_COUNT,
-  LATTICE_CENTRE,
-  MAX_RESOURCE_PER_CELL,
-  type Position,
-} from './substrate.js';
+import { LATTICE_CENTRE, generateResourceCaps, type Position } from './substrate.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
 // Sim state. Everything the simulation knows about itself lives here. State
@@ -46,8 +41,13 @@ export interface SimState {
   // Flat row-major resource grid for the sub-lattice. Length is
   // LATTICE_CELL_COUNT; index is cellIndex(x, y) = y * LATTICE_SIDE + x.
   // Each cell carries an integer resource quantity that probes absorb
-  // and basal regen replenishes (up to MAX_RESOURCE_PER_CELL).
+  // and basal regen replenishes (up to that cell's resourceCaps entry).
   resources: bigint[];
+  // Per-cell capacity, derived once from the seed at construction.
+  // Cells inside a system disc carry positive caps; cells in the
+  // void carry zero. Regen replenishes up to this cap; diffusion is
+  // not cap-aware and can transiently push a cell above its own cap.
+  resourceCaps: bigint[];
 }
 
 // Snapshotable shape of SimState. Used for save/load and the rebuild-from-log
@@ -62,6 +62,7 @@ export interface SimStateSnapshot {
   readonly nextProbeOrdinal: bigint;
   readonly nextLineageOrdinal: bigint;
   readonly resources: readonly bigint[];
+  readonly resourceCaps: readonly bigint[];
 }
 
 export interface CreateInitialStateOptions {
@@ -96,6 +97,15 @@ export function createInitialState(
   }
 
   const rng = Xoshiro256ss.fromSeed(seed);
+
+  // Procedural system placement happens before the founder is minted,
+  // so the world exists and then the founder lands in it. The first
+  // system anchors at the lattice centre, guaranteeing the founder
+  // starts in a viable cell. Subsequent systems consume PRNG draws
+  // from the same stream as everything else — the world generation
+  // is part of the (seed → state) contract.
+  const resourceCaps = generateResourceCaps(rng, LATTICE_CENTRE);
+
   const founderLineageId = LineageId('L0');
   const founderProbeId = ProbeId('P0');
   const founder: Probe = {
@@ -114,9 +124,11 @@ export function createInitialState(
     referenceFirmware: founderFirmware,
     foundedAtTick: SimTick(0n),
   };
-  // Lattice begins fully resourced — gives the founder runway and lets
-  // depletion gradients form organically as probes spread.
-  const resources = new Array<bigint>(LATTICE_CELL_COUNT).fill(MAX_RESOURCE_PER_CELL);
+  // Each cell starts at its own cap — system centres are bountiful,
+  // void cells are dead — so probes leaving the founder's home system
+  // walk through interstellar emptiness until they cross another
+  // system's falloff disc.
+  const resources = resourceCaps.slice();
 
   return {
     simTick: SimTick(0n),
@@ -126,6 +138,7 @@ export function createInitialState(
     nextProbeOrdinal: 1n,
     nextLineageOrdinal: 1n,
     resources,
+    resourceCaps,
   };
 }
 
@@ -142,6 +155,9 @@ export function snapshot(state: SimState): SimStateSnapshot {
     // Resources mutate in place each tick; copy the slice so the saved
     // view stays frozen.
     resources: state.resources.slice(),
+    // resourceCaps are immutable post-construction, but copying keeps
+    // the snapshot independent of any future mutation by mistake.
+    resourceCaps: state.resourceCaps.slice(),
   };
 }
 
@@ -156,5 +172,6 @@ export function restore(snap: SimStateSnapshot): SimState {
     nextProbeOrdinal: snap.nextProbeOrdinal,
     nextLineageOrdinal: snap.nextLineageOrdinal,
     resources: snap.resources.slice(),
+    resourceCaps: snap.resourceCaps.slice(),
   };
 }

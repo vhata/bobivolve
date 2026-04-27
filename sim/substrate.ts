@@ -10,28 +10,84 @@
 // the determinism contract. If the side ever needs to change, that is a
 // migration, not a tuning knob.
 
-// 32×32 cells. Small enough that diffusion gradients are visible across the
-// whole grid within a few hundred ticks; large enough that several lineages
-// can claim distinct neighbourhoods. Tunable here only — the value is wired
-// through every consumer by import, never duplicated.
-export const LATTICE_SIDE = 32;
+// 64×64 cells. SPEC.md frames the universe as "a contained galaxy of a
+// few dozen densely-populated systems." The lattice is sized so a few
+// dozen systems can fit at meaningful spacing and most cells stay
+// interstellar void — the world feels bigger than the active patch.
+// Tunable here only; the value is wired through every consumer by
+// import, never duplicated.
+export const LATTICE_SIDE = 64;
 
 // Total cell count; helpful for sizing the flat resource grid.
 export const LATTICE_CELL_COUNT = LATTICE_SIDE * LATTICE_SIDE;
 
-// Carrying capacity of a single cell. Regen accumulates up to this
-// value; excess is discarded. Tuned alongside the gather directive's
+// Carrying capacity of a system-centre cell. Per-cell caps fall off
+// from system centres toward zero in the void; this constant is the
+// maximum any cell can hold. Tuned alongside the gather directive's
 // rate parameter (firmware-controlled) and BASAL_DRAIN_PER_TICK so a
-// few-probe density is sustainable per cell.
+// few-probe density is sustainable inside a system.
 export const MAX_RESOURCE_PER_CELL = 1000n;
 
-// Resources gained by every cell each tick, capped at MAX_RESOURCE_PER_CELL.
-// Constant across the lattice in R1; later releases may make regen
-// position-dependent, but for now the substrate is uniform.
-export const RESOURCE_REGEN_PER_CELL_PER_TICK = 1n;
+// Regen scales with each cell's cap: a cap-N cell regens at
+// floor(N / RESOURCE_REGEN_DIVISOR) per tick. Cells in the void
+// (cap = 0) never regen. The divisor is tuned so a system-centre
+// cell (cap = MAX_RESOURCE_PER_CELL = 1000) regens at 10/tick, and
+// the gradient toward the system edge falls off with the cap.
+export const RESOURCE_REGEN_DIVISOR = 100n;
+
+// SPEC.md "Galaxy and Scale": the substrate is procedurally generated
+// from a seed, with star systems / resources placed deterministically.
+// We model that here as a handful of system centres, each with a
+// linear-falloff disc of resources around it. Most of the lattice is
+// void.
+export const NUM_SYSTEMS = 30;
+// Falloff radius in cells. A cell at distance d from the nearest
+// system centre carries cap = MAX × (1 - d²/r²) when d < r, else 0.
+// Squared distance keeps the math integer.
+export const SYSTEM_FALLOFF_RADIUS = 4;
 
 export function cellIndex(x: number, y: number): number {
   return y * LATTICE_SIDE + x;
+}
+
+// Generate the per-cell resource caps for a fresh run. Deterministic
+// in the supplied PRNG state — the function consumes 2 PRNG draws per
+// system after the first (the first system is anchored at the lattice
+// centre so the founder always lands somewhere viable).
+//
+// The cap at each cell is the maximum, across all system centres, of
+// MAX × (1 - d²/r²) when d < r, else 0. Cells outside any system's
+// disc remain at 0 (interstellar void) and never regen. Linear
+// falloff in squared distance is integer-only — no floats touch the
+// determinism path.
+export function generateResourceCaps(rng: { nextU64: () => bigint }, centre: Position): bigint[] {
+  const systems: Position[] = [centre];
+  for (let i = 1; i < NUM_SYSTEMS; i++) {
+    const xRoll = rng.nextU64();
+    const yRoll = rng.nextU64();
+    const x = Number(xRoll % BigInt(LATTICE_SIDE));
+    const y = Number(yRoll % BigInt(LATTICE_SIDE));
+    systems.push({ x, y });
+  }
+  const caps = new Array<bigint>(LATTICE_CELL_COUNT).fill(0n);
+  const radiusSq = SYSTEM_FALLOFF_RADIUS * SYSTEM_FALLOFF_RADIUS;
+  for (let y = 0; y < LATTICE_SIDE; y++) {
+    for (let x = 0; x < LATTICE_SIDE; x++) {
+      let best = 0n;
+      for (const sys of systems) {
+        const dx = x - sys.x;
+        const dy = y - sys.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= radiusSq) continue;
+        // r = MAX × (radiusSq − distSq) / radiusSq, integer.
+        const num = MAX_RESOURCE_PER_CELL * BigInt(radiusSq - distSq);
+        const cap = num / BigInt(radiusSq);
+        if (cap > best) best = cap;
+      }
+      caps[y * LATTICE_SIDE + x] = best;
+    }
+  }
+  return caps;
 }
 
 // Diffusion rate per tick, expressed as a numerator/denominator so the

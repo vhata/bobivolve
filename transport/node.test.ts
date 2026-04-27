@@ -16,10 +16,10 @@ import type { Command, ReplicationEvent, SimEvent } from '../protocol/types.js';
 const SEED_42 = 42n;
 const TICKS_3000 = 3000n;
 // Total probes ever spawned (founder + every replication) for the
-// seed=42, 3000-tick run under R1 metabolic mechanics with the
-// production FOUNDER_FIRMWARE (gather + explore + replicate). Some of
-// these have since died, so this is not the live population.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 6214n;
+// seed=42, 3000-tick run under R1 metabolic mechanics on the
+// procedural-systems substrate with the production FOUNDER_FIRMWARE.
+// Some of these have since died, so this is not the live population.
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 4054n;
 
 function fakeClock(): () => number {
   let t = 0;
