@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { AutoPausePanel } from './components/AutoPausePanel.js';
 import { ControlsPanel } from './components/ControlsPanel.js';
+import { DecreesPanel } from './components/DecreesPanel.js';
 import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
 import { LineageInspectorPanel } from './components/LineageInspectorPanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
@@ -47,6 +48,7 @@ export function App(): React.JSX.Element {
         <ControlsPanel />
         <AutoPausePanel />
         <OriginPanel />
+        <DecreesPanel />
         <PopulationPanel />
         <SubstratePanel />
         <LineageTreePanel />

@@ -81,6 +81,28 @@ export interface ApplyPatchCommand {
   readonly firmware: readonly DirectiveSpec[];
 }
 
+// Decree trigger discriminated union. R2 V1 ships only populationBelow.
+export type DecreeTriggerSpec = PopulationBelowTriggerSpec;
+
+export interface PopulationBelowTriggerSpec {
+  readonly kind: 'populationBelow';
+  readonly lineageId: string;
+  // Strict-less-than threshold. Decimal string for u64 safety.
+  readonly threshold: string;
+}
+
+export interface QueueDecreeCommand {
+  readonly kind: 'queueDecree';
+  readonly trigger: DecreeTriggerSpec;
+  readonly patchTargetLineageId: string;
+  readonly patchFirmware: readonly DirectiveSpec[];
+}
+
+export interface RevokeDecreeCommand {
+  readonly kind: 'revokeDecree';
+  readonly decreeId: string;
+}
+
 // DirectiveSpec — wire shape for a directive carried on a Command.
 // Mirrors ProbeInspectorDirective (same fields, query-result variant).
 // Numeric params are decimal strings per the proto3 JSON convention so
@@ -110,6 +132,8 @@ export type CommandBody =
   | QuarantineCommand
   | ReleaseQuarantineCommand
   | ApplyPatchCommand
+  | QueueDecreeCommand
+  | RevokeDecreeCommand
   | SaveCommand
   | LoadCommand;
 
@@ -213,6 +237,28 @@ export interface PatchSaturatedEvent {
   readonly totalPopulation: bigint;
 }
 
+export interface DecreeQueuedEvent {
+  readonly kind: 'decreeQueued';
+  // Stable id minted by the host. The dashboard correlates the
+  // player's submission with the decree visible in the queue.
+  readonly decreeId: string;
+}
+
+export interface DecreeFiredEvent {
+  readonly kind: 'decreeFired';
+  readonly decreeId: string;
+  readonly patchTargetLineageId: string;
+  // True when the patch landed cleanly. False when the target lineage
+  // was extinct at firing time — the decree is still consumed.
+  readonly landed: boolean;
+  readonly probesAffected: bigint;
+}
+
+export interface DecreeRevokedEvent {
+  readonly kind: 'decreeRevoked';
+  readonly decreeId: string;
+}
+
 export type SimEventBody =
   | TickEvent
   | ReplicationEvent
@@ -225,7 +271,10 @@ export type SimEventBody =
   | QuarantineImposedEvent
   | QuarantineLiftedEvent
   | PatchAppliedEvent
-  | PatchSaturatedEvent;
+  | PatchSaturatedEvent
+  | DecreeQueuedEvent
+  | DecreeFiredEvent
+  | DecreeRevokedEvent;
 
 export type SimEvent = SimEventBody & {
   // Integer time. Floats are forbidden in tick fields (ARCHITECTURE.md).
@@ -268,6 +317,10 @@ export interface SubstrateQueryBody {
   readonly kind: 'substrate';
 }
 
+export interface DecreeQueueQueryBody {
+  readonly kind: 'decreeQueue';
+}
+
 export type QueryBody =
   | LineageTreeQueryBody
   | ProbeInspectorQueryBody
@@ -275,7 +328,8 @@ export type QueryBody =
   | LogSliceQueryBody
   | PopulationSummaryQueryBody
   | ListSavesQueryBody
-  | SubstrateQueryBody;
+  | SubstrateQueryBody
+  | DecreeQueueQueryBody;
 
 export type Query = QueryBody & {
   readonly queryId: string;
@@ -389,6 +443,21 @@ export interface SubstrateProbe {
   readonly y: number;
 }
 
+export interface DecreeQueueResult {
+  readonly kind: 'decreeQueue';
+  readonly decrees: readonly DecreeQueueEntry[];
+}
+
+export interface DecreeQueueEntry {
+  readonly id: string;
+  // bigint for u64 safety. The host returns this so the dashboard can
+  // show "queued at tick N" without joining other state.
+  readonly queuedAtTick: bigint;
+  readonly trigger: DecreeTriggerSpec;
+  readonly patchTargetLineageId: string;
+  readonly patchFirmware: readonly DirectiveSpec[];
+}
+
 export type QueryResultBody =
   | LineageTreeResult
   | ProbeInspectorResult
@@ -396,7 +465,8 @@ export type QueryResultBody =
   | LogSliceResult
   | PopulationSummaryResult
   | ListSavesResult
-  | SubstrateResult;
+  | SubstrateResult
+  | DecreeQueueResult;
 
 export type QueryResult = QueryResultBody & {
   readonly queryId: string;

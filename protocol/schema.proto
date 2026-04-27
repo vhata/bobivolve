@@ -32,7 +32,7 @@ message Command {
     Resume resume = 5;
     Step step = 6;
     ApplyPatch apply_patch = 7;
-    // 8 reserved: R2+ QueueDecree.
+    QueueDecree queue_decree = 8;
     Quarantine quarantine = 9;
     ConfigureAutoPause configure_auto_pause = 10;
     Save save = 11;
@@ -43,10 +43,8 @@ message Command {
     // command to grow parameters independently (a hold-duration on
     // Quarantine, or an audit reason on ReleaseQuarantine, etc.).
     ReleaseQuarantine release_quarantine = 13;
+    RevokeDecree revoke_decree = 14;
   }
-
-  reserved 8;
-  reserved "queue_decree";
 }
 
 message NewRun {
@@ -119,6 +117,41 @@ message DirectiveSpec {
   map<string, string> params = 2;
 }
 
+message QueueDecree {
+  // Trigger and patch are bundled into a single command — the player
+  // authors them together in the decree composer.
+  DecreeTriggerSpec trigger = 1;
+  // Target lineage for the patch payload. Distinct from the trigger's
+  // monitored lineage (e.g. "if L1 dies below 5, patch L0 to be more
+  // aggressive").
+  string patch_target_lineage_id = 2;
+  // Patch firmware to install when the trigger fires. Same shape as
+  // ApplyPatch.firmware.
+  repeated DirectiveSpec patch_firmware = 3;
+}
+
+message RevokeDecree {
+  // Decree id to remove from the queue. Idempotent: a decree id that
+  // has already fired or been revoked is a no-op ack.
+  string decree_id = 1;
+}
+
+// Trigger conditions a decree can wait on. R2 V1 ships only one shape —
+// populationBelow — so the union is small. Adding shapes is additive
+// proto3 and lands as the events that justify them ship.
+message DecreeTriggerSpec {
+  oneof body {
+    PopulationBelowTriggerSpec population_below = 1;
+  }
+}
+
+message PopulationBelowTriggerSpec {
+  // Lineage to monitor.
+  string lineage_id = 1;
+  // Strict-less-than threshold. Decimal string for u64 safety.
+  string threshold = 2;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SimEvent — sim → UI. Two delivery tiers (heartbeat vs domain events) are an
 // implementation concern of the transport layer, not of the schema.
@@ -147,6 +180,9 @@ message SimEvent {
     // id and the count of extant probes whose firmware was overwritten,
     // so the dashboard can show an immediate effect indication.
     PatchApplied patch_applied = 15;
+    DecreeQueued decree_queued = 16;
+    DecreeFired decree_fired = 17;
+    DecreeRevoked decree_revoked = 18;
   }
 
   reserved 7, 8;
@@ -242,6 +278,32 @@ message PatchSaturated {
   string total_population = 3;
 }
 
+message DecreeQueued {
+  // Stable id minted by the host on QueueDecree. Carried back so the
+  // dashboard can correlate the player's submission with the decree
+  // visible in the queue.
+  string decree_id = 1;
+}
+
+message DecreeFired {
+  // Decree that just fired and was removed from the queue.
+  string decree_id = 1;
+  // Target lineage of the decree's patch payload.
+  string patch_target_lineage_id = 2;
+  // True when the patch landed cleanly. False when the target lineage
+  // had been extinct by the time the trigger fired — the decree is
+  // still consumed (one-shot) but no firmware was written.
+  bool landed = 3;
+  // Probes whose firmware was overwritten. 0 when landed=false.
+  string probes_affected = 4;
+}
+
+message DecreeRevoked {
+  // Decree the player cancelled before it fired. Removed from the
+  // queue. No payload effect.
+  string decree_id = 1;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Query / QueryResult — UI → sim → reply. Pull-only; never pushed.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,6 +319,7 @@ message Query {
     PopulationSummaryQuery population_summary = 6;
     SubstrateQuery substrate = 7;
     ListSavesQuery list_saves = 8;
+    DecreeQueueQuery decree_queue = 9;
   }
 }
 
@@ -271,10 +334,12 @@ message QueryResult {
     PopulationSummary population_summary = 6;
     Substrate substrate = 7;
     ListSaves list_saves = 8;
+    DecreeQueue decree_queue = 9;
   }
 }
 
 message LineageTreeQuery {}
+message DecreeQueueQuery {}
 message ProbeInspectorQuery {
   string probe_id = 1;
 }
@@ -392,4 +457,22 @@ message SubstrateProbe {
   string lineage_id = 2;
   uint32 x = 3;
   uint32 y = 4;
+}
+
+// DecreeQueue — queued decrees in declaration order. Each summary is
+// flat enough for the dashboard to render without joining other state.
+message DecreeQueue {
+  repeated DecreeQueueEntry decrees = 1;
+}
+
+message DecreeQueueEntry {
+  string id = 1;
+  // Tick at which the decree was queued.
+  string queued_at_tick = 2;
+  // Trigger spec, with one shape per known trigger kind.
+  DecreeTriggerSpec trigger = 3;
+  // Patch payload's target lineage.
+  string patch_target_lineage_id = 4;
+  // Patch firmware so the dashboard can show what the decree will do.
+  repeated DirectiveSpec patch_firmware = 5;
 }

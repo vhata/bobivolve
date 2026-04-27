@@ -14,7 +14,8 @@
 //   - Acknowledge each command with CommandAck or, on validation failure,
 //     CommandError.
 
-import { ORIGIN_COMPUTE_MAX, PATCH_AUTHORING_COST } from '../sim/compute.js';
+import { DECREE_AUTHORING_COST, ORIGIN_COMPUTE_MAX, PATCH_AUTHORING_COST } from '../sim/compute.js';
+import type { DecreeTrigger, QueuedDecree } from '../sim/decree.js';
 import type { Directive, DirectiveStack } from '../sim/directive.js';
 import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
 import { applyPatch, validatePatchFirmware } from '../sim/patch.js';
@@ -28,6 +29,9 @@ import type {
   Command,
   CommandAckEvent,
   CommandErrorEvent,
+  DecreeQueuedEvent,
+  DecreeRevokedEvent,
+  DecreeTriggerSpec,
   DirectiveSpec,
   ParameterDrift,
   PatchAppliedEvent,
@@ -253,6 +257,8 @@ export class NodeHost {
         return this.queryListSaves(query.queryId);
       case 'substrate':
         return this.querySubstrate(query.queryId);
+      case 'decreeQueue':
+        return this.queryDecreeQueue(query.queryId);
       case 'lineageTree':
       case 'logSlice':
       case 'populationSummary':
@@ -262,6 +268,32 @@ export class NodeHost {
         // surface live for early UI integration.
         return { queryId: query.queryId, kind: query.kind } as QueryResult;
     }
+  }
+
+  private queryDecreeQueue(queryId: string): QueryResult {
+    if (this.state === null) {
+      return { queryId, kind: 'decreeQueue', decrees: [] };
+    }
+    const decrees = this.state.queuedDecrees.map((d) => {
+      let trigger: DecreeTriggerSpec;
+      switch (d.trigger.kind) {
+        case 'populationBelow':
+          trigger = {
+            kind: 'populationBelow',
+            lineageId: d.trigger.lineageId,
+            threshold: d.trigger.threshold.toString(),
+          };
+          break;
+      }
+      return {
+        id: d.id,
+        queuedAtTick: d.queuedAtTick,
+        trigger,
+        patchTargetLineageId: d.patchTargetLineageId,
+        patchFirmware: d.patchFirmware.map(directiveToInspector),
+      };
+    });
+    return { queryId, kind: 'decreeQueue', decrees };
   }
 
   private async queryListSaves(queryId: string): Promise<QueryResult> {
@@ -481,6 +513,12 @@ export class NodeHost {
       case 'applyPatch':
         this.handleApplyPatch(cmd.commandId, cmd.lineageId, cmd.firmware);
         return;
+      case 'queueDecree':
+        this.handleQueueDecree(cmd);
+        return;
+      case 'revokeDecree':
+        this.handleRevokeDecree(cmd.commandId, cmd.decreeId);
+        return;
       case 'save':
         this.handleSave(cmd.commandId, cmd.slot);
         return;
@@ -560,6 +598,118 @@ export class NodeHost {
       patchId: result.patchId,
     };
     this.emit(event);
+    this.ack(commandId);
+  }
+
+  // QueueDecree: validate the trigger and patch, charge compute, mint a
+  // stable id, append to the queue. The decree fires later from
+  // sim/step.ts when the trigger condition holds.
+  private handleQueueDecree(cmd: {
+    commandId: string;
+    trigger: DecreeTriggerSpec;
+    patchTargetLineageId: string;
+    patchFirmware: readonly DirectiveSpec[];
+  }): void {
+    if (this.state === null) {
+      this.error(cmd.commandId, 'cannot queue decree before newRun');
+      return;
+    }
+
+    // Translate trigger spec → typed sim trigger.
+    let trigger: DecreeTrigger;
+    switch (cmd.trigger.kind) {
+      case 'populationBelow': {
+        const monitored = LineageId(cmd.trigger.lineageId);
+        if (!this.state.lineages.has(monitored)) {
+          this.error(cmd.commandId, `unknown lineage in trigger: ${cmd.trigger.lineageId}`);
+          return;
+        }
+        let threshold: bigint;
+        try {
+          threshold = BigInt(cmd.trigger.threshold);
+        } catch {
+          this.error(cmd.commandId, `malformed threshold: ${cmd.trigger.threshold}`);
+          return;
+        }
+        if (threshold < 0n) {
+          this.error(cmd.commandId, `threshold must be non-negative`);
+          return;
+        }
+        trigger = { kind: 'populationBelow', lineageId: monitored, threshold };
+        break;
+      }
+    }
+
+    const target = LineageId(cmd.patchTargetLineageId);
+    if (!this.state.lineages.has(target)) {
+      this.error(cmd.commandId, `unknown patch target lineage: ${cmd.patchTargetLineageId}`);
+      return;
+    }
+
+    const firmware: Directive[] = [];
+    for (const spec of cmd.patchFirmware) {
+      const directive = inspectorToDirective(spec);
+      if (directive === null) {
+        this.error(cmd.commandId, `malformed directive in decree patch: ${JSON.stringify(spec)}`);
+        return;
+      }
+      firmware.push(directive);
+    }
+    const patchFirmware: DirectiveStack = firmware;
+
+    const validation = validatePatchFirmware(patchFirmware);
+    if (validation !== null) {
+      this.error(cmd.commandId, validation);
+      return;
+    }
+
+    if (this.state.originCompute < DECREE_AUTHORING_COST) {
+      this.error(
+        cmd.commandId,
+        `insufficient Origin compute: need ${DECREE_AUTHORING_COST.toString()}, have ${this.state.originCompute.toString()}`,
+      );
+      return;
+    }
+    this.state.originCompute -= DECREE_AUTHORING_COST;
+
+    const decreeId = `D${this.state.nextDecreeOrdinal.toString()}`;
+    this.state.nextDecreeOrdinal += 1n;
+    const decree: QueuedDecree = {
+      id: decreeId,
+      queuedAtTick: this.state.simTick,
+      trigger,
+      patchTargetLineageId: target,
+      patchFirmware,
+    };
+    this.state.queuedDecrees.push(decree);
+
+    const event: DecreeQueuedEvent & { simTick: bigint } = {
+      kind: 'decreeQueued',
+      simTick: this.state.simTick,
+      decreeId,
+    };
+    this.emit(event);
+    this.ack(cmd.commandId);
+  }
+
+  private handleRevokeDecree(commandId: string, decreeId: string): void {
+    if (this.state === null) {
+      this.error(commandId, 'cannot revoke decree before newRun');
+      return;
+    }
+    const before = this.state.queuedDecrees.length;
+    this.state.queuedDecrees = this.state.queuedDecrees.filter((d) => d.id !== decreeId);
+    const removed = before !== this.state.queuedDecrees.length;
+    if (removed) {
+      const event: DecreeRevokedEvent & { simTick: bigint } = {
+        kind: 'decreeRevoked',
+        simTick: this.state.simTick,
+        decreeId,
+      };
+      this.emit(event);
+    }
+    // Idempotent: revoking a decree that has already fired or never
+    // existed acks without an event.
     this.ack(commandId);
   }
 
