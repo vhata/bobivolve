@@ -56,8 +56,8 @@ Shipped as `r0-petri-dish`. Two items deferred with rationale: extra mutation ki
 
 ### Functional (from SPEC.md)
 
-- `✓` Sub-lattice — fixed 32×32 grid; probes carry positions on it; resources live per cell
-- `✓` Resources — u64 scalar quantity in each cell, with constant regen capped at MAX_RESOURCE_PER_CELL
+- `✓` Sub-lattice — fixed 64×64 grid procedurally seeded with system centres (most cells are interstellar void); probes carry positions on it
+- `✓` Resources — u64 scalar quantity in each cell with per-cell caps that fall off from system centres; regen scales with cap so void cells stay dead
 - `✓` Resource diffusion — a fraction of each cell's resources flows to its 4 cardinal neighbours every tick, deterministically (pure integer arithmetic, no PRNG draws); boundary reflects so total resources are conserved
 - `✓` Energy budgets — every probe carries an energy reservoir; basal metabolism drains it per tick, gather replenishes it, replication transfers a fixed cost from parent to child
 - `✓` Starvation — when a probe's energy reaches zero at end of tick it dies and the host emits `DeathEvent`; if the lineage's last extant member dies, an `ExtinctionEvent` follows
