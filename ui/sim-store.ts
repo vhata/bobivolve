@@ -94,6 +94,13 @@ export interface SimStoreState {
   // updates it. Defaults to L0 once the founder lineage is seeded.
   readonly selectedLineageId: string;
   readonly selectLineage: (id: string) => void;
+  // Lineages currently under player quarantine. Maintained from
+  // QuarantineImposed / QuarantineLifted events. After a Load the set
+  // is reset to empty — the client does not yet pull the restored
+  // quarantine set out of the snapshot. Tracked in TODO.md.
+  readonly quarantinedLineages: ReadonlySet<string>;
+  readonly quarantine: (lineageId: string) => void;
+  readonly releaseQuarantine: (lineageId: string) => void;
 }
 
 let nextCommandOrdinal = 0;
@@ -278,6 +285,18 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // update would saturate React. simTick advances via the
         // throttled Tick heartbeat instead.
         return;
+      case 'quarantineImposed': {
+        const next = new Set(get().quarantinedLineages);
+        next.add(event.lineageId);
+        set({ quarantinedLineages: next });
+        return;
+      }
+      case 'quarantineLifted': {
+        const next = new Set(get().quarantinedLineages);
+        next.delete(event.lineageId);
+        set({ quarantinedLineages: next });
+        return;
+      }
     }
   };
 
@@ -297,6 +316,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     selectedLineageId: 'L0',
     lastSaveAtTick: null,
     saves: [],
+    quarantinedLineages: new Set(),
     transport: null,
     attach: (transport) => {
       const previous = get().transport;
@@ -352,6 +372,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         actualSpeed: 0,
         pendingCommands: pending,
         selectedLineageId: 'L0',
+        quarantinedLineages: new Set(),
       });
       transport.send({ kind: 'newRun', commandId, seed });
     },
@@ -435,11 +456,41 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         paused: true,
         actualSpeed: 0,
         selectedLineageId: 'L0',
+        // The post-Load snapshot may carry a quarantined set, but the
+        // client doesn't pull it down today. Resetting to empty matches
+        // what the client will observe from the absent events; future
+        // work logged in TODO.md will surface the restored set so the
+        // dashboard can render it correctly post-Load.
+        quarantinedLineages: new Set(),
       });
       transport.send({ kind: 'load', commandId, slot });
     },
     selectLineage: (id) => {
       set({ selectedLineageId: id });
+    },
+    quarantine: (lineageId) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      // Optimistic flip on the local store. The host echoes via
+      // QuarantineImposed if the state actually changed, which
+      // re-asserts the flip; on idempotent ack-only the state already
+      // matches and the echo is a no-op. On commandError (unknown
+      // lineage, pre-newRun) the optimistic flip is what's exposed
+      // to the player — surfaceable as a roll-back is a future polish.
+      const next = new Set(get().quarantinedLineages);
+      next.add(lineageId);
+      const commandId = mintCommandId('ui-quarantine');
+      transport.send({ kind: 'quarantine', commandId, lineageId });
+      set({ quarantinedLineages: next });
+    },
+    releaseQuarantine: (lineageId) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const next = new Set(get().quarantinedLineages);
+      next.delete(lineageId);
+      const commandId = mintCommandId('ui-releaseQuarantine');
+      transport.send({ kind: 'releaseQuarantine', commandId, lineageId });
+      set({ quarantinedLineages: next });
     },
     refreshSaves: async () => {
       const transport = get().transport;

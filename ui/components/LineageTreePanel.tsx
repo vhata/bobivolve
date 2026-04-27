@@ -79,13 +79,20 @@ function TreeNodeView({
   node,
   selectedId,
   onSelect,
+  quarantinedLineages,
 }: {
   node: TreeNode;
   selectedId: string;
   onSelect: (id: string) => void;
+  quarantinedLineages: ReadonlySet<string>;
 }): React.JSX.Element {
   const selected = node.lineage.id === selectedId;
-  const className = ['lineage-node', selected ? 'lineage-node-selected' : '']
+  const isQuarantined = quarantinedLineages.has(node.lineage.id);
+  const className = [
+    'lineage-node',
+    selected ? 'lineage-node-selected' : '',
+    isQuarantined ? 'lineage-node-quarantined' : '',
+  ]
     .filter(Boolean)
     .join(' ');
   return (
@@ -97,6 +104,7 @@ function TreeNodeView({
         aria-pressed={selected}
       >
         <span className="lineage-id">
+          {isQuarantined ? <span className="lineage-quarantine-pip">⊘</span> : null}
           {node.lineage.name}
           {node.lineage.name !== node.lineage.id ? (
             <span className="lineage-id-ordinal"> {node.lineage.id}</span>
@@ -117,6 +125,7 @@ function TreeNodeView({
               node={child}
               selectedId={selectedId}
               onSelect={onSelect}
+              quarantinedLineages={quarantinedLineages}
             />
           ))}
         </ul>
@@ -130,6 +139,7 @@ export function LineageTreePanel(): React.JSX.Element {
   const populationByLineage = useSimStore((s) => s.populationByLineage);
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
   const selectLineage = useSimStore((s) => s.selectLineage);
+  const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
 
   const roots = buildLivingTree(lineages, populationByLineage);
   // Living lineage count for the panel header — distinct from
@@ -158,6 +168,7 @@ export function LineageTreePanel(): React.JSX.Element {
                 node={root}
                 selectedId={selectedLineageId}
                 onSelect={selectLineage}
+                quarantinedLineages={quarantinedLineages}
               />
             ))}
           </ul>
