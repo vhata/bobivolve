@@ -387,6 +387,18 @@ export function LineageInspectorPanel(): React.JSX.Element {
                 <dd>{drift !== null ? `${drift.population.toString()} extant` : '…'}</dd>
               </div>
               <div>
+                <dt>patches</dt>
+                <dd>
+                  {drift === null ? (
+                    '…'
+                  ) : drift.patches.length === 0 ? (
+                    <span className="patches-empty">no interventions</span>
+                  ) : (
+                    <span className="patches-list">{drift.patches.join(', ')}</span>
+                  )}
+                </dd>
+              </div>
+              <div>
                 <dt>firmware</dt>
                 <dd>
                   {firmwareLines.length === 0 ? (

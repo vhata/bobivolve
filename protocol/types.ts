@@ -386,6 +386,10 @@ export interface DriftTelemetry {
   // Current reference firmware, in directive order. The patch editor
   // round-trips this into an ApplyPatch command on submit.
   readonly referenceFirmware: readonly DirectiveSpec[];
+  // Patch ids landed on this lineage (directly or inherited at
+  // speciation). The dashboard renders these as the lineage's
+  // intervention history.
+  readonly patches: readonly string[];
 }
 
 export interface ParameterDrift {
