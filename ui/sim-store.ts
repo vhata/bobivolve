@@ -208,12 +208,13 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         return;
       }
       case 'replication':
-        // Population accounting flows from Tick heartbeats (throttled to
-        // 60Hz). Updating on every Replication event would cause hundreds
-        // of re-renders per second at fat population + high speed, which
-        // saturates the browser's event loop and starves user clicks.
-        // Only the simTick monotonic update lives here.
-        if (event.simTick > get().simTick) set({ simTick: event.simTick });
+        // Replication events arrive in proportion to the active
+        // population — at scale, thousands per second. Triggering a
+        // store update for any field on every one cascades into
+        // re-renders that can lock the UI ("Maximum update depth
+        // exceeded"). The simTick field stays advanced by the
+        // throttled Tick heartbeat, which is enough for the panels
+        // that read it.
         return;
       case 'speciation': {
         const lineages = new Map(get().lineages);
@@ -272,9 +273,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       }
       case 'extinction':
       case 'death':
-        // Other event kinds will populate dedicated slices as the matching
-        // panels land. The tick field is the cheap update either way.
-        if (event.simTick > get().simTick) set({ simTick: event.simTick });
+        // Same reasoning as the replication branch: deaths arrive in
+        // proportion to population at scale, so a per-event store
+        // update would saturate React. simTick advances via the
+        // throttled Tick heartbeat instead.
         return;
     }
   };

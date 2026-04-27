@@ -60,12 +60,19 @@ describe('maybeMutate', () => {
     expect(mutated).toBeLessThan(trials / 8);
   });
 
-  it('preserves directive count and kind', () => {
+  it('preserves directive kind set under structural mutations', () => {
+    // Structural mutations (priority swap, loss, gain) are very rare;
+    // most replications produce a stack with the same length and same
+    // kinds as the input. The looser invariant here: kinds present in
+    // the output are a subset of kinds present in the input — gain
+    // duplicates an existing directive, never invents a new kind.
     const rng = Xoshiro256ss.fromSeed(1n);
+    const inputKinds = new Set(firmware.map((d) => d.kind));
     for (let i = 0; i < 500; i++) {
       const result = maybeMutate(rng, firmware);
-      expect(result.firmware).toHaveLength(1);
-      expect(result.firmware[0]?.kind).toBe('replicate');
+      for (const directive of result.firmware) {
+        expect(inputKinds.has(directive.kind)).toBe(true);
+      }
     }
   });
 

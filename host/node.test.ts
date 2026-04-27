@@ -20,9 +20,9 @@ const TICKS_3000 = 3000n;
 // replicate). Probes spread across the lattice, so per-cell carrying
 // capacity multiplies into a much larger global figure than the
 // no-explore TEST_FIRMWARE in sim/step.test.ts.
-const GOLDEN_LIVE_POP_SEED_42 = 924n;
+const GOLDEN_LIVE_POP_SEED_42 = 968n;
 // Total probes ever spawned across the same run.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 5914n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 6480n;
 
 function makeFakeClock(): () => number {
   // Returns a clock whose readings advance by 1ms per call, deterministically.
