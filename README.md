@@ -6,16 +6,18 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 
 ## Status
 
-Approaching Release 0. The simulation core, the persistence layer, and a working dashboard with seven panels are in place. Two R0 polish items remain — additional mutation kinds and forensic state-rewind scrub — see [`TODO.md`](TODO.md).
+**Release 0 — Petri Dish** (tagged `r0-petri-dish`). The simulation core, persistence, and a seven-panel dashboard are in place; lineages drift, speciate, and the tree records descent. There is no death and no scarcity — the design question this release answers is whether firmware-as-data drift produces something interesting on its own. Selection pressure arrives in **Release 1 — Scarcity**.
 
 ## How to run
 
 The dashboard:
 
 ```
-pnpm install
-pnpm dev
+make install
+make dev
 ```
+
+(`make` lists every named workflow; underlying tools may change, names won't.)
 
 A run starts at seed 42 by default. The Run panel changes the seed; the Controls panel pauses, resumes, and toggles speed (1×, 4×, 16×, 64×). Save and Load persist the current run to the browser's Origin Private File System.
 
