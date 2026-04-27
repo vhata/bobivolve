@@ -10,22 +10,27 @@ import {
   MAX_RESOURCE_PER_CELL,
   RESOURCE_REGEN_PER_CELL_PER_TICK,
   cellIndex,
+  diffuseResources,
 } from './substrate.js';
 import { LineageId, ProbeId, SimTick } from './types.js';
 
 // Advance the simulation by one tick. R1 — Scarcity adds the metabolic
-// loop: cells regenerate, probes absorb from their cell, basal drain
-// pulls energy back down, and probes whose energy hits zero die.
+// loop: cells regenerate, resources diffuse across the lattice, probes
+// absorb from their cell, basal drain pulls energy back down, and
+// probes whose energy hits zero die.
 //
 // Phase order:
-//   0. Regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
-//      capped at MAX_RESOURCE_PER_CELL.
-//   1. Metabolism. For each probe, in Map insertion order: absorb from
-//      its cell (capped by what is there), then deduct basal drain.
-//      A probe whose energy reaches zero dies and the host receives
-//      a DeathEvent.
-//   2. Directives. Surviving probes execute their firmware (replication
-//      today, gather + others later).
+//   0a. Regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
+//       capped at MAX_RESOURCE_PER_CELL.
+//   0b. Diffuse. A fraction of each cell's resources flows to its 4
+//       cardinal neighbours, reflecting at the boundary so total
+//       resources are conserved across the diffusion step.
+//   1.  Metabolism. For each probe, in Map insertion order: absorb from
+//       its cell (capped by what is there), then deduct basal drain.
+//       A probe whose energy reaches zero dies and the host receives
+//       a DeathEvent.
+//   2.  Directives. Surviving probes execute their firmware (replication
+//       today, gather + others later).
 //
 // Determinism notes:
 //   - PRNG draws are consumed in a fixed order: probes existing at tick
@@ -46,13 +51,17 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 export function tick(state: SimState, events?: SimEvent[]): void {
   state.simTick = SimTick(state.simTick + 1n);
 
-  // Phase 0: regen.
+  // Phase 0a: regen.
   for (let i = 0; i < LATTICE_CELL_COUNT; i++) {
     const current = state.resources[i] ?? 0n;
     if (current >= MAX_RESOURCE_PER_CELL) continue;
     const next = current + RESOURCE_REGEN_PER_CELL_PER_TICK;
     state.resources[i] = next > MAX_RESOURCE_PER_CELL ? MAX_RESOURCE_PER_CELL : next;
   }
+
+  // Phase 0b: diffusion. Pure integer arithmetic, conservative across
+  // boundaries — nothing leaves the lattice.
+  diffuseResources(state.resources);
 
   const ids = [...state.probes.keys()];
 
