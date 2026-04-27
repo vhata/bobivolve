@@ -13,9 +13,12 @@ import { useSimStore } from '../sim-store.js';
 // strings + every probe's position) does not throttle user-input
 // handling at production population, fast enough to feel live.
 const REFRESH_INTERVAL_MS = 2000;
-// Render the lattice into a fixed-size SVG; the panel scales the SVG
-// rather than the cells, so the look is consistent across viewports.
+// Render the lattice into a fixed-size SVG; CSS scales the SVG so the
+// look is consistent across viewports.
 const VIEW_PX = 320;
+// The expanded modal renders the same SVG into a larger viewport so
+// cells and dots are inspectable.
+const EXPANDED_PX = 720;
 
 type SubstrateView = SubstrateResult & { queryId: string };
 
@@ -57,6 +60,7 @@ export function SubstratePanel(): React.JSX.Element {
 
   const [view, setView] = useState<SubstrateView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (transport === null) return;
@@ -85,6 +89,18 @@ export function SubstratePanel(): React.JSX.Element {
     };
   }, [transport]);
 
+  // ESC closes the expanded view.
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+    };
+  }, [expanded]);
+
   return (
     <section className="panel substrate-panel">
       <header className="panel-header">
@@ -101,22 +117,71 @@ export function SubstratePanel(): React.JSX.Element {
         ) : view === null ? (
           <p className="panel-empty">…</p>
         ) : (
-          <SubstrateGrid view={view} highlightLineageId={selectedLineageId} />
+          <button
+            type="button"
+            className="substrate-trigger"
+            onClick={() => setExpanded(true)}
+            aria-label="Expand the substrate view"
+          >
+            <SubstrateGrid view={view} highlightLineageId={selectedLineageId} sizePx={VIEW_PX} />
+          </button>
         )}
       </div>
+      {expanded && view !== null ? (
+        <SubstrateModal
+          view={view}
+          highlightLineageId={selectedLineageId}
+          onClose={() => setExpanded(false)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function SubstrateModal({
+  view,
+  highlightLineageId,
+  onClose,
+}: {
+  view: SubstrateView;
+  highlightLineageId: string;
+  onClose: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="substrate-modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="substrate-modal"
+        role="dialog"
+        aria-label="Substrate, expanded"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <header className="substrate-modal-header">
+          <span>
+            {view.side.toString()}×{view.side.toString()} · {view.probes.length.toString()} probes
+          </span>
+          <button type="button" className="load-picker-cancel" onClick={onClose}>
+            close (esc)
+          </button>
+        </header>
+        <SubstrateGrid view={view} highlightLineageId={highlightLineageId} sizePx={EXPANDED_PX} />
+      </div>
+    </div>
   );
 }
 
 function SubstrateGrid({
   view,
   highlightLineageId,
+  sizePx,
 }: {
   view: SubstrateView;
   highlightLineageId: string;
+  sizePx: number;
 }): React.JSX.Element {
   const side = view.side;
-  const cellPx = VIEW_PX / side;
+  const cellPx = sizePx / side;
   const max = BigInt(view.maxResourcePerCell);
 
   // Render order: cells (heatmap rectangles) first, probes (lineage
@@ -173,7 +238,7 @@ function SubstrateGrid({
 
   return (
     <svg
-      viewBox={`0 0 ${VIEW_PX.toString()} ${VIEW_PX.toString()}`}
+      viewBox={`0 0 ${sizePx.toString()} ${sizePx.toString()}`}
       preserveAspectRatio="xMidYMid meet"
       className="substrate-svg"
       role="img"
