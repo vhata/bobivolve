@@ -4,14 +4,16 @@ Grouped by release. Each entry is one line, marked `✓` shipped or `⋯` in pro
 
 Updated in the same commit as any feature whose status changes.
 
-## Release 1 — Scarcity (in progress)
+## Release 1 — Scarcity
 
-- ⋯ Sub-lattice — probes have positions on a 2D grid; resources live in cells
-- ⋯ Resources & diffusion — cells carry u64 resource counts that flow between neighbours each tick
-- ⋯ Energy & starvation — probes carry energy; replication and basal metabolism drain it; zero energy means death
-- ⋯ Gather directive — pull resources from the cell into the probe's energy
-- ⋯ Mutation: priority swap, directive loss/gain — meaningful now with ≥2 directive kinds in firmware
-- ⋯ Lineage extinction auto-pause — fires when a clade collapses
+- ✓ Sub-lattice — probes have positions on a 32×32 grid; resources live in cells
+- ✓ Resources & diffusion — cells carry u64 resource counts that flow between neighbours each tick
+- ✓ Energy & starvation — probes carry energy; basal metabolism drains it, gather replenishes it, replication transfers cost to the child; zero energy means death
+- ✓ Gather directive — pulls resources from the cell into the probe's energy
+- ✓ Explore directive — random-walk move to a cardinal neighbour, gated by a u64 threshold
+- ✓ Replicate directive (R1 reinterpretation) — energy-threshold gated, per SPEC
+- ✓ Mutation: priority swap, directive loss/gain — now meaningful with three directive kinds in firmware
+- ✓ Lineage extinction auto-pause — fires when a clade loses its last extant member
 
 ## Release 0 — Petri Dish
 

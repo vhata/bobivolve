@@ -6,7 +6,7 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 
 ## Status
 
-**Release 0 — Petri Dish** (tagged `r0-petri-dish`). The simulation core, persistence, and a seven-panel dashboard are in place; lineages drift, speciate, and the tree records descent. There is no death and no scarcity — the design question this release answers is whether firmware-as-data drift produces something interesting on its own. Selection pressure arrives in **Release 1 — Scarcity**.
+**Release 1 — Scarcity** (tagged `r1-scarcity`). Probes now live on a 32×32 sub-lattice with diffusing resources, carry an energy reservoir that drains each tick, and replicate only when they've gathered enough to fund the cost. Lineages compete for cells; some go extinct. Firmware grew from one directive to three (`gather`, `explore`, `replicate`) and the structural mutations — priority swap, directive loss, directive gain — are unblocked. The R1 design question this release answers is whether selection pressure produces competitive lineage dynamics. **Release 2 — The Engineer's Console** is next.
 
 ## How to run
 

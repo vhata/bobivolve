@@ -13,8 +13,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Rebuild-from-log fallback when a snapshot is missing or unreadable (ARCHITECTURE.md migration path); currently load fails fast in that case #r0 #host
 - Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
 
-## Release 1 — Scarcity
+## Release 2 — The Engineer's Console
 
-- Mutation: priority swap (needs ≥2 directive kinds in firmware to be meaningful) #r1 #sim
-- Mutation: directive loss / gain (needs ≥2 directive kinds in firmware to be meaningful) #r1 #sim
-- Forensic replay: state-rewind scrub UI (load nearest snapshot + advance to selected tick); the events-timeline shape is in place, the data path supports it, the affordance waits on R1+ producing more events worth rewinding to #r1 #ui
+- Forensic replay: state-rewind scrub UI (load nearest snapshot + advance to selected tick); the events-timeline shape is in place, the data path supports it, the affordance waits on richer events for R2's player intervention #r2 #ui
