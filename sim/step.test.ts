@@ -6,22 +6,21 @@ import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
 import { ProbeId, Seed, SimTick } from './types.js';
 
-// Replication tests. R0 mechanic: probes execute their firmware once per tick
-// and may replicate based on a per-tick threshold draw against the seeded
-// PRNG. Children may inherit drifted firmware (sim/mutation.ts). No death
-// yet — once spawned, probes persist for the run; lineage clustering also
-// pending, so all descendants stay in L0.
+// Replication tests. R1 mechanic: a probe replicates when its energy
+// reaches the directive threshold; the cost (REPLICATION_COST_ENERGY)
+// is deducted from the parent on each child. Children may inherit
+// drifted firmware (sim/mutation.ts). Lineages are clustered by
+// sim/lineage.ts.
 //
 // The golden population numbers below are the byte-for-byte determinism
 // contract: the TypeScript implementation defines them, and any future
 // implementation (the Rust port) must reproduce them. A drift here is the
 // signal that determinism just regressed.
 
-// Test fixture independent of production tuning. Threshold 2^54 ≈ probability
-// 2^-10 per probe per tick. 3000 ticks at this rate yields a few dozen probes
-// — large enough to exercise lineage inheritance and ID uniqueness, small
-// enough that the BigInt-heavy inner loop runs in well under a second.
-const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
+// Test fixture: an energy threshold tuned so a probe replicates often
+// enough that 3000 ticks produces an interesting population without
+// taking forever in the inner loop.
+const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1000n }];
 const TEST_TICKS = 3000n;
 
 describe('replication', () => {
@@ -61,8 +60,9 @@ describe('replication', () => {
     tickN(state, TEST_TICKS);
     const ids = [...state.probes.keys()];
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids[0]).toBe(ProbeId('P0'));
-    expect(BigInt(ids.length)).toBe(state.nextProbeOrdinal);
+    // The ordinal counter advances on every birth and never goes back,
+    // so it tracks total-ever-spawned even after deaths.
+    expect(state.nextProbeOrdinal).toBe(GOLDEN_TOTAL_SPAWNED_SEED_42);
   });
 
   it('children record their birth tick within the run window', () => {
@@ -123,16 +123,22 @@ describe('replication', () => {
   });
 });
 
-// Golden population for seed=42 with TEST_FIRMWARE after TEST_TICKS.
-// Locked when this test was first written; any change here is a determinism
-// regression and should be investigated, not "fixed" by updating the number.
-const GOLDEN_POP_SEED_42_TEST = 27;
+// Golden live population for seed=42 with TEST_FIRMWARE after TEST_TICKS.
+// Locked at the R1 metabolic mechanic; the value reflects extant probes,
+// not total ever spawned. Any change here is a determinism regression and
+// should be investigated, not "fixed" by updating the number.
+const GOLDEN_POP_SEED_42_TEST = 33;
+// Total probes ever spawned in the same run (used by tests that assert
+// against the ordinal counter, which never decreases).
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 133n;
 
 describe('metabolism', () => {
-  it('a probe in a full cell nets ABSORPTION - DRAIN per tick', () => {
-    // Default lattice starts every cell at MAX. The founder absorbs the
-    // cap each tick (until the cell drains, far past 100 ticks).
-    const state = createInitialState(Seed(42n));
+  it('a probe in a full cell nets ABSORPTION - DRAIN per tick (no replication)', () => {
+    // Pin founderEnergy below the directive threshold so the founder
+    // cannot replicate during the window — that way the energy delta
+    // measures metabolism alone, not metabolism net of replication
+    // costs.
+    const state = createInitialState(Seed(42n), { founderEnergy: 100n });
     const startEnergy = state.probes.get(ProbeId('P0'))?.energy ?? 0n;
     tickN(state, 100n);
     const expectedDelta = (ABSORPTION_PER_PROBE_PER_TICK - BASAL_DRAIN_PER_TICK) * 100n;

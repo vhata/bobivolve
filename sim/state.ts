@@ -40,10 +40,6 @@ export interface SimState {
   // Kept separate from rng so they survive without consuming randomness.
   nextProbeOrdinal: bigint;
   nextLineageOrdinal: bigint;
-  // Energy granted to every newly-minted probe (founder + each child).
-  // Carried on state so tests can drive a low value through the same
-  // surface as production code, and so save/load round-trips it.
-  initialEnergy: bigint;
   // Flat row-major resource grid for the sub-lattice. Length is
   // LATTICE_CELL_COUNT; index is cellIndex(x, y) = y * LATTICE_SIDE + x.
   // Each cell carries an integer resource quantity that probes absorb
@@ -62,13 +58,15 @@ export interface SimStateSnapshot {
   readonly lineages: readonly Lineage[];
   readonly nextProbeOrdinal: bigint;
   readonly nextLineageOrdinal: bigint;
-  readonly initialEnergy: bigint;
   readonly resources: readonly bigint[];
 }
 
 export interface CreateInitialStateOptions {
   readonly founderFirmware?: DirectiveStack;
-  readonly initialEnergy?: bigint;
+  // Override the founder's starting energy. Children do not inherit
+  // from this; they receive REPLICATION_COST_ENERGY transferred from
+  // the parent at birth.
+  readonly founderEnergy?: bigint;
 }
 
 export function createInitialState(
@@ -77,13 +75,13 @@ export function createInitialState(
 ): SimState {
   // Back-compat positional form: createInitialState(seed, firmware) is
   // still the common call. Object form lets callers (tests in
-  // particular) pass `initialEnergy` without committing to a positional
+  // particular) pass `founderEnergy` without committing to a positional
   // ordering across future fields.
   const opts: CreateInitialStateOptions = Array.isArray(founderFirmwareOrOptions)
     ? { founderFirmware: founderFirmwareOrOptions as DirectiveStack }
     : (founderFirmwareOrOptions as CreateInitialStateOptions);
   const founderFirmware = opts.founderFirmware ?? FOUNDER_FIRMWARE;
-  const initialEnergy = opts.initialEnergy ?? INITIAL_ENERGY;
+  const founderEnergy = opts.founderEnergy ?? INITIAL_ENERGY;
 
   const rng = Xoshiro256ss.fromSeed(seed);
   const founderLineageId = LineageId('L0');
@@ -94,7 +92,7 @@ export function createInitialState(
     bornAtTick: SimTick(0n),
     firmware: founderFirmware,
     position: LATTICE_CENTRE,
-    energy: initialEnergy,
+    energy: founderEnergy,
   };
   const founderLineage: Lineage = {
     id: founderLineageId,
@@ -115,7 +113,6 @@ export function createInitialState(
     lineages: new Map([[founderLineage.id, founderLineage]]),
     nextProbeOrdinal: 1n,
     nextLineageOrdinal: 1n,
-    initialEnergy,
     resources,
   };
 }
@@ -130,7 +127,6 @@ export function snapshot(state: SimState): SimStateSnapshot {
     lineages: [...state.lineages.values()],
     nextProbeOrdinal: state.nextProbeOrdinal,
     nextLineageOrdinal: state.nextLineageOrdinal,
-    initialEnergy: state.initialEnergy,
     // Resources mutate in place each tick; copy the slice so the saved
     // view stays frozen.
     resources: state.resources.slice(),
@@ -147,7 +143,6 @@ export function restore(snap: SimStateSnapshot): SimState {
     lineages: new Map(snap.lineages.map((l) => [l.id, l])),
     nextProbeOrdinal: snap.nextProbeOrdinal,
     nextLineageOrdinal: snap.nextLineageOrdinal,
-    initialEnergy: snap.initialEnergy,
     resources: snap.resources.slice(),
   };
 }
