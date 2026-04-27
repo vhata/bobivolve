@@ -1,29 +1,43 @@
 import type { DeathEvent, ReplicationEvent, SimEvent, SpeciationEvent } from '../protocol/types.js';
 import type { Directive } from './directive.js';
-import { BASAL_DRAIN_PER_TICK } from './energy.js';
+import { ABSORPTION_PER_PROBE_PER_TICK, BASAL_DRAIN_PER_TICK } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
 import type { Probe, SimState } from './state.js';
+import {
+  LATTICE_CELL_COUNT,
+  MAX_RESOURCE_PER_CELL,
+  RESOURCE_REGEN_PER_CELL_PER_TICK,
+  cellIndex,
+} from './substrate.js';
 import { LineageId, ProbeId, SimTick } from './types.js';
 
-// Advance the simulation by one tick. R1 — Scarcity adds basal metabolism
-// and death; firmware execution (replication today, gather later) runs
-// for survivors only.
+// Advance the simulation by one tick. R1 — Scarcity adds the metabolic
+// loop: cells regenerate, probes absorb from their cell, basal drain
+// pulls energy back down, and probes whose energy hits zero die.
 //
 // Phase order:
-//   1. Drain. Every probe loses BASAL_DRAIN_PER_TICK from its energy
-//      reservoir. Probes whose energy reaches zero die and the host
-//      receives a DeathEvent.
-//   2. Directives. Surviving probes execute their firmware in Map
-//      insertion order (the determinism contract from R0).
+//   0. Regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
+//      capped at MAX_RESOURCE_PER_CELL.
+//   1. Metabolism. For each probe, in Map insertion order: absorb from
+//      its cell (capped by what is there), then deduct basal drain.
+//      A probe whose energy reaches zero dies and the host receives
+//      a DeathEvent.
+//   2. Directives. Surviving probes execute their firmware (replication
+//      today, gather + others later).
 //
 // Determinism notes:
 //   - PRNG draws are consumed in a fixed order: probes existing at tick
 //     start, iterated in Map insertion order (which JS guarantees).
 //     Children born this tick are NOT iterated until the next tick.
-//   - Drain is pure integer subtraction; no PRNG draws.
-//   - Death emission order is iteration order, locked.
+//   - Regen, absorption, and drain are pure integer arithmetic; no
+//     PRNG draws.
+//   - Absorption is competitive: a probe earlier in iteration order
+//     gets the cell's resources before a later probe in the same cell
+//     sees them. The order is locked by Map insertion (which lines up
+//     with birth order), so two runs from the same seed produce
+//     identical absorption events.
 //   - Speciation is a deterministic function of firmware comparison.
 //
 // `events`, if provided, is appended to with every SimEvent the tick
@@ -32,15 +46,29 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 export function tick(state: SimState, events?: SimEvent[]): void {
   state.simTick = SimTick(state.simTick + 1n);
 
+  // Phase 0: regen.
+  for (let i = 0; i < LATTICE_CELL_COUNT; i++) {
+    const current = state.resources[i] ?? 0n;
+    if (current >= MAX_RESOURCE_PER_CELL) continue;
+    const next = current + RESOURCE_REGEN_PER_CELL_PER_TICK;
+    state.resources[i] = next > MAX_RESOURCE_PER_CELL ? MAX_RESOURCE_PER_CELL : next;
+  }
+
   const ids = [...state.probes.keys()];
 
-  // Phase 1: basal drain + death. Energy mutates in place — Probe is
-  // otherwise readonly; this is the one field that does. Avoids per-tick
-  // object allocation for every probe, which was 9× slower at sim scale.
+  // Phase 1: absorption + basal drain + death. Energy mutates in place
+  // (the one mutable field on Probe); resources mutate in place too
+  // (a flat bigint array). Avoids per-tick object allocation that
+  // would dominate the inner loop at simulation scale.
   for (const id of ids) {
     const probe = state.probes.get(id);
     if (probe === undefined) continue;
-    probe.energy -= BASAL_DRAIN_PER_TICK;
+    const idx = cellIndex(probe.position.x, probe.position.y);
+    const cellResource = state.resources[idx] ?? 0n;
+    const absorbed =
+      cellResource < ABSORPTION_PER_PROBE_PER_TICK ? cellResource : ABSORPTION_PER_PROBE_PER_TICK;
+    state.resources[idx] = cellResource - absorbed;
+    probe.energy = probe.energy + absorbed - BASAL_DRAIN_PER_TICK;
     if (probe.energy <= 0n) {
       state.probes.delete(id);
       if (events !== undefined) {

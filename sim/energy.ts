@@ -19,3 +19,10 @@ export const INITIAL_ENERGY = 1_000_000n;
 // replenishment lives for exactly INITIAL_ENERGY / BASAL_DRAIN_PER_TICK
 // ticks.
 export const BASAL_DRAIN_PER_TICK = 1n;
+
+// Energy a probe absorbs from its cell each tick. The actual gain is
+// min(cell_resources, ABSORPTION_PER_PROBE_PER_TICK) — a probe in a
+// depleted cell gains nothing. Set above BASAL_DRAIN_PER_TICK so a
+// well-resourced probe nets positive each tick and can replicate;
+// below it would starve everyone everywhere.
+export const ABSORPTION_PER_PROBE_PER_TICK = 2n;
