@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { SimEvent } from '../protocol/types.js';
 import type { DirectiveStack } from './directive.js';
+import { BASAL_DRAIN_PER_TICK } from './energy.js';
 import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
 import { ProbeId, Seed, SimTick } from './types.js';
@@ -125,3 +127,41 @@ describe('replication', () => {
 // Locked when this test was first written; any change here is a determinism
 // regression and should be investigated, not "fixed" by updating the number.
 const GOLDEN_POP_SEED_42_TEST = 27;
+
+describe('basal metabolism', () => {
+  it('drains BASAL_DRAIN_PER_TICK from every survivor each tick', () => {
+    const state = createInitialState(Seed(42n));
+    const founder0 = state.probes.get(ProbeId('P0'));
+    const startEnergy = founder0?.energy ?? 0n;
+    tickN(state, 100n);
+    const founder1 = state.probes.get(ProbeId('P0'));
+    expect(founder1?.energy).toBe(startEnergy - BASAL_DRAIN_PER_TICK * 100n);
+  });
+
+  it('emits a DeathEvent and removes the probe when energy is exhausted', () => {
+    // Low initialEnergy so the founder dies in a handful of ticks.
+    const state = createInitialState(Seed(42n), { initialEnergy: 5n });
+    const events: SimEvent[] = [];
+    tickN(state, 5n, events);
+    // After 5 ticks of 1-energy drain, the founder is dead.
+    expect(state.probes.has(ProbeId('P0'))).toBe(false);
+    const death = events.find((e) => e.kind === 'death');
+    expect(death).toBeDefined();
+    if (death?.kind === 'death') {
+      expect(death.probeId).toBe('P0');
+      expect(death.lineageId).toBe('L0');
+    }
+  });
+
+  it('death is deterministic across runs from the same seed', () => {
+    // Same low-energy fixture, same seed: death events should appear in
+    // identical order with identical contents.
+    const events1: SimEvent[] = [];
+    const events2: SimEvent[] = [];
+    const a = createInitialState(Seed(99n), { initialEnergy: 100n });
+    const b = createInitialState(Seed(99n), { initialEnergy: 100n });
+    tickN(a, 200n, events1);
+    tickN(b, 200n, events2);
+    expect(events1).toEqual(events2);
+  });
+});

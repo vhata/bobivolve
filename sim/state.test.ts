@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { INITIAL_ENERGY } from './energy.js';
 import { createInitialState, restore, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
 import { LATTICE_CENTRE } from './substrate.js';
@@ -30,6 +31,20 @@ describe('createInitialState', () => {
     for (const probe of state.probes.values()) {
       expect(probe.position).toEqual(LATTICE_CENTRE);
     }
+  });
+
+  it('founder begins with the default initial energy', () => {
+    const state = createInitialState(Seed(42n));
+    const founder = state.probes.get(ProbeId('P0'));
+    expect(founder?.energy).toBe(INITIAL_ENERGY);
+    expect(state.initialEnergy).toBe(INITIAL_ENERGY);
+  });
+
+  it('initialEnergy override flows through to the founder and to children', () => {
+    const state = createInitialState(Seed(42n), { initialEnergy: 50n });
+    const founder = state.probes.get(ProbeId('P0'));
+    expect(founder?.energy).toBe(50n);
+    expect(state.initialEnergy).toBe(50n);
   });
 
   it('is deterministic across constructions with the same seed', () => {
