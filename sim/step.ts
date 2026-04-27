@@ -1,16 +1,13 @@
 import type { DeathEvent, ReplicationEvent, SimEvent, SpeciationEvent } from '../protocol/types.js';
 import type { Directive } from './directive.js';
-import {
-  ABSORPTION_PER_PROBE_PER_TICK,
-  BASAL_DRAIN_PER_TICK,
-  REPLICATION_COST_ENERGY,
-} from './energy.js';
+import { BASAL_DRAIN_PER_TICK, REPLICATION_COST_ENERGY } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
 import type { Probe, SimState } from './state.js';
 import {
   LATTICE_CELL_COUNT,
+  LATTICE_SIDE,
   MAX_RESOURCE_PER_CELL,
   RESOURCE_REGEN_PER_CELL_PER_TICK,
   cellIndex,
@@ -18,10 +15,8 @@ import {
 } from './substrate.js';
 import { LineageId, ProbeId, SimTick } from './types.js';
 
-// Advance the simulation by one tick. R1 — Scarcity adds the metabolic
-// loop: cells regenerate, resources diffuse across the lattice, probes
-// absorb from their cell, basal drain pulls energy back down, and
-// probes whose energy hits zero die.
+// Advance the simulation by one tick. R1 — Scarcity composes the
+// metabolism loop with directive-driven behaviour.
 //
 // Phase order:
 //   0a. Regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
@@ -29,12 +24,15 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 //   0b. Diffuse. A fraction of each cell's resources flows to its 4
 //       cardinal neighbours, reflecting at the boundary so total
 //       resources are conserved across the diffusion step.
-//   1.  Metabolism. For each probe, in Map insertion order: absorb from
-//       its cell (capped by what is there), then deduct basal drain.
-//       A probe whose energy reaches zero dies and the host receives
-//       a DeathEvent.
-//   2.  Directives. Surviving probes execute their firmware (replication
-//       today, gather + others later).
+//   1.  Basal drain. Every probe loses BASAL_DRAIN_PER_TICK from its
+//       energy reservoir. Energy may go negative here; death is not
+//       checked yet — phase 2 directives can still pull a probe back
+//       above zero via gather.
+//   2.  Directives. For each probe, in Map insertion order, execute
+//       firmware in firmware order: gather pulls from the cell, explore
+//       moves to a neighbour, replicate spawns a child.
+//   3.  Death. Probes whose energy ended this tick at or below zero
+//       are removed and the host receives a DeathEvent.
 //
 // Determinism notes:
 //   - PRNG draws are consumed in a fixed order: probes existing at tick
@@ -69,42 +67,43 @@ export function tick(state: SimState, events?: SimEvent[]): void {
 
   const ids = [...state.probes.keys()];
 
-  // Phase 1: absorption + basal drain + death. Energy mutates in place
-  // (the one mutable field on Probe); resources mutate in place too
-  // (a flat bigint array). Avoids per-tick object allocation that
-  // would dominate the inner loop at simulation scale.
+  // Phase 1: basal drain. Pure integer subtraction; energy may go
+  // negative but death is not checked here.
   for (const id of ids) {
     const probe = state.probes.get(id);
     if (probe === undefined) continue;
-    const idx = cellIndex(probe.position.x, probe.position.y);
-    const cellResource = state.resources[idx] ?? 0n;
-    const absorbed =
-      cellResource < ABSORPTION_PER_PROBE_PER_TICK ? cellResource : ABSORPTION_PER_PROBE_PER_TICK;
-    state.resources[idx] = cellResource - absorbed;
-    probe.energy = probe.energy + absorbed - BASAL_DRAIN_PER_TICK;
-    if (probe.energy <= 0n) {
-      state.probes.delete(id);
-      if (events !== undefined) {
-        const death: SimEvent = {
-          kind: 'death',
-          simTick: state.simTick,
-          probeId: probe.id,
-          lineageId: probe.lineageId,
-        } satisfies DeathEvent & { simTick: bigint };
-        events.push(death);
-      }
+    probe.energy -= BASAL_DRAIN_PER_TICK;
+  }
+
+  // Phase 2: directives. Iterate the captured ids in Map insertion
+  // order; for each probe still alive, run every directive in firmware
+  // order. Births this tick are NOT visited — the captured ids list
+  // pre-dates them.
+  for (const id of ids) {
+    const probe = state.probes.get(id);
+    if (probe === undefined) continue;
+    for (const directive of probe.firmware) {
+      maybeApply(state, probe, directive, events);
     }
   }
 
-  // Phase 2: directives for survivors. We iterate the captured ids again
-  // so dead probes are skipped naturally and births this tick are not
-  // visited.
+  // Phase 3: death. A probe whose energy ended at zero or below dies
+  // — the host emits a DeathEvent. Iteration order is preserved so
+  // death events appear in the same sequence two runs of the same
+  // seed produce.
   for (const id of ids) {
     const probe = state.probes.get(id);
     if (probe === undefined) continue;
-
-    for (const directive of probe.firmware) {
-      maybeApply(state, probe, directive, events);
+    if (probe.energy > 0n) continue;
+    state.probes.delete(id);
+    if (events !== undefined) {
+      const death: SimEvent = {
+        kind: 'death',
+        simTick: state.simTick,
+        probeId: probe.id,
+        lineageId: probe.lineageId,
+      } satisfies DeathEvent & { simTick: bigint };
+      events.push(death);
     }
   }
 }
@@ -120,10 +119,49 @@ function maybeApply(
   events: SimEvent[] | undefined,
 ): void {
   switch (directive.kind) {
+    case 'gather':
+      gather(state, probe, directive.rate);
+      return;
+    case 'explore':
+      explore(state, probe, directive.threshold);
+      return;
     case 'replicate':
       maybeReplicate(state, probe, directive.threshold, events);
       return;
   }
+}
+
+function gather(state: SimState, probe: Probe, rate: bigint): void {
+  // Pull up to `rate` energy units from the cell at the probe's
+  // position. Capped by what the cell currently holds; an empty cell
+  // yields nothing. Pure integer arithmetic; no PRNG draws.
+  const idx = cellIndex(probe.position.x, probe.position.y);
+  const cellResource = state.resources[idx] ?? 0n;
+  const taken = cellResource < rate ? cellResource : rate;
+  state.resources[idx] = cellResource - taken;
+  probe.energy += taken;
+}
+
+function explore(state: SimState, probe: Probe, threshold: bigint): void {
+  // Two PRNG draws on a successful move — one to gate, one to pick a
+  // direction. Boundary moves are no-ops (no draw is "wasted" on a
+  // refused direction; the second draw still consumes determinism so
+  // the same seed produces identical streams across runs).
+  const decision = state.rng.nextU64();
+  if (decision >= threshold) return;
+  const dirRoll = state.rng.nextU64();
+  const direction = Number(dirRoll % 4n);
+  let nx = probe.position.x;
+  let ny = probe.position.y;
+  if (direction === 0) nx -= 1;
+  else if (direction === 1) nx += 1;
+  else if (direction === 2) ny -= 1;
+  else ny += 1;
+  if (nx < 0 || nx >= LATTICE_SIDE || ny < 0 || ny >= LATTICE_SIDE) return;
+  // Reassign rather than mutate so any snapshot referencing the old
+  // position object stays consistent with what was seen at snapshot
+  // time.
+  probe.position = { x: nx, y: ny };
 }
 
 function maybeReplicate(

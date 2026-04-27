@@ -62,11 +62,11 @@ describe('lineage clustering', () => {
   });
 
   it('produces multiple lineages over enough generations', () => {
-    // Long enough run for at least one accumulation of drift to push past
-    // the divergence threshold. With drift up to ~1.5% per mutation event
-    // and divergence triggered at ~1% absolute, a single near-max mutation
-    // event suffices to speciate, so this is reasonably reliable.
-    const state = createInitialState(Seed(42n), TEST_FIRMWARE);
+    // Production firmware (gather + explore + replicate) — explore
+    // spreads probes across the lattice, multiplying the per-cell
+    // carrying capacity into a much larger total replication budget,
+    // so a few thousand ticks are enough to see speciation reliably.
+    const state = createInitialState(Seed(42n));
     tickN(state, 8000n);
     expect(state.lineages.size).toBeGreaterThan(1);
   });

@@ -22,10 +22,15 @@ describe('createInitialState', () => {
   });
 
   it('spawns children at their parent cell', () => {
-    // Run long enough for at least one replication so we can confirm
-    // children inherit position. Replication probability is small, so
-    // give it enough ticks.
-    const state = createInitialState(Seed(42n));
+    // Children inherit the parent's position at birth. Subsequent
+    // movement is the explore directive's job — to isolate spawn
+    // behaviour we use a firmware without explore so probes stay put.
+    const state = createInitialState(Seed(42n), {
+      founderFirmware: [
+        { kind: 'gather', rate: 2n },
+        { kind: 'replicate', threshold: 1000n },
+      ],
+    });
     tickN(state, 2000n);
     expect(state.probes.size).toBeGreaterThan(1);
     for (const probe of state.probes.values()) {

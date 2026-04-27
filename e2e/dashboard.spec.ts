@@ -79,7 +79,7 @@ test('pause stops population growth and resets the speed readout', async ({ page
 test('1× speed advances slower than 16×', async ({ page }) => {
   await page.goto('/');
 
-  // Wait for some growth so a speed difference is observable.
+  // Wait for the sim to be live.
   await expect
     .poll(
       async () => {
@@ -90,25 +90,32 @@ test('1× speed advances slower than 16×', async ({ page }) => {
     )
     .toBeGreaterThan(2);
 
-  // Click 1×. A short window of growth gives a baseline.
+  // Tick advance over a fixed window is the right speed signal — under
+  // R1 the population can saturate at carrying capacity, so growth is
+  // not monotonic with speed.
+  function readSimTick(): Promise<number> {
+    return page
+      .locator('.population-panel .panel-meta')
+      .textContent()
+      .then((t) => readNumeric(t ?? ''));
+  }
+
   await page.getByRole('button', { name: '1×' }).click();
+  await page.waitForTimeout(1_000);
+  const tick1xStart = await readSimTick();
   await page.waitForTimeout(2_000);
-  const popAt1xStart = readNumeric((await page.locator('.population-total').textContent()) ?? '');
-  await page.waitForTimeout(2_000);
-  const popAt1xEnd = readNumeric((await page.locator('.population-total').textContent()) ?? '');
-  const growthAt1x = popAt1xEnd - popAt1xStart;
+  const tick1xEnd = await readSimTick();
+  const advanceAt1x = tick1xEnd - tick1xStart;
 
-  // Click 16×. Same window, expect more growth.
   await page.getByRole('button', { name: '16×' }).click();
+  await page.waitForTimeout(1_000);
+  const tick16xStart = await readSimTick();
   await page.waitForTimeout(2_000);
-  const popAt16xStart = readNumeric((await page.locator('.population-total').textContent()) ?? '');
-  await page.waitForTimeout(2_000);
-  const popAt16xEnd = readNumeric((await page.locator('.population-total').textContent()) ?? '');
-  const growthAt16x = popAt16xEnd - popAt16xStart;
+  const tick16xEnd = await readSimTick();
+  const advanceAt16x = tick16xEnd - tick16xStart;
 
-  // 16× should grow at least as fast as 1× — strictly more in expectation,
-  // but allow equality so tiny early-tick jitter doesn't flake.
-  expect(growthAt16x).toBeGreaterThanOrEqual(growthAt1x);
+  // 16× should advance the simulation strictly faster than 1×.
+  expect(advanceAt16x).toBeGreaterThan(advanceAt1x);
 });
 
 test('pause actually halts growth at 64× with a busy worker', async ({ page }) => {

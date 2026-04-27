@@ -16,12 +16,13 @@ import type { Command, ReplicationEvent, SimEvent, TickEvent } from '../protocol
 // the existing sim-level golden.
 const SEED_42 = 42n;
 const TICKS_3000 = 3000n;
-// Live population at end of run (after deaths). Locked against the
-// sim-level golden in sim/step.test.ts.
-const GOLDEN_LIVE_POP_SEED_42 = 33n;
-// Total probes ever spawned (founder + every replication). Differs
-// from live population because R1 has deaths.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 133n;
+// Live population at end of run, FOUNDER_FIRMWARE (gather + explore +
+// replicate). Probes spread across the lattice, so per-cell carrying
+// capacity multiplies into a much larger global figure than the
+// no-explore TEST_FIRMWARE in sim/step.test.ts.
+const GOLDEN_LIVE_POP_SEED_42 = 924n;
+// Total probes ever spawned across the same run.
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 5914n;
 
 function makeFakeClock(): () => number {
   // Returns a clock whose readings advance by 1ms per call, deterministically.

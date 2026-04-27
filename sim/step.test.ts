@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../protocol/types.js';
 import type { DirectiveStack } from './directive.js';
-import { ABSORPTION_PER_PROBE_PER_TICK, BASAL_DRAIN_PER_TICK } from './energy.js';
+import { BASAL_DRAIN_PER_TICK } from './energy.js';
 import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
 import { ProbeId, Seed, SimTick } from './types.js';
@@ -17,11 +17,19 @@ import { ProbeId, Seed, SimTick } from './types.js';
 // implementation (the Rust port) must reproduce them. A drift here is the
 // signal that determinism just regressed.
 
-// Test fixture: an energy threshold tuned so a probe replicates often
-// enough that 3000 ticks produces an interesting population without
-// taking forever in the inner loop.
-const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1000n }];
+// Test fixture: gather + replicate, no explore. Keeps probes alive
+// (gather sustains the basal drain) and sends them all into the centre
+// cell where iteration order produces predictable selection pressure.
+// Skipping explore makes the PRNG sequence simpler than the production
+// founder firmware uses.
+const TEST_FIRMWARE: DirectiveStack = [
+  { kind: 'gather', rate: 2n },
+  { kind: 'replicate', threshold: 1000n },
+];
 const TEST_TICKS = 3000n;
+// Gather rate matched to TEST_FIRMWARE above. Used by the metabolism
+// test to predict the energy delta from one tick of gather - drain.
+const TEST_GATHER_RATE = 2n;
 
 describe('replication', () => {
   it('founder probe begins with the firmware passed at construction', () => {
@@ -34,14 +42,18 @@ describe('replication', () => {
     // With lineage clustering, descendants may speciate into new lineages
     // when their firmware drifts past the divergence threshold. The
     // invariant tested here is that every probe's lineageId is registered
-    // in state.lineages — orphaned lineage IDs would be a bug.
+    // in state.lineages — orphaned lineage IDs would be a bug. Firmware
+    // length and directive kinds match the fixture's shape (gather,
+    // replicate); mutation drifts parameters but does not change the
+    // shape under simple parameter-drift mutation.
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, TEST_TICKS);
     expect(state.probes.size).toBeGreaterThan(1);
     for (const probe of state.probes.values()) {
       expect(state.lineages.has(probe.lineageId)).toBe(true);
-      expect(probe.firmware).toHaveLength(1);
-      expect(probe.firmware[0]?.kind).toBe('replicate');
+      expect(probe.firmware).toHaveLength(TEST_FIRMWARE.length);
+      const kinds = probe.firmware.map((d) => d.kind);
+      expect(kinds).toEqual(['gather', 'replicate']);
     }
   });
 
@@ -49,9 +61,21 @@ describe('replication', () => {
     // Long enough for drift to be statistically inevitable at the seeded
     // rates. The exact distribution is locked by the determinism contract
     // — we don't assert what the variation looks like, only that it exists.
+    // The replicate threshold is the larger parameter in TEST_FIRMWARE;
+    // gather rate is small (2), so its DRIFT_DIVISOR-bounded drift is
+    // zero — we'd never observe variation there. Threshold drifts by
+    // up to ±threshold/64 per event, so 6000 ticks reliably produces
+    // some.
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, 6000n);
-    const thresholds = new Set([...state.probes.values()].map((p) => p.firmware[0]?.threshold));
+    const thresholds = new Set(
+      [...state.probes.values()].map((p) => {
+        for (const d of p.firmware) {
+          if (d.kind === 'replicate') return d.threshold;
+        }
+        return null;
+      }),
+    );
     expect(thresholds.size).toBeGreaterThan(1);
   });
 
@@ -125,35 +149,38 @@ describe('replication', () => {
 
 // Golden live population for seed=42 with TEST_FIRMWARE after TEST_TICKS.
 // Locked at the R1 metabolic mechanic; the value reflects extant probes,
-// not total ever spawned. Any change here is a determinism regression and
-// should be investigated, not "fixed" by updating the number.
-const GOLDEN_POP_SEED_42_TEST = 33;
+// not total ever spawned. Any change here is a determinism regression
+// and should be investigated, not "fixed" by updating the number.
+const GOLDEN_POP_SEED_42_TEST = 35;
 // Total probes ever spawned in the same run (used by tests that assert
 // against the ordinal counter, which never decreases).
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 133n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 191n;
 
 describe('metabolism', () => {
-  it('a probe in a full cell nets ABSORPTION - DRAIN per tick (no replication)', () => {
+  it('a probe in a full cell nets gather rate − basal drain per tick', () => {
     // Pin founderEnergy below the directive threshold so the founder
     // cannot replicate during the window — that way the energy delta
     // measures metabolism alone, not metabolism net of replication
-    // costs.
-    const state = createInitialState(Seed(42n), { founderEnergy: 100n });
+    // costs. TEST_FIRMWARE has no explore directive, so the probe
+    // stays in its starting cell and gathers from full resources for
+    // the entire window.
+    const state = createInitialState(Seed(42n), {
+      founderFirmware: TEST_FIRMWARE,
+      founderEnergy: 100n,
+    });
     const startEnergy = state.probes.get(ProbeId('P0'))?.energy ?? 0n;
     tickN(state, 100n);
-    const expectedDelta = (ABSORPTION_PER_PROBE_PER_TICK - BASAL_DRAIN_PER_TICK) * 100n;
+    const expectedDelta = (TEST_GATHER_RATE - BASAL_DRAIN_PER_TICK) * 100n;
     expect(state.probes.get(ProbeId('P0'))?.energy).toBe(startEnergy + expectedDelta);
   });
 
   it('emits DeathEvent and removes the probe when energy is exhausted', () => {
     // Force the death path: pin the founder's energy to zero and empty
-    // every cell on the lattice. Regen brings each cell to 1; diffusion
-    // is a no-op (floor(1 * NUM / (DEN * 4)) = 0). The founder absorbs
-    // 1 and drains BASAL_DRAIN_PER_TICK = 1, leaving energy at zero
-    // — which trips the death condition. Zeroing the whole field (not
-    // just the founder's cell) keeps diffusion from delivering any
-    // inflow from richer neighbours.
-    const state = createInitialState(Seed(42n));
+    // every cell on the lattice. Use TEST_FIRMWARE so the founder's
+    // gather pulls from the regen-fed cell but does not move via
+    // explore. Each tick: regen brings the cell to 1, drain takes 1,
+    // gather returns 1 → end-of-tick energy = 0, which trips death.
+    const state = createInitialState(Seed(42n), { founderFirmware: TEST_FIRMWARE });
     const founder = state.probes.get(ProbeId('P0'));
     if (founder === undefined) throw new Error('founder missing');
     founder.energy = 0n;

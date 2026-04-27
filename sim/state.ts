@@ -16,18 +16,20 @@ import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 // determined at every tick (ARCHITECTURE.md "Snapshots are an
 // implementation-defined performance cache").
 
-// Probe identity is immutable, but energy mutates every tick (basal
-// drain) and on every directive that touches it. Mutating in place is a
-// deliberate departure from the otherwise-readonly shape — the spread
-// allocations swamped the inner loop at simulation scale. Snapshots
-// take a shallow copy of each probe so that a saved view does not drift
-// when the live state advances.
+// Probe identity is immutable, but two fields mutate every tick:
+// energy (basal drain, gather, replicate cost) and position (explore).
+// Mutating in place is a deliberate departure from the otherwise-readonly
+// shape — the spread allocations swamped the inner loop at simulation
+// scale. Snapshots take a shallow copy of each probe so that a saved
+// view does not drift when the live state advances; reassignments to
+// position install a fresh object so snapshot consumers reading
+// .position stay consistent.
 export interface Probe {
   readonly id: ProbeId;
   readonly lineageId: LineageId;
   readonly bornAtTick: SimTick;
   readonly firmware: DirectiveStack;
-  readonly position: Position;
+  position: Position;
   energy: bigint;
 }
 
