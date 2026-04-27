@@ -1,4 +1,10 @@
-import type { DeathEvent, ReplicationEvent, SimEvent, SpeciationEvent } from '../protocol/types.js';
+import type {
+  DeathEvent,
+  ExtinctionEvent,
+  ReplicationEvent,
+  SimEvent,
+  SpeciationEvent,
+} from '../protocol/types.js';
 import type { Directive } from './directive.js';
 import { BASAL_DRAIN_PER_TICK, REPLICATION_COST_ENERGY } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
@@ -91,11 +97,13 @@ export function tick(state: SimState, events?: SimEvent[]): void {
   // — the host emits a DeathEvent. Iteration order is preserved so
   // death events appear in the same sequence two runs of the same
   // seed produce.
+  const lineagesThatLostProbes = new Set<LineageId>();
   for (const id of ids) {
     const probe = state.probes.get(id);
     if (probe === undefined) continue;
     if (probe.energy > 0n) continue;
     state.probes.delete(id);
+    lineagesThatLostProbes.add(probe.lineageId);
     if (events !== undefined) {
       const death: SimEvent = {
         kind: 'death',
@@ -104,6 +112,28 @@ export function tick(state: SimState, events?: SimEvent[]): void {
         lineageId: probe.lineageId,
       } satisfies DeathEvent & { simTick: bigint };
       events.push(death);
+    }
+  }
+
+  // Phase 4: extinction events. A lineage that just lost members AND
+  // now has zero extant probes triggers ExtinctionEvent. We only check
+  // lineages affected this tick — most ticks have none, so the cost is
+  // bounded by the number of deaths, not the total lineage count.
+  if (events !== undefined && lineagesThatLostProbes.size > 0) {
+    const extantByLineage = new Map<LineageId, number>();
+    for (const probe of state.probes.values()) {
+      const current = extantByLineage.get(probe.lineageId) ?? 0;
+      extantByLineage.set(probe.lineageId, current + 1);
+    }
+    for (const lineageId of lineagesThatLostProbes) {
+      if ((extantByLineage.get(lineageId) ?? 0) === 0) {
+        const extinction: SimEvent = {
+          kind: 'extinction',
+          simTick: state.simTick,
+          lineageId,
+        } satisfies ExtinctionEvent & { simTick: bigint };
+        events.push(extinction);
+      }
     }
   }
 }

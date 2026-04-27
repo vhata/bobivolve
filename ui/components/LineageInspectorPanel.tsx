@@ -21,10 +21,23 @@ const SPARK_PX_H = 36;
 const SPARK_HISTORY = 60;
 const REFRESH_INTERVAL_MS = 1500;
 
-function describeReplicateRate(thresholdStr: string): string {
-  const t = BigInt(thresholdStr);
-  const probabilityPerTick = Number(t) / 2 ** 64;
-  return `replicates ≈ ${(probabilityPerTick * 100).toFixed(3)}% per tick`;
+// Plain-language summary of a parameter for the inspector's firmware
+// row. Each entry is the lineage's reference (frozen at speciation)
+// expressed in a unit a player can reason about.
+function describeParameter(key: string, valueStr: string): string {
+  const v = BigInt(valueStr);
+  switch (key) {
+    case 'replicate.threshold':
+      return `replicates at energy ≥ ${v.toString()}`;
+    case 'gather.rate':
+      return `gathers up to ${v.toString()} energy per tick`;
+    case 'explore.threshold': {
+      const probabilityPerTick = Number(v) / 2 ** 64;
+      return `wanders ≈ ${(probabilityPerTick * 100).toFixed(2)}% of ticks`;
+    }
+    default:
+      return `${key} = ${v.toString()}`;
+  }
 }
 
 function thresholdPercent(divisorStr: string): number {
@@ -269,10 +282,15 @@ export function LineageInspectorPanel(): React.JSX.Element {
   }, [transport, selectedLineageId]);
 
   const lineage = lineages.get(selectedLineageId);
-  const referenceThreshold = drift?.parameters['replicate.threshold']?.reference ?? null;
   const divisorStr = drift?.divergenceDivisor ?? null;
   const thresholdPct = divisorStr === null ? 0 : thresholdPercent(divisorStr);
   const isSolo = drift !== null && drift.population === 1n;
+  // Plain-language firmware summary, one bullet per parameter the
+  // lineage's reference firmware carries.
+  const firmwareLines: readonly string[] =
+    drift === null
+      ? []
+      : Object.entries(drift.parameters).map(([key, p]) => describeParameter(key, p.reference));
 
   return (
     <section className="panel inspector-panel">
@@ -312,7 +330,15 @@ export function LineageInspectorPanel(): React.JSX.Element {
               <div>
                 <dt>firmware</dt>
                 <dd>
-                  {referenceThreshold !== null ? describeReplicateRate(referenceThreshold) : '…'}
+                  {firmwareLines.length === 0 ? (
+                    '…'
+                  ) : (
+                    <ul className="firmware-summary">
+                      {firmwareLines.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  )}
                 </dd>
               </div>
             </dl>

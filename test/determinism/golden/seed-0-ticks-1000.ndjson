@@ -235,6 +235,7 @@
 {"kind":"death","simTick":"38","probeId":"P168","lineageId":"L0"}
 {"kind":"death","simTick":"38","probeId":"P189","lineageId":"L11"}
 {"kind":"death","simTick":"38","probeId":"P192","lineageId":"L13"}
+{"kind":"extinction","simTick":"38","lineageId":"L13"}
 {"kind":"replication","simTick":"39","parentProbeId":"P199","childProbeId":"P200","lineageId":"L11","mutated":false}
 {"kind":"death","simTick":"39","probeId":"P155","lineageId":"L6"}
 {"kind":"death","simTick":"39","probeId":"P190","lineageId":"L8"}
@@ -811,6 +812,7 @@
 {"kind":"replication","simTick":"724","parentProbeId":"P579","childProbeId":"P580","lineageId":"L43","mutated":false}
 {"kind":"replication","simTick":"732","parentProbeId":"P580","childProbeId":"P581","lineageId":"L43","mutated":false}
 {"kind":"death","simTick":"737","probeId":"P527","lineageId":"L37"}
+{"kind":"extinction","simTick":"737","lineageId":"L37"}
 {"kind":"death","simTick":"739","probeId":"P518","lineageId":"L25"}
 {"kind":"replication","simTick":"740","parentProbeId":"P581","childProbeId":"P582","lineageId":"L43","mutated":false}
 {"kind":"death","simTick":"742","probeId":"P539","lineageId":"L39"}
