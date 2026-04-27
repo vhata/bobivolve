@@ -4,7 +4,6 @@ import type { DirectiveStack } from './directive.js';
 import { ABSORPTION_PER_PROBE_PER_TICK, BASAL_DRAIN_PER_TICK } from './energy.js';
 import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
-import { LATTICE_CENTRE, cellIndex } from './substrate.js';
 import { ProbeId, Seed, SimTick } from './types.js';
 
 // Replication tests. R0 mechanic: probes execute their firmware once per tick
@@ -142,14 +141,17 @@ describe('metabolism', () => {
 
   it('emits DeathEvent and removes the probe when energy is exhausted', () => {
     // Force the death path: pin the founder's energy to zero and empty
-    // its cell. Phase 0 regen brings the cell to 1; the founder absorbs
-    // 1 and drains BASAL_DRAIN_PER_TICK, leaving energy at
-    // 1 - BASAL_DRAIN_PER_TICK ≤ 0 — which trips the death condition.
+    // every cell on the lattice. Regen brings each cell to 1; diffusion
+    // is a no-op (floor(1 * NUM / (DEN * 4)) = 0). The founder absorbs
+    // 1 and drains BASAL_DRAIN_PER_TICK = 1, leaving energy at zero
+    // — which trips the death condition. Zeroing the whole field (not
+    // just the founder's cell) keeps diffusion from delivering any
+    // inflow from richer neighbours.
     const state = createInitialState(Seed(42n));
     const founder = state.probes.get(ProbeId('P0'));
     if (founder === undefined) throw new Error('founder missing');
     founder.energy = 0n;
-    state.resources[cellIndex(LATTICE_CENTRE.x, LATTICE_CENTRE.y)] = 0n;
+    state.resources.fill(0n);
     const events: SimEvent[] = [];
     tick(state, events);
     expect(state.probes.has(ProbeId('P0'))).toBe(false);

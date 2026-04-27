@@ -33,6 +33,55 @@ export function cellIndex(x: number, y: number): number {
   return y * LATTICE_SIDE + x;
 }
 
+// Diffusion rate per tick, expressed as a numerator/denominator so the
+// integer arithmetic is exact. Each cell sends
+// floor(value * NUM / (DEN * 4)) to each of its 4 cardinal neighbours;
+// boundary cells reflect (the would-be off-lattice share stays put).
+// Conservation is preserved exactly.
+export const DIFFUSION_RATE_NUMERATOR = 1n;
+export const DIFFUSION_RATE_DENOMINATOR = 20n;
+
+// Diffuse resources across the sub-lattice in place. Called once per
+// tick. Pure integer arithmetic; no PRNG draws — the determinism
+// contract is unchanged when this runs.
+export function diffuseResources(resources: bigint[]): void {
+  const next = resources.slice();
+  for (let y = 0; y < LATTICE_SIDE; y++) {
+    for (let x = 0; x < LATTICE_SIDE; x++) {
+      const idx = cellIndex(x, y);
+      const value = resources[idx] ?? 0n;
+      const outflowPerNeighbour =
+        (value * DIFFUSION_RATE_NUMERATOR) / (DIFFUSION_RATE_DENOMINATOR * 4n);
+      if (outflowPerNeighbour === 0n) continue;
+      let outgoing = 0n;
+      if (x > 0) {
+        const ni = cellIndex(x - 1, y);
+        next[ni] = (next[ni] ?? 0n) + outflowPerNeighbour;
+        outgoing += outflowPerNeighbour;
+      }
+      if (x < LATTICE_SIDE - 1) {
+        const ni = cellIndex(x + 1, y);
+        next[ni] = (next[ni] ?? 0n) + outflowPerNeighbour;
+        outgoing += outflowPerNeighbour;
+      }
+      if (y > 0) {
+        const ni = cellIndex(x, y - 1);
+        next[ni] = (next[ni] ?? 0n) + outflowPerNeighbour;
+        outgoing += outflowPerNeighbour;
+      }
+      if (y < LATTICE_SIDE - 1) {
+        const ni = cellIndex(x, y + 1);
+        next[ni] = (next[ni] ?? 0n) + outflowPerNeighbour;
+        outgoing += outflowPerNeighbour;
+      }
+      next[idx] = (next[idx] ?? 0n) - outgoing;
+    }
+  }
+  for (let i = 0; i < LATTICE_CELL_COUNT; i++) {
+    resources[i] = next[i] ?? 0n;
+  }
+}
+
 export interface Position {
   // Cell coordinates on the sub-lattice. Integer values in [0, LATTICE_SIDE).
   // Plain numbers (not bigint) — u32 fits in JS number with precision to
