@@ -2,6 +2,7 @@ import { FOUNDER_FIRMWARE, type DirectiveStack } from './directive.js';
 import type { Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
+import { LATTICE_CENTRE, type Position } from './substrate.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
 // Sim state. Everything the simulation knows about itself lives here. State
@@ -14,6 +15,7 @@ export interface Probe {
   readonly lineageId: LineageId;
   readonly bornAtTick: SimTick;
   readonly firmware: DirectiveStack;
+  readonly position: Position;
 }
 
 export interface SimState {
@@ -52,6 +54,7 @@ export function createInitialState(
     lineageId: founderLineageId,
     bornAtTick: SimTick(0n),
     firmware: founderFirmware,
+    position: LATTICE_CENTRE,
   };
   const founderLineage: Lineage = {
     id: founderLineageId,
