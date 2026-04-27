@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../protocol/types.js';
 import type { DirectiveStack } from './directive.js';
-import { BASAL_DRAIN_PER_TICK } from './energy.js';
+import { ABSORPTION_PER_PROBE_PER_TICK, BASAL_DRAIN_PER_TICK } from './energy.js';
 import { createInitialState, snapshot } from './state.js';
 import { tick, tickN } from './step.js';
+import { LATTICE_CENTRE, cellIndex } from './substrate.js';
 import { ProbeId, Seed, SimTick } from './types.js';
 
 // Replication tests. R0 mechanic: probes execute their firmware once per tick
@@ -128,22 +129,29 @@ describe('replication', () => {
 // regression and should be investigated, not "fixed" by updating the number.
 const GOLDEN_POP_SEED_42_TEST = 27;
 
-describe('basal metabolism', () => {
-  it('drains BASAL_DRAIN_PER_TICK from every survivor each tick', () => {
+describe('metabolism', () => {
+  it('a probe in a full cell nets ABSORPTION - DRAIN per tick', () => {
+    // Default lattice starts every cell at MAX. The founder absorbs the
+    // cap each tick (until the cell drains, far past 100 ticks).
     const state = createInitialState(Seed(42n));
-    const founder0 = state.probes.get(ProbeId('P0'));
-    const startEnergy = founder0?.energy ?? 0n;
+    const startEnergy = state.probes.get(ProbeId('P0'))?.energy ?? 0n;
     tickN(state, 100n);
-    const founder1 = state.probes.get(ProbeId('P0'));
-    expect(founder1?.energy).toBe(startEnergy - BASAL_DRAIN_PER_TICK * 100n);
+    const expectedDelta = (ABSORPTION_PER_PROBE_PER_TICK - BASAL_DRAIN_PER_TICK) * 100n;
+    expect(state.probes.get(ProbeId('P0'))?.energy).toBe(startEnergy + expectedDelta);
   });
 
-  it('emits a DeathEvent and removes the probe when energy is exhausted', () => {
-    // Low initialEnergy so the founder dies in a handful of ticks.
-    const state = createInitialState(Seed(42n), { initialEnergy: 5n });
+  it('emits DeathEvent and removes the probe when energy is exhausted', () => {
+    // Force the death path: pin the founder's energy to zero and empty
+    // its cell. Phase 0 regen brings the cell to 1; the founder absorbs
+    // 1 and drains BASAL_DRAIN_PER_TICK, leaving energy at
+    // 1 - BASAL_DRAIN_PER_TICK ≤ 0 — which trips the death condition.
+    const state = createInitialState(Seed(42n));
+    const founder = state.probes.get(ProbeId('P0'));
+    if (founder === undefined) throw new Error('founder missing');
+    founder.energy = 0n;
+    state.resources[cellIndex(LATTICE_CENTRE.x, LATTICE_CENTRE.y)] = 0n;
     const events: SimEvent[] = [];
-    tickN(state, 5n, events);
-    // After 5 ticks of 1-energy drain, the founder is dead.
+    tick(state, events);
     expect(state.probes.has(ProbeId('P0'))).toBe(false);
     const death = events.find((e) => e.kind === 'death');
     expect(death).toBeDefined();
@@ -153,15 +161,14 @@ describe('basal metabolism', () => {
     }
   });
 
-  it('death is deterministic across runs from the same seed', () => {
-    // Same low-energy fixture, same seed: death events should appear in
-    // identical order with identical contents.
+  it('metabolism + replication is deterministic across runs from the same seed', () => {
     const events1: SimEvent[] = [];
     const events2: SimEvent[] = [];
-    const a = createInitialState(Seed(99n), { initialEnergy: 100n });
-    const b = createInitialState(Seed(99n), { initialEnergy: 100n });
-    tickN(a, 200n, events1);
-    tickN(b, 200n, events2);
+    const a = createInitialState(Seed(99n));
+    const b = createInitialState(Seed(99n));
+    tickN(a, 500n, events1);
+    tickN(b, 500n, events2);
     expect(events1).toEqual(events2);
+    expect(snapshot(a)).toEqual(snapshot(b));
   });
 });

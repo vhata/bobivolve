@@ -3,7 +3,12 @@ import { INITIAL_ENERGY } from './energy.js';
 import type { Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { Xoshiro256ss, type Xoshiro256State } from './rng.js';
-import { LATTICE_CENTRE, type Position } from './substrate.js';
+import {
+  LATTICE_CELL_COUNT,
+  LATTICE_CENTRE,
+  MAX_RESOURCE_PER_CELL,
+  type Position,
+} from './substrate.js';
 import { LineageId, ProbeId, SimTick, type Seed } from './types.js';
 
 // Sim state. Everything the simulation knows about itself lives here. State
@@ -39,6 +44,11 @@ export interface SimState {
   // Carried on state so tests can drive a low value through the same
   // surface as production code, and so save/load round-trips it.
   initialEnergy: bigint;
+  // Flat row-major resource grid for the sub-lattice. Length is
+  // LATTICE_CELL_COUNT; index is cellIndex(x, y) = y * LATTICE_SIDE + x.
+  // Each cell carries an integer resource quantity that probes absorb
+  // and basal regen replenishes (up to MAX_RESOURCE_PER_CELL).
+  resources: bigint[];
 }
 
 // Snapshotable shape of SimState. Used for save/load and the rebuild-from-log
@@ -53,6 +63,7 @@ export interface SimStateSnapshot {
   readonly nextProbeOrdinal: bigint;
   readonly nextLineageOrdinal: bigint;
   readonly initialEnergy: bigint;
+  readonly resources: readonly bigint[];
 }
 
 export interface CreateInitialStateOptions {
@@ -93,6 +104,10 @@ export function createInitialState(
     referenceFirmware: founderFirmware,
     foundedAtTick: SimTick(0n),
   };
+  // Lattice begins fully resourced — gives the founder runway and lets
+  // depletion gradients form organically as probes spread.
+  const resources = new Array<bigint>(LATTICE_CELL_COUNT).fill(MAX_RESOURCE_PER_CELL);
+
   return {
     simTick: SimTick(0n),
     rng,
@@ -101,6 +116,7 @@ export function createInitialState(
     nextProbeOrdinal: 1n,
     nextLineageOrdinal: 1n,
     initialEnergy,
+    resources,
   };
 }
 
@@ -115,6 +131,9 @@ export function snapshot(state: SimState): SimStateSnapshot {
     nextProbeOrdinal: state.nextProbeOrdinal,
     nextLineageOrdinal: state.nextLineageOrdinal,
     initialEnergy: state.initialEnergy,
+    // Resources mutate in place each tick; copy the slice so the saved
+    // view stays frozen.
+    resources: state.resources.slice(),
   };
 }
 
@@ -129,5 +148,6 @@ export function restore(snap: SimStateSnapshot): SimState {
     nextProbeOrdinal: snap.nextProbeOrdinal,
     nextLineageOrdinal: snap.nextLineageOrdinal,
     initialEnergy: snap.initialEnergy,
+    resources: snap.resources.slice(),
   };
 }
