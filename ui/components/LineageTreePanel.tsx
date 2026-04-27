@@ -1,15 +1,15 @@
-// LineageTreePanel — nested view of the lineage hierarchy. Each speciation
-// event creates a new lineage with a parentId pointing at its ancestor;
-// this panel walks that tree from L0 down. Extant population per lineage
-// is read from the store's populationByLineage map.
+// LineageTreePanel — nested view of the LIVING lineage hierarchy.
+//
+// Each speciation event creates a new lineage with a parentId pointing
+// at its ancestor. This panel filters the recorded lineage map to
+// living-only (population > 0) and re-parents each survivor to its
+// nearest still-living ancestor. Dead ancestors disappear; the chain
+// of descent collapses around them, but living genealogies render at
+// full depth without any indent cap. Speciation history of dead
+// branches still lives in the events timeline.
 
 import type { LineageNode } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
-
-// Depth at which the visual indent stops growing. The DOM stays nested
-// for selection / structural correctness; CSS caps the leftward shift
-// so deep clades stay readable in the panel.
-const MAX_VISUAL_DEPTH = 8;
 
 interface TreeNode {
   readonly lineage: LineageNode;
@@ -17,24 +17,47 @@ interface TreeNode {
   readonly children: readonly TreeNode[];
 }
 
-function buildTree(
+function buildLivingTree(
   lineages: ReadonlyMap<string, LineageNode>,
   populationByLineage: ReadonlyMap<string, bigint>,
 ): TreeNode[] {
+  // Step 1: enumerate living lineages.
+  const living = new Map<string, LineageNode>();
+  for (const [id, lineage] of lineages) {
+    const population = populationByLineage.get(id) ?? 0n;
+    if (population > 0n) living.set(id, lineage);
+  }
+
+  // Step 2: re-parent each living lineage to its nearest living
+  // ancestor. Walk the parentId chain skipping any non-living entry.
+  // The result is the "effective parent" for tree-building purposes.
+  function nearestLivingAncestor(start: LineageNode): string | null {
+    let cursor = start.parentId;
+    while (cursor !== null) {
+      if (living.has(cursor)) return cursor;
+      const ancestor = lineages.get(cursor);
+      if (ancestor === undefined) return null;
+      cursor = ancestor.parentId;
+    }
+    return null;
+  }
+
+  // Step 3: bucket children by effective parent.
   const childrenOf = new Map<string | null, LineageNode[]>();
-  for (const lineage of lineages.values()) {
-    const list = childrenOf.get(lineage.parentId);
+  for (const lineage of living.values()) {
+    const effectiveParent = nearestLivingAncestor(lineage);
+    const list = childrenOf.get(effectiveParent);
     if (list === undefined) {
-      childrenOf.set(lineage.parentId, [lineage]);
+      childrenOf.set(effectiveParent, [lineage]);
     } else {
       list.push(lineage);
     }
   }
 
+  // Step 4: walk top-down. Sort siblings by foundedAtTick for
+  // deterministic ordering.
   function build(parentId: string | null): TreeNode[] {
     const children = childrenOf.get(parentId) ?? [];
-    // Sort by foundedAtTick — earlier speciation appears first. Stable
-    // tie-break on id keeps the order deterministic across renders.
     return [...children]
       .sort((a, b) => {
         if (a.foundedAtTick !== b.foundedAtTick) {
@@ -52,41 +75,17 @@ function buildTree(
   return build(null);
 }
 
-// A subtree is fully archaeology when this lineage and all of its
-// descendants are extinct. Drop the entire subtree from the tree —
-// the events timeline still records the speciations. Lineages whose
-// own row is dead but whose descendants are alive stay rendered, so
-// the chain of descent for living clades is preserved.
-function pruneFullyDeadSubtrees(nodes: readonly TreeNode[]): TreeNode[] {
-  const out: TreeNode[] = [];
-  for (const n of nodes) {
-    const prunedChildren = pruneFullyDeadSubtrees(n.children);
-    if (n.population === 0n && prunedChildren.length === 0) continue;
-    out.push({ ...n, children: prunedChildren });
-  }
-  return out;
-}
-
 function TreeNodeView({
   node,
-  depth,
   selectedId,
   onSelect,
 }: {
   node: TreeNode;
-  depth: number;
   selectedId: string;
   onSelect: (id: string) => void;
 }): React.JSX.Element {
-  const extinct = node.population === 0n;
   const selected = node.lineage.id === selectedId;
-  const beyondCap = depth >= MAX_VISUAL_DEPTH;
-  const className = [
-    'lineage-node',
-    extinct ? 'lineage-node-extinct' : '',
-    selected ? 'lineage-node-selected' : '',
-    beyondCap ? 'lineage-node-deep' : '',
-  ]
+  const className = ['lineage-node', selected ? 'lineage-node-selected' : '']
     .filter(Boolean)
     .join(' ');
   return (
@@ -102,14 +101,9 @@ function TreeNodeView({
           {node.lineage.name !== node.lineage.id ? (
             <span className="lineage-id-ordinal"> {node.lineage.id}</span>
           ) : null}
-          {beyondCap ? (
-            <span className="lineage-depth-tag">
-              depth {depth.toString()} · parent {node.lineage.parentId ?? '—'}
-            </span>
-          ) : null}
         </span>
         <span className="lineage-meta">
-          {extinct ? 'extinct' : `${node.population.toString()} probes`}
+          {node.population.toString()} probes
           {node.lineage.foundedAtTick > 0n
             ? ` · forked at ${node.lineage.foundedAtTick.toString()}`
             : ''}
@@ -121,7 +115,6 @@ function TreeNodeView({
             <TreeNodeView
               key={child.lineage.id}
               node={child}
-              depth={depth + 1}
               selectedId={selectedId}
               onSelect={onSelect}
             />
@@ -138,24 +131,31 @@ export function LineageTreePanel(): React.JSX.Element {
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
   const selectLineage = useSimStore((s) => s.selectLineage);
 
-  const roots = pruneFullyDeadSubtrees(buildTree(lineages, populationByLineage));
+  const roots = buildLivingTree(lineages, populationByLineage);
+  // Living lineage count for the panel header — distinct from
+  // lineages.size (which counts every lineage ever recorded).
+  let livingCount = 0;
+  for (const id of lineages.keys()) {
+    if ((populationByLineage.get(id) ?? 0n) > 0n) livingCount += 1;
+  }
 
   return (
     <section className="panel lineage-tree-panel">
       <header className="panel-header">
         <h2>Lineages</h2>
-        <span className="panel-meta">{lineages.size}</span>
+        <span className="panel-meta">
+          {livingCount.toString()} living · {lineages.size.toString()} ever
+        </span>
       </header>
       <div className="panel-body">
         {roots.length === 0 ? (
-          <p className="panel-empty">no lineages yet</p>
+          <p className="panel-empty">no living lineages</p>
         ) : (
           <ul className="lineage-tree">
             {roots.map((root) => (
               <TreeNodeView
                 key={root.lineage.id}
                 node={root}
-                depth={0}
                 selectedId={selectedLineageId}
                 onSelect={selectLineage}
               />
