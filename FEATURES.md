@@ -8,7 +8,7 @@ Updated in the same commit as any feature whose status changes.
 
 - ✓ Quarantine — a player can suspend a lineage's replication from the inspector; the suspension is reversible and the tree marks quarantined lineages with a pip
 - ⋯ Origin compute — renewable budget regenerates per tick; patch and decree authoring consume it; the dashboard shows what's affordable
-- ⋯ Patches — a directive editor authors firmware modifications to a target lineage; descendants inherit and drift like any firmware
+- ✓ Patches — the lineage inspector opens a modal directive editor on click; submitted patches replace the lineage's reference firmware and every extant probe, with PATCH_AUTHORING_COST charged against Origin compute; descendants inherit and drift like any firmware
 - ⋯ Decrees — conditional patches queued to fire when their triggers match (R2 ships a narrow trigger set)
 - ⋯ Intervention-versioned lineage tree — the tree shows when a patch landed and which clades inherited it
 - ⋯ PatchSaturated auto-pause — fires when a player-authored patch reaches X% of the population

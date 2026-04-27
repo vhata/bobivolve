@@ -70,6 +70,26 @@ export interface ReleaseQuarantineCommand {
   readonly lineageId: string;
 }
 
+export interface ApplyPatchCommand {
+  readonly kind: 'applyPatch';
+  // Target lineage; must be living. Patched firmware overwrites the
+  // lineage's reference firmware and every extant probe in the
+  // lineage; descendants inherit and drift like any firmware.
+  readonly lineageId: string;
+  // Full directive stack to install. Validated server-side against
+  // MIN_FIRMWARE_LENGTH; the host replies CommandError on too-short.
+  readonly firmware: readonly DirectiveSpec[];
+}
+
+// DirectiveSpec — wire shape for a directive carried on a Command.
+// Mirrors ProbeInspectorDirective (same fields, query-result variant).
+// Numeric params are decimal strings per the proto3 JSON convention so
+// u64 values survive a JSON-encoded transport.
+export interface DirectiveSpec {
+  readonly kind: string;
+  readonly params: Readonly<Record<string, string>>;
+}
+
 export interface SaveCommand {
   readonly kind: 'save';
   readonly slot: string;
@@ -89,6 +109,7 @@ export type CommandBody =
   | ConfigureAutoPauseCommand
   | QuarantineCommand
   | ReleaseQuarantineCommand
+  | ApplyPatchCommand
   | SaveCommand
   | LoadCommand;
 
@@ -172,6 +193,14 @@ export interface QuarantineLiftedEvent {
   readonly lineageId: string;
 }
 
+export interface PatchAppliedEvent {
+  readonly kind: 'patchApplied';
+  readonly lineageId: string;
+  // Count of extant probes whose firmware was overwritten when the
+  // patch landed. bigint for u64-safe transport.
+  readonly probesAffected: bigint;
+}
+
 export type SimEventBody =
   | TickEvent
   | ReplicationEvent
@@ -182,7 +211,8 @@ export type SimEventBody =
   | CommandAckEvent
   | CommandErrorEvent
   | QuarantineImposedEvent
-  | QuarantineLiftedEvent;
+  | QuarantineLiftedEvent
+  | PatchAppliedEvent;
 
 export type SimEvent = SimEventBody & {
   // Integer time. Floats are forbidden in tick fields (ARCHITECTURE.md).
@@ -286,6 +316,9 @@ export interface DriftTelemetry {
   // 1 / divergenceDivisor (e.g. divisor 100 → ±1%). Decimal string for
   // u64-safe transport (proto3 JSON convention).
   readonly divergenceDivisor: string;
+  // Current reference firmware, in directive order. The patch editor
+  // round-trips this into an ApplyPatch command on submit.
+  readonly referenceFirmware: readonly DirectiveSpec[];
 }
 
 export interface ParameterDrift {

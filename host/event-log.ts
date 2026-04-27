@@ -77,6 +77,7 @@ function bigintReviver(key: string, value: unknown): unknown {
     case 'nextLineageOrdinal':
     case 'originCompute':
     case 'originComputeMax':
+    case 'probesAffected':
       return BigInt(value);
     default:
       return value;

@@ -1002,3 +1002,149 @@ body {
 .origin-net-negative {
   color: #e6a04a;
 }
+
+.patch-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.patch-editor {
+  background: #16181d;
+  border: 1px solid #2c2f36;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  min-width: 360px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.patch-editor-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.patch-editor-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.patch-editor-target {
+  color: #8a8c93;
+  font-size: 0.9rem;
+}
+
+.patch-editor-cost {
+  font-size: 0.85rem;
+  color: #b6b8be;
+  margin-bottom: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-editor-warning {
+  color: #ff8a3c;
+  font-weight: 600;
+  margin-left: 0.4rem;
+}
+
+.patch-editor-body {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.patch-editor-row {
+  border: 1px solid #23252b;
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  background: #1c1f25;
+}
+
+.patch-editor-kind {
+  color: #8aaaff;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+
+.patch-editor-params {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.patch-editor-param {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.patch-editor-param-label {
+  color: #b6b8be;
+}
+
+.patch-editor-input {
+  width: 8rem;
+  padding: 0.3rem 0.5rem;
+  background: #0e0f12;
+  border: 1px solid #2c2f36;
+  border-radius: 3px;
+  color: #e8e9ed;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.patch-editor-input:focus {
+  outline: 1px solid #3a5fa8;
+  border-color: #3a5fa8;
+}
+
+.patch-editor-invalid {
+  border-color: #ff8a3c;
+}
+
+.patch-editor-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.patch-editor-button {
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid #2c2f36;
+  background: #1c1f25;
+  color: #e8e9ed;
+  font: inherit;
+  cursor: pointer;
+}
+
+.patch-editor-button:hover:not(:disabled) {
+  background: #232730;
+}
+
+.patch-editor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.patch-editor-button-primary {
+  background: #2c4a8a;
+  border-color: #3a5fa8;
+  color: #ffffff;
+}
+
+.patch-editor-button-primary:hover:not(:disabled) {
+  background: #36589f;
+}

@@ -324,6 +324,103 @@ describe('NodeHost quarantine', () => {
   });
 });
 
+describe('NodeHost patch authoring', () => {
+  it('ApplyPatch emits PatchApplied and overwrites probe firmware', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(1500n);
+    host.send({
+      kind: 'applyPatch',
+      commandId: 'patch-1',
+      lineageId: 'L0',
+      firmware: [
+        { kind: 'gather', params: { rate: '5' } },
+        { kind: 'explore', params: { threshold: (1n << 58n).toString() } },
+        { kind: 'replicate', params: { threshold: '800' } },
+      ],
+    });
+
+    const applied = events.find((e) => e.kind === 'patchApplied');
+    expect(applied).toBeDefined();
+    if (applied?.kind === 'patchApplied') {
+      expect(applied.lineageId).toBe('L0');
+      expect(applied.probesAffected).toBeGreaterThan(0n);
+    }
+    const ack = events.find((e) => e.kind === 'commandAck' && e.commandId === 'patch-1');
+    expect(ack).toBeDefined();
+  });
+
+  it('errors when Origin compute is insufficient', () => {
+    // Force the budget below cost: send three patches in a row from a
+    // full budget of 1000 with cost 100; the fourth should drain past
+    // the cost and... wait, 1000/100 = 10 patches before the budget
+    // is below cost. Easier: drive the host's internal compute to a
+    // small number by leaning on a fake state — but that breaks the
+    // contract. Instead, send 10 patches; the 11th should fail.
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(2000n);
+    for (let i = 0; i < 10; i++) {
+      host.send({
+        kind: 'applyPatch',
+        commandId: `p-${i.toString()}`,
+        lineageId: 'L0',
+        firmware: [
+          { kind: 'gather', params: { rate: (2n + BigInt(i)).toString() } },
+          { kind: 'replicate', params: { threshold: '1000' } },
+        ],
+      });
+    }
+    host.send({
+      kind: 'applyPatch',
+      commandId: 'p-overdraft',
+      lineageId: 'L0',
+      firmware: [
+        { kind: 'gather', params: { rate: '20' } },
+        { kind: 'replicate', params: { threshold: '1000' } },
+      ],
+    });
+    const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'p-overdraft');
+    expect(err).toBeDefined();
+    if (err?.kind === 'commandError') {
+      expect(err.message).toMatch(/Origin compute/);
+    }
+  });
+
+  it('errors on unknown lineage', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({
+      kind: 'applyPatch',
+      commandId: 'p-bad',
+      lineageId: 'L999',
+      firmware: [
+        { kind: 'gather', params: { rate: '2' } },
+        { kind: 'replicate', params: { threshold: '1000' } },
+      ],
+    });
+    const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'p-bad');
+    expect(err).toBeDefined();
+  });
+
+  it('errors on too-short firmware', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({
+      kind: 'applyPatch',
+      commandId: 'p-empty',
+      lineageId: 'L0',
+      firmware: [],
+    });
+    const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'p-empty');
+    expect(err).toBeDefined();
+  });
+});
+
 describe('NodeHost listener safety', () => {
   it('a throwing listener does not bring down the run-loop or other listeners', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
