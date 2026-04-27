@@ -4,6 +4,15 @@ Grouped by release. Each entry is one line, marked `✓` shipped or `⋯` in pro
 
 Updated in the same commit as any feature whose status changes.
 
+## Release 2 — The Engineer's Console
+
+- ⋯ Quarantine — a player can suspend a lineage's replication; the suspension is reversible and survives save/load
+- ⋯ Origin compute — renewable budget regenerates per tick; patch and decree authoring consume it; the dashboard shows what's affordable
+- ⋯ Patches — a directive editor authors firmware modifications to a target lineage; descendants inherit and drift like any firmware
+- ⋯ Decrees — conditional patches queued to fire when their triggers match (R2 ships a narrow trigger set)
+- ⋯ Intervention-versioned lineage tree — the tree shows when a patch landed and which clades inherited it
+- ⋯ PatchSaturated auto-pause — fires when a player-authored patch reaches X% of the population
+
 ## Release 1 — Scarcity
 
 - ✓ Sub-lattice — probes have positions on a 64×64 grid procedurally seeded with system centres; most cells are interstellar void
