@@ -56,22 +56,24 @@ Shipped as `r0-petri-dish`. Two items deferred with rationale: extra mutation ki
 
 ### Functional (from SPEC.md)
 
-- `⋯` Sub-lattice — fixed-size 2D grid; probes carry positions on it; resources live per cell
-- `⋯` Resources — u64 scalar quantity in each cell, with constant regen
-- `⋯` Resource diffusion — a fraction of each cell's resources flows to its neighbours every tick, deterministically (pure integer arithmetic, no PRNG draws)
-- `⋯` Energy budgets — every probe carries an energy field; basal metabolism drains it per tick, gather replenishes it, replication deducts a fixed cost
-- `⋯` Starvation — when a probe's energy reaches zero it dies; the host emits `DeathEvent`
-- `⋯` Gather directive — a parameterised directive that pulls resources from the probe's cell into its energy. Founder firmware becomes `[gather, replicate]`.
-- `⋯` Mutation: priority swap — meaningful now that the firmware has ≥2 directive kinds (carried over from R0's deferred list)
-- `⋯` Mutation: directive loss / gain — same gate; same carry-over
+- `✓` Sub-lattice — fixed 32×32 grid; probes carry positions on it; resources live per cell
+- `✓` Resources — u64 scalar quantity in each cell, with constant regen capped at MAX_RESOURCE_PER_CELL
+- `✓` Resource diffusion — a fraction of each cell's resources flows to its 4 cardinal neighbours every tick, deterministically (pure integer arithmetic, no PRNG draws); boundary reflects so total resources are conserved
+- `✓` Energy budgets — every probe carries an energy reservoir; basal metabolism drains it per tick, gather replenishes it, replication transfers a fixed cost from parent to child
+- `✓` Starvation — when a probe's energy reaches zero at end of tick it dies and the host emits `DeathEvent`; if the lineage's last extant member dies, an `ExtinctionEvent` follows
+- `✓` Gather directive — parameterised, pulls up to `rate` from the probe's cell into its energy
+- `✓` Explore directive — parameterised, gates a single-step move to a uniformly random cardinal neighbour
+- `✓` Replicate directive — energy-threshold gated per SPEC; replaces R0's probability mechanic
+- `✓` Mutation: priority swap — adjacent directives swap with ~1.5% probability per replication
+- `✓` Mutation: directive loss / gain — ~0.4% each; gain duplicates an existing directive with parameter drift on the copy, capped at MAX_FIRMWARE_LENGTH
 
 ### Implicit (from ARCHITECTURE.md and PROCESS.md)
 
-- `⋯` Determinism extends to the new mechanics — same seed produces a byte-for-byte identical event log including resource fields and death events; covered by the determinism golden
-- `⋯` Save / load round-trips the new state — probe positions, energies, and the lattice resource grid all survive a snapshot
-- `⋯` Headless capability extends — `pnpm sim` runs the full R1 mechanics with no UI attached
-- `⋯` Auto-pause: lineage extinction now actually fires (the death-event path is live)
-- `⋯` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`
+- `✓` Determinism extends to the new mechanics — same seed produces a byte-for-byte identical event log; goldens at seed=0/1000, seed=42/3000, seed=2026/5000 are checked in and verified in CI
+- `✓` Save / load round-trips the new state — probe positions, energies, and the lattice resource grid all survive a snapshot
+- `✓` Headless capability extends — `pnpm sim` runs the full R1 mechanics with no UI attached
+- `✓` Auto-pause: lineage extinction fires when a clade loses its last extant member; the dashboard checkbox is live
+- `✓` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`
 
 ### Acceptance test (manual)
 
@@ -87,4 +89,4 @@ If they can do that, the design question — does selection pressure produce com
 
 ### Verdict
 
-Pending. Acceptance criteria are open; the work just begun.
+Shipped as `r1-scarcity`. The R1 design question is now answerable from the dashboard: open a run, watch the lattice fill, watch lineages compete and die, compare drift envelopes between survivors. Selection pressure is the new variable, and lineage dominance no longer correlates with founding age alone.
