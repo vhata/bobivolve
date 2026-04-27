@@ -17,5 +17,4 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 
 - Forensic replay: state-rewind scrub UI (load nearest snapshot + advance to selected tick); the events-timeline shape is in place, the data path supports it, the affordance waits on richer events for R2's player intervention #r2 #ui
 - Tune gather-rate drift to be observable at the founder value (currently 2 with DRIFT_DIVISOR=64 floors drift to zero; a meaningful divisor change or a higher founder rate would let gather drift bite) #r2 #sim
-- Restore quarantine state in the dashboard after a Load — the snapshot carries the set, but the client resets to empty and only re-learns from new events; either re-emit synthetic events on Load or extend the lineageTree query result body and pull on Load ack #r2 #host #ui
-- Wire the per-tick maintenance compute cost for held quarantines once Origin compute lands; currently quarantine is flag-only #r2 #sim
+- Restore intervention state in the dashboard after a Load — quarantines, queued decrees, applied patches all live in the snapshot but the client resets each on Load and only re-learns from new events; either re-emit synthetic events post-Load or pull a fresh state slab from a query #r2 #host #ui

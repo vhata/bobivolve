@@ -1236,3 +1236,13 @@ body {
   background: #25282f;
   border-color: #3a3e48;
 }
+
+.patches-empty {
+  color: #6e7178;
+  font-style: italic;
+}
+
+.patches-list {
+  font-variant-numeric: tabular-nums;
+  color: #8aaaff;
+}

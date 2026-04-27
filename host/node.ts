@@ -421,6 +421,7 @@ export class NodeHost {
         parameters,
         divergenceDivisor: SPECIATION_DIVERGENCE_DIVISOR.toString(),
         referenceFirmware,
+        patches: lineage.patches.slice(),
       },
     };
   }

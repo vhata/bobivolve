@@ -402,6 +402,10 @@ message DriftTelemetry {
   // as the firmware carried on ApplyPatch — the editor round-trips
   // the result of this query into a patch command on submit.
   repeated DirectiveSpec reference_firmware = 4;
+  // Patch ids that have landed on this lineage or were inherited from
+  // a parent lineage at speciation. The dashboard renders these as the
+  // lineage's intervention history.
+  repeated string patches = 5;
 }
 
 message ParameterDrift {
