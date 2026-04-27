@@ -28,6 +28,8 @@ import type {
   CommandErrorEvent,
   ParameterDrift,
   ProbeInspectorDirective,
+  QuarantineImposedEvent,
+  QuarantineLiftedEvent,
   Query,
   QueryResult,
   SimEvent,
@@ -430,6 +432,12 @@ export class NodeHost {
         this.autoPauseTriggers = new Set(cmd.enabledTriggers);
         this.ack(cmd.commandId);
         return;
+      case 'quarantine':
+        this.handleQuarantineToggle(cmd.commandId, cmd.lineageId, true);
+        return;
+      case 'releaseQuarantine':
+        this.handleQuarantineToggle(cmd.commandId, cmd.lineageId, false);
+        return;
       case 'save':
         this.handleSave(cmd.commandId, cmd.slot);
         return;
@@ -437,6 +445,56 @@ export class NodeHost {
         this.handleLoad(cmd.commandId, cmd.slot);
         return;
     }
+  }
+
+  // Both Quarantine and ReleaseQuarantine commands flow through here. The
+  // shape is symmetric: validate, no-op-ack on idempotent, otherwise flip
+  // the set membership and emit the matching domain event. Splitting the
+  // commands kept the seam clean; a single internal helper keeps the host
+  // code from duplicating the validation.
+  //
+  // Origin compute gating is deferred to task 3 — SPEC says quarantine
+  // costs Origin compute, the agreed shape is a per-tick maintenance
+  // cost while a quarantine is held. That gate lands when the budget
+  // does; this slice ships the flag-only mechanic.
+  private handleQuarantineToggle(commandId: string, lineageId: string, quarantine: boolean): void {
+    if (this.state === null) {
+      this.error(
+        commandId,
+        quarantine ? 'cannot quarantine before newRun' : 'cannot release before newRun',
+      );
+      return;
+    }
+    const id = LineageId(lineageId);
+    if (!this.state.lineages.has(id)) {
+      this.error(commandId, `unknown lineage: ${lineageId}`);
+      return;
+    }
+    const set = this.state.quarantinedLineages;
+    const wasQuarantined = set.has(id);
+    if (quarantine === wasQuarantined) {
+      // Idempotent: already in target state. Ack only — no event.
+      this.ack(commandId);
+      return;
+    }
+    if (quarantine) {
+      set.add(id);
+      const event: QuarantineImposedEvent & { simTick: bigint } = {
+        kind: 'quarantineImposed',
+        simTick: this.state.simTick,
+        lineageId,
+      };
+      this.emit(event);
+    } else {
+      set.delete(id);
+      const event: QuarantineLiftedEvent & { simTick: bigint } = {
+        kind: 'quarantineLifted',
+        simTick: this.state.simTick,
+        lineageId,
+      };
+      this.emit(event);
+    }
+    this.ack(commandId);
   }
 
   // Run synchronously until the sim reaches `untilTick`, or until `paused`

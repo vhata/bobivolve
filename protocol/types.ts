@@ -56,6 +56,20 @@ export interface ConfigureAutoPauseCommand {
   readonly enabledTriggers: readonly string[];
 }
 
+export interface QuarantineCommand {
+  readonly kind: 'quarantine';
+  // Target lineage. Idempotent: quarantining an already-quarantined
+  // lineage succeeds as a no-op (CommandAck without an event).
+  readonly lineageId: string;
+}
+
+export interface ReleaseQuarantineCommand {
+  readonly kind: 'releaseQuarantine';
+  // Target lineage. Idempotent: releasing a non-quarantined lineage
+  // succeeds as a no-op (CommandAck without an event).
+  readonly lineageId: string;
+}
+
 export interface SaveCommand {
   readonly kind: 'save';
   readonly slot: string;
@@ -73,6 +87,8 @@ export type CommandBody =
   | ResumeCommand
   | StepCommand
   | ConfigureAutoPauseCommand
+  | QuarantineCommand
+  | ReleaseQuarantineCommand
   | SaveCommand
   | LoadCommand;
 
@@ -138,6 +154,18 @@ export interface CommandErrorEvent {
   readonly message: string;
 }
 
+export interface QuarantineImposedEvent {
+  readonly kind: 'quarantineImposed';
+  // Lineage now under quarantine. Emitted only on actual state flip.
+  readonly lineageId: string;
+}
+
+export interface QuarantineLiftedEvent {
+  readonly kind: 'quarantineLifted';
+  // Lineage whose quarantine just ended. Emitted only on actual state flip.
+  readonly lineageId: string;
+}
+
 export type SimEventBody =
   | TickEvent
   | ReplicationEvent
@@ -146,7 +174,9 @@ export type SimEventBody =
   | DeathEvent
   | AutoPausedEvent
   | CommandAckEvent
-  | CommandErrorEvent;
+  | CommandErrorEvent
+  | QuarantineImposedEvent
+  | QuarantineLiftedEvent;
 
 export type SimEvent = SimEventBody & {
   // Integer time. Floats are forbidden in tick fields (ARCHITECTURE.md).
