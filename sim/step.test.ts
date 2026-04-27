@@ -148,13 +148,14 @@ describe('replication', () => {
 });
 
 // Golden live population for seed=42 with TEST_FIRMWARE after TEST_TICKS.
-// Locked at the R1 metabolic mechanic; the value reflects extant probes,
-// not total ever spawned. Any change here is a determinism regression
-// and should be investigated, not "fixed" by updating the number.
-const GOLDEN_POP_SEED_42_TEST = 35;
+// Locked at the R1 metabolic mechanic on the procedural-systems
+// substrate; the value reflects extant probes, not total ever spawned.
+// Any change here is a determinism regression and should be
+// investigated, not "fixed" by updating the number.
+const GOLDEN_POP_SEED_42_TEST = 52;
 // Total probes ever spawned in the same run (used by tests that assert
 // against the ordinal counter, which never decreases).
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 187n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 351n;
 
 describe('metabolism', () => {
   it('a probe in a full cell nets gather rate − basal drain per tick', () => {
@@ -175,16 +176,17 @@ describe('metabolism', () => {
   });
 
   it('emits DeathEvent and removes the probe when energy is exhausted', () => {
-    // Force the death path: pin the founder's energy to zero and empty
-    // every cell on the lattice. Use TEST_FIRMWARE so the founder's
-    // gather pulls from the regen-fed cell but does not move via
-    // explore. Each tick: regen brings the cell to 1, drain takes 1,
-    // gather returns 1 → end-of-tick energy = 0, which trips death.
-    const state = createInitialState(Seed(42n), { founderFirmware: TEST_FIRMWARE });
+    // Force the death path: pin the founder's energy to zero with a
+    // firmware that has no gather. The system centre regens whether
+    // we like it or not (the founder spawns there), but without
+    // gather the founder cannot absorb the resources, so basal drain
+    // takes energy negative and phase-3 death fires.
+    const state = createInitialState(Seed(42n), {
+      founderFirmware: [{ kind: 'replicate', threshold: 100_000n }],
+    });
     const founder = state.probes.get(ProbeId('P0'));
     if (founder === undefined) throw new Error('founder missing');
     founder.energy = 0n;
-    state.resources.fill(0n);
     const events: SimEvent[] = [];
     tick(state, events);
     expect(state.probes.has(ProbeId('P0'))).toBe(false);

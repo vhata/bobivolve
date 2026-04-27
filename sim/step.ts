@@ -14,8 +14,7 @@ import type { Probe, SimState } from './state.js';
 import {
   LATTICE_CELL_COUNT,
   LATTICE_SIDE,
-  MAX_RESOURCE_PER_CELL,
-  RESOURCE_REGEN_PER_CELL_PER_TICK,
+  RESOURCE_REGEN_DIVISOR,
   cellIndex,
   diffuseResources,
 } from './substrate.js';
@@ -59,12 +58,19 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 export function tick(state: SimState, events?: SimEvent[]): void {
   state.simTick = SimTick(state.simTick + 1n);
 
-  // Phase 0a: regen.
+  // Phase 0a: regen. Each cell's regen rate scales with that cell's
+  // own cap — system centres replenish faster than their edges; void
+  // cells (cap = 0) never regen. Any resources a void cell catches via
+  // diffusion drain back out and stay drained.
   for (let i = 0; i < LATTICE_CELL_COUNT; i++) {
+    const cap = state.resourceCaps[i] ?? 0n;
+    if (cap === 0n) continue;
     const current = state.resources[i] ?? 0n;
-    if (current >= MAX_RESOURCE_PER_CELL) continue;
-    const next = current + RESOURCE_REGEN_PER_CELL_PER_TICK;
-    state.resources[i] = next > MAX_RESOURCE_PER_CELL ? MAX_RESOURCE_PER_CELL : next;
+    if (current >= cap) continue;
+    const rate = cap / RESOURCE_REGEN_DIVISOR;
+    if (rate === 0n) continue;
+    const next = current + rate;
+    state.resources[i] = next > cap ? cap : next;
   }
 
   // Phase 0b: diffusion. Pure integer arithmetic, conservative across

@@ -43,8 +43,13 @@ export type DirectiveStack = readonly Directive[];
 // fund the replication cost from this tick's harvest; explore between
 // the two so a fresh child does not immediately drift away from its
 // resource source.
+//
+// explore.threshold = 2^58 ≈ 1.5% per tick. On a 64×64 lattice this
+// gives the wave-front of colonisation real visible width — probes
+// take many ticks to walk between systems, and you can watch the
+// frontier creep across the void on the substrate panel.
 export const FOUNDER_FIRMWARE: DirectiveStack = [
   { kind: 'gather', rate: 2n },
-  { kind: 'explore', threshold: 1n << 60n },
+  { kind: 'explore', threshold: 1n << 58n },
   { kind: 'replicate', threshold: 1000n },
 ];
