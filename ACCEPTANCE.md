@@ -49,3 +49,42 @@ If they can do that, the design question — does the firmware-as-data idea prod
 ### Verdict
 
 Shipped as `r0-petri-dish`. Two items deferred with rationale: extra mutation kinds (gated on R1's richer firmware) and the state-rewind scrub UI (gated on later releases producing more events worth rewinding to). The R0 design question — does firmware-as-data drift produce something interesting on its own — is answerable by playing the dashboard.
+
+## Release 1 — Scarcity
+
+**Design question:** _Does selection pressure produce competitive lineage dynamics?_
+
+### Functional (from SPEC.md)
+
+- `⋯` Sub-lattice — fixed-size 2D grid; probes carry positions on it; resources live per cell
+- `⋯` Resources — u64 scalar quantity in each cell, with constant regen
+- `⋯` Resource diffusion — a fraction of each cell's resources flows to its neighbours every tick, deterministically (pure integer arithmetic, no PRNG draws)
+- `⋯` Energy budgets — every probe carries an energy field; basal metabolism drains it per tick, gather replenishes it, replication deducts a fixed cost
+- `⋯` Starvation — when a probe's energy reaches zero it dies; the host emits `DeathEvent`
+- `⋯` Gather directive — a parameterised directive that pulls resources from the probe's cell into its energy. Founder firmware becomes `[gather, replicate]`.
+- `⋯` Mutation: priority swap — meaningful now that the firmware has ≥2 directive kinds (carried over from R0's deferred list)
+- `⋯` Mutation: directive loss / gain — same gate; same carry-over
+
+### Implicit (from ARCHITECTURE.md and PROCESS.md)
+
+- `⋯` Determinism extends to the new mechanics — same seed produces a byte-for-byte identical event log including resource fields and death events; covered by the determinism golden
+- `⋯` Save / load round-trips the new state — probe positions, energies, and the lattice resource grid all survive a snapshot
+- `⋯` Headless capability extends — `pnpm sim` runs the full R1 mechanics with no UI attached
+- `⋯` Auto-pause: lineage extinction now actually fires (the death-event path is live)
+- `⋯` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`
+
+### Acceptance test (manual)
+
+A first-time visitor to the dashboard can, within ten minutes and without external instructions:
+
+- start a run at a chosen seed,
+- watch the population grow, plateau, and oscillate as births balance deaths,
+- watch named lineages compete — some thrive, some go extinct,
+- catch at least one extinction auto-pause as a clade collapses,
+- compare two surviving clades in the lineage inspector and see how their firmware has diverged under pressure.
+
+If they can do that, the design question — does selection pressure produce competitive lineage dynamics — is answerable by playing.
+
+### Verdict
+
+Pending. Acceptance criteria are open; the work just begun.
