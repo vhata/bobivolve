@@ -5,6 +5,7 @@ import type {
   SimEvent,
   SpeciationEvent,
 } from '../protocol/types.js';
+import { applyComputeTick } from './compute.js';
 import type { Directive } from './directive.js';
 import { BASAL_DRAIN_PER_TICK, REPLICATION_COST_ENERGY } from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
@@ -21,14 +22,17 @@ import {
 import { LineageId, ProbeId, SimTick } from './types.js';
 
 // Advance the simulation by one tick. R1 — Scarcity composes the
-// metabolism loop with directive-driven behaviour.
+// metabolism loop with directive-driven behaviour; R2 adds the Origin
+// compute book-keeping.
 //
 // Phase order:
-//   0a. Regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
+//   0a. Resource regen. Every cell gains RESOURCE_REGEN_PER_CELL_PER_TICK,
 //       capped at MAX_RESOURCE_PER_CELL.
 //   0b. Diffuse. A fraction of each cell's resources flows to its 4
 //       cardinal neighbours, reflecting at the boundary so total
 //       resources are conserved across the diffusion step.
+//   0c. Origin compute. Pay quarantine maintenance, then regen toward
+//       cap. Pure integer arithmetic; deterministic.
 //   1.  Basal drain. Every probe loses BASAL_DRAIN_PER_TICK from its
 //       energy reservoir. Energy may go negative here; death is not
 //       checked yet — phase 2 directives can still pull a probe back
@@ -43,8 +47,8 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 //   - PRNG draws are consumed in a fixed order: probes existing at tick
 //     start, iterated in Map insertion order (which JS guarantees).
 //     Children born this tick are NOT iterated until the next tick.
-//   - Regen, absorption, and drain are pure integer arithmetic; no
-//     PRNG draws.
+//   - Regen, absorption, drain, and compute book-keeping are pure
+//     integer arithmetic; no PRNG draws.
 //   - Absorption is competitive: a probe earlier in iteration order
 //     gets the cell's resources before a later probe in the same cell
 //     sees them. The order is locked by Map insertion (which lines up
@@ -58,10 +62,10 @@ import { LineageId, ProbeId, SimTick } from './types.js';
 export function tick(state: SimState, events?: SimEvent[]): void {
   state.simTick = SimTick(state.simTick + 1n);
 
-  // Phase 0a: regen. Each cell's regen rate scales with that cell's
-  // own cap — system centres replenish faster than their edges; void
-  // cells (cap = 0) never regen. Any resources a void cell catches via
-  // diffusion drain back out and stay drained.
+  // Phase 0a: resource regen. Each cell's regen rate scales with that
+  // cell's own cap — system centres replenish faster than their edges;
+  // void cells (cap = 0) never regen. Any resources a void cell catches
+  // via diffusion drain back out and stay drained.
   for (let i = 0; i < LATTICE_CELL_COUNT; i++) {
     const cap = state.resourceCaps[i] ?? 0n;
     if (cap === 0n) continue;
@@ -76,6 +80,10 @@ export function tick(state: SimState, events?: SimEvent[]): void {
   // Phase 0b: diffusion. Pure integer arithmetic, conservative across
   // boundaries — nothing leaves the lattice.
   diffuseResources(state.resources);
+
+  // Phase 0c: Origin compute. Pay quarantine maintenance first, then
+  // regen toward cap. See sim/compute.ts for the rationale on order.
+  state.originCompute = applyComputeTick(state.originCompute, state.quarantinedLineages.size);
 
   const ids = [...state.probes.keys()];
 

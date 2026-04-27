@@ -129,6 +129,13 @@ message Tick {
   uint32 actual_speed = 1;
   uint64 population_total = 2;
   map<string, uint64> population_by_lineage = 3;
+  // Origin compute budget at the heartbeat tick. Decimal strings for
+  // u64-safety on JSON-encoded transports. Max is the cap regen targets;
+  // the dashboard normalises against it. Best-effort like the rest of
+  // the heartbeat — the UI should treat dropped heartbeats as "value
+  // unchanged", not "value zero".
+  string origin_compute = 4;
+  string origin_compute_max = 5;
 }
 
 message Replication {

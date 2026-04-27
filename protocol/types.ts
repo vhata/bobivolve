@@ -108,6 +108,12 @@ export interface TickEvent {
   readonly actualSpeed: number;
   readonly populationTotal: bigint;
   readonly populationByLineage: Readonly<Record<string, bigint>>;
+  // Origin compute budget at this heartbeat. bigint so the seam can
+  // pass u64 cleanly; the proto3 wire encoding stringifies it. Max is
+  // the cap regen targets — the dashboard normalises against it
+  // without having to hard-code the sim tuning.
+  readonly originCompute: bigint;
+  readonly originComputeMax: bigint;
 }
 
 export interface ReplicationEvent {

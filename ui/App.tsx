@@ -6,6 +6,7 @@ import { ControlsPanel } from './components/ControlsPanel.js';
 import { EventsTimelinePanel } from './components/EventsTimelinePanel.js';
 import { LineageInspectorPanel } from './components/LineageInspectorPanel.js';
 import { LineageTreePanel } from './components/LineageTreePanel.js';
+import { OriginPanel } from './components/OriginPanel.js';
 import { PopulationPanel } from './components/PopulationPanel.js';
 import { RunPanel } from './components/RunPanel.js';
 import { SubstratePanel } from './components/SubstratePanel.js';
@@ -45,6 +46,7 @@ export function App(): React.JSX.Element {
         <RunPanel />
         <ControlsPanel />
         <AutoPausePanel />
+        <OriginPanel />
         <PopulationPanel />
         <SubstratePanel />
         <LineageTreePanel />
