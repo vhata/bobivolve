@@ -14,9 +14,10 @@
 //   - Acknowledge each command with CommandAck or, on validation failure,
 //     CommandError.
 
-import { ORIGIN_COMPUTE_MAX } from '../sim/compute.js';
-import type { Directive } from '../sim/directive.js';
+import { ORIGIN_COMPUTE_MAX, PATCH_AUTHORING_COST } from '../sim/compute.js';
+import type { Directive, DirectiveStack } from '../sim/directive.js';
 import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
+import { applyPatch, validatePatchFirmware } from '../sim/patch.js';
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
 import { LATTICE_SIDE, MAX_RESOURCE_PER_CELL } from '../sim/substrate.js';
@@ -27,7 +28,9 @@ import type {
   Command,
   CommandAckEvent,
   CommandErrorEvent,
+  DirectiveSpec,
   ParameterDrift,
+  PatchAppliedEvent,
   ProbeInspectorDirective,
   QuarantineImposedEvent,
   QuarantineLiftedEvent,
@@ -142,6 +145,39 @@ function directiveToInspector(directive: Directive): ProbeInspectorDirective {
         kind: 'explore',
         params: { threshold: directive.threshold.toString() },
       };
+  }
+}
+
+// Parse a wire-side DirectiveSpec into a sim-side Directive. Returns
+// null when the kind or params are malformed; the host surfaces that
+// as a CommandError. The conversion reverses directiveToInspector and
+// the lint discipline that forbids floats in tick fields enforces the
+// integer types here.
+function inspectorToDirective(spec: DirectiveSpec): Directive | null {
+  const decode = (key: string): bigint | null => {
+    const raw = spec.params[key];
+    if (raw === undefined) return null;
+    try {
+      return BigInt(raw);
+    } catch {
+      return null;
+    }
+  };
+  switch (spec.kind) {
+    case 'replicate': {
+      const threshold = decode('threshold');
+      return threshold === null ? null : { kind: 'replicate', threshold };
+    }
+    case 'gather': {
+      const rate = decode('rate');
+      return rate === null ? null : { kind: 'gather', rate };
+    }
+    case 'explore': {
+      const threshold = decode('threshold');
+      return threshold === null ? null : { kind: 'explore', threshold };
+    }
+    default:
+      return null;
   }
 }
 
@@ -342,6 +378,8 @@ export class NodeHost {
       };
     }
 
+    const referenceFirmware = lineage.referenceFirmware.map(directiveToInspector);
+
     return {
       queryId,
       kind: 'driftTelemetry',
@@ -350,6 +388,7 @@ export class NodeHost {
         population,
         parameters,
         divergenceDivisor: SPECIATION_DIVERGENCE_DIVISOR.toString(),
+        referenceFirmware,
       },
     };
   }
@@ -439,6 +478,9 @@ export class NodeHost {
       case 'releaseQuarantine':
         this.handleQuarantineToggle(cmd.commandId, cmd.lineageId, false);
         return;
+      case 'applyPatch':
+        this.handleApplyPatch(cmd.commandId, cmd.lineageId, cmd.firmware);
+        return;
       case 'save':
         this.handleSave(cmd.commandId, cmd.slot);
         return;
@@ -446,6 +488,78 @@ export class NodeHost {
         this.handleLoad(cmd.commandId, cmd.slot);
         return;
     }
+  }
+
+  // ApplyPatch: validate, charge Origin compute, install the patch,
+  // emit PatchApplied. SPEC.md "patches are inherited by descendants
+  // and drift like any other firmware" — applying overwrites the
+  // lineage's referenceFirmware and every extant probe in the lineage;
+  // subsequent replications drift from the patched stack via the
+  // normal mutation path.
+  private handleApplyPatch(
+    commandId: string,
+    lineageId: string,
+    firmwareSpecs: readonly DirectiveSpec[],
+  ): void {
+    if (this.state === null) {
+      this.error(commandId, 'cannot apply patch before newRun');
+      return;
+    }
+    const id = LineageId(lineageId);
+    if (!this.state.lineages.has(id)) {
+      this.error(commandId, `unknown lineage: ${lineageId}`);
+      return;
+    }
+    // Lineage must be living for the patch to bite anything.
+    let extant = 0;
+    for (const probe of this.state.probes.values()) {
+      if (probe.lineageId === id) {
+        extant += 1;
+        // No need to count higher than 1; the gate is "any".
+        break;
+      }
+    }
+    if (extant === 0) {
+      this.error(commandId, `lineage ${lineageId} has no extant probes`);
+      return;
+    }
+
+    const firmware: Directive[] = [];
+    for (const spec of firmwareSpecs) {
+      const directive = inspectorToDirective(spec);
+      if (directive === null) {
+        this.error(commandId, `malformed directive in patch: ${JSON.stringify(spec)}`);
+        return;
+      }
+      firmware.push(directive);
+    }
+    const newFirmware: DirectiveStack = firmware;
+
+    const validation = validatePatchFirmware(newFirmware);
+    if (validation !== null) {
+      this.error(commandId, validation);
+      return;
+    }
+
+    if (this.state.originCompute < PATCH_AUTHORING_COST) {
+      this.error(
+        commandId,
+        `insufficient Origin compute: need ${PATCH_AUTHORING_COST.toString()}, have ${this.state.originCompute.toString()}`,
+      );
+      return;
+    }
+    this.state.originCompute -= PATCH_AUTHORING_COST;
+
+    const result = applyPatch(this.state, id, newFirmware);
+
+    const event: PatchAppliedEvent & { simTick: bigint } = {
+      kind: 'patchApplied',
+      simTick: this.state.simTick,
+      lineageId,
+      probesAffected: BigInt(result.probesAffected),
+    };
+    this.emit(event);
+    this.ack(commandId);
   }
 
   // Both Quarantine and ReleaseQuarantine commands flow through here. The

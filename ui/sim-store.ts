@@ -9,7 +9,7 @@
 // tree views.
 
 import { create } from 'zustand';
-import type { ListSavesResult, SaveSummary, SimEvent } from '../protocol/types.js';
+import type { DirectiveSpec, ListSavesResult, SaveSummary, SimEvent } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
 
 export interface LineagePopulation {
@@ -106,6 +106,11 @@ export interface SimStoreState {
   // gap as "value unchanged", not "value zero".
   readonly originCompute: bigint | null;
   readonly originComputeMax: bigint | null;
+  // Submit a patch. Fire-and-forget at the store level; success or
+  // failure surfaces via PatchApplied or CommandError events on the
+  // transport. The host is responsible for charging compute and
+  // validating; the store does not pre-check.
+  readonly applyPatch: (lineageId: string, firmware: readonly DirectiveSpec[]) => void;
 }
 
 let nextCommandOrdinal = 0;
@@ -304,6 +309,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         set({ quarantinedLineages: next });
         return;
       }
+      case 'patchApplied':
+        // The lineage inspector re-polls driftTelemetry every 1500ms
+        // and picks up the new reference firmware from there. No
+        // dedicated store state needed at V1; future work will track
+        // applied patches for the lineage tree's intervention history.
+        return;
     }
   };
 
@@ -507,6 +518,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const commandId = mintCommandId('ui-releaseQuarantine');
       transport.send({ kind: 'releaseQuarantine', commandId, lineageId });
       set({ quarantinedLineages: next });
+    },
+    applyPatch: (lineageId, firmware) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-applyPatch');
+      transport.send({ kind: 'applyPatch', commandId, lineageId, firmware });
     },
     refreshSaves: async () => {
       const transport = get().transport;

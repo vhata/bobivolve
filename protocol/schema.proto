@@ -31,7 +31,8 @@ message Command {
     Pause pause = 4;
     Resume resume = 5;
     Step step = 6;
-    // 7..8 reserved: R2+ ApplyPatch, QueueDecree.
+    ApplyPatch apply_patch = 7;
+    // 8 reserved: R2+ QueueDecree.
     Quarantine quarantine = 9;
     ConfigureAutoPause configure_auto_pause = 10;
     Save save = 11;
@@ -44,8 +45,8 @@ message Command {
     ReleaseQuarantine release_quarantine = 13;
   }
 
-  reserved 7, 8;
-  reserved "apply_patch", "queue_decree";
+  reserved 8;
+  reserved "queue_decree";
 }
 
 message NewRun {
@@ -95,6 +96,29 @@ message ReleaseQuarantine {
   string lineage_id = 1;
 }
 
+message ApplyPatch {
+  // Target lineage. Must be living (population > 0); the host replies
+  // CommandError otherwise. The patched firmware overwrites the
+  // lineage's reference firmware AND every extant probe in the
+  // lineage. Subsequent replications drift from the patched firmware
+  // via the normal mutation path — a player intervention becomes
+  // part of the genetic record.
+  string lineage_id = 1;
+  // Full directive stack to install. Validated against
+  // MIN_FIRMWARE_LENGTH. Decimal-string params per the proto3 JSON
+  // convention.
+  repeated DirectiveSpec firmware = 2;
+}
+
+// DirectiveSpec — wire shape for a directive carried on a Command.
+// Mirrors ProbeInspectorDirective, which is the same shape carried on
+// a QueryResult; the duplication is deliberate while the patch editor
+// stabilises. Future cleanup may consolidate.
+message DirectiveSpec {
+  string kind = 1;
+  map<string, string> params = 2;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SimEvent — sim → UI. Two delivery tiers (heartbeat vs domain events) are an
 // implementation concern of the transport layer, not of the schema.
@@ -111,7 +135,9 @@ message SimEvent {
     Extinction extinction = 5;
     Death death = 6;
     // 7..8 reserved: R3+ FirstContact, TreatyViolation.
-    // 9 reserved: R2+ PatchSaturated.
+    // 9 reserved: R2+ PatchSaturated — fires when a player-authored
+    // patch reaches X% of the population. Detection logic and the
+    // event payload land alongside per-patch propagation tracking.
     AutoPaused auto_paused = 10;
     CommandAck command_ack = 11;
     CommandError command_error = 12;
@@ -119,6 +145,10 @@ message SimEvent {
     // the Quarantine / ReleaseQuarantine commands.
     QuarantineImposed quarantine_imposed = 13;
     QuarantineLifted quarantine_lifted = 14;
+    // Player-authored patch landed on a lineage. Carries the lineage
+    // id and the count of extant probes whose firmware was overwritten,
+    // so the dashboard can show an immediate effect indication.
+    PatchApplied patch_applied = 15;
   }
 
   reserved 7, 8, 9;
@@ -190,6 +220,15 @@ message QuarantineLifted {
   // actually flips — an idempotent ReleaseQuarantine on a lineage not
   // under quarantine emits a CommandAck but no QuarantineLifted.
   string lineage_id = 1;
+}
+
+message PatchApplied {
+  // Target lineage that just received a player-authored patch.
+  string lineage_id = 1;
+  // Count of extant probes whose firmware was overwritten when the
+  // patch landed. Decimal string for u64-safety on JSON-encoded
+  // transports.
+  string probes_affected = 2;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -281,6 +320,12 @@ message DriftTelemetry {
   // parameter; equivalently, the relative speciation threshold is
   // 1 / divergence_divisor (e.g. divisor 100 → ±1%).
   string divergence_divisor = 3;
+  // Current reference firmware in directive order. The patch editor
+  // starts from this so the player edits the lineage's actual current
+  // shape, not a derived view that has lost ordering. Same wire shape
+  // as the firmware carried on ApplyPatch — the editor round-trips
+  // the result of this query into a patch command on submit.
+  repeated DirectiveSpec reference_firmware = 4;
 }
 
 message ParameterDrift {
