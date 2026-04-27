@@ -185,13 +185,18 @@ export interface ListSavesQueryBody {
   readonly kind: 'listSaves';
 }
 
+export interface SubstrateQueryBody {
+  readonly kind: 'substrate';
+}
+
 export type QueryBody =
   | LineageTreeQueryBody
   | ProbeInspectorQueryBody
   | DriftTelemetryQueryBody
   | LogSliceQueryBody
   | PopulationSummaryQueryBody
-  | ListSavesQueryBody;
+  | ListSavesQueryBody
+  | SubstrateQueryBody;
 
 export type Query = QueryBody & {
   readonly queryId: string;
@@ -279,13 +284,37 @@ export interface SaveSummary {
   readonly savedAtMs: number;
 }
 
+export interface SubstrateResult {
+  readonly kind: 'substrate';
+  // Side of the (square) sub-lattice. Cells are flat row-major:
+  // `cells[y * side + x]`.
+  readonly side: number;
+  // Per-cell resource counts; decimal strings for u64-safe transport.
+  // Length is `side * side`.
+  readonly cells: readonly string[];
+  // Cap regen targets per cell; decimal string. The UI uses this to
+  // normalise the heatmap brightness without having to hardcode the
+  // sim's tuning.
+  readonly maxResourcePerCell: string;
+  // Position + lineage of every extant probe.
+  readonly probes: readonly SubstrateProbe[];
+}
+
+export interface SubstrateProbe {
+  readonly id: string;
+  readonly lineageId: string;
+  readonly x: number;
+  readonly y: number;
+}
+
 export type QueryResultBody =
   | LineageTreeResult
   | ProbeInspectorResult
   | DriftTelemetryResult
   | LogSliceResult
   | PopulationSummaryResult
-  | ListSavesResult;
+  | ListSavesResult
+  | SubstrateResult;
 
 export type QueryResult = QueryResultBody & {
   readonly queryId: string;

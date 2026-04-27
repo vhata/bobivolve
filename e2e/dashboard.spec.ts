@@ -210,6 +210,7 @@ test('every panel and control is visibly rendered', async ({ page }) => {
     '.controls-panel',
     '.autopause-panel',
     '.population-panel',
+    '.substrate-panel',
     '.lineage-tree-panel',
     '.inspector-panel',
     '.timeline-panel',
@@ -289,6 +290,25 @@ test('lineage inspector surfaces the speciation rule', async ({ page }) => {
   // rendered next to the Drift heading. R0 sets the divisor to 100, so
   // the threshold reads as ±1.00%.
   await expect(inspectorPanel).toContainText(/speciates beyond ±\d+\.\d+% of founder/);
+});
+
+test('substrate panel renders the lattice and at least one probe dot', async ({ page }) => {
+  await page.goto('/');
+  // Wait for the substrate query to round-trip (REFRESH_INTERVAL_MS is
+  // 750ms; allow a few cycles for slow CI).
+  await expect
+    .poll(
+      async () => {
+        const cells = await page.locator('.substrate-svg rect').count();
+        return cells;
+      },
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
+  // 32×32 = 1024 cells; the founder is on the lattice from tick 0.
+  const cellCount = await page.locator('.substrate-svg rect').count();
+  expect(cellCount).toBe(1024);
+  await expect.poll(async () => page.locator('.substrate-svg circle').count()).toBeGreaterThan(0);
 });
 
 test('Save creates a slot that appears in the saves list', async ({ page }) => {

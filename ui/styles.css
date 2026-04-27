@@ -245,6 +245,25 @@ body {
   margin-top: 0.25rem;
 }
 
+/* Deep-tree visual cap. Past MAX_VISUAL_DEPTH (8 levels) the JSX still
+   nests <ul> for structural correctness, but we stop adding indent so
+   the panel stays readable. The lineage-depth-tag in the row carries
+   the actual depth + parent so the player does not lose context. */
+.lineage-node-deep .lineage-children {
+  padding-left: 0;
+  margin-left: 0;
+  border-left: none;
+  margin-top: 0;
+}
+
+.lineage-depth-tag {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  color: #6e7178;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
 .lineage-node {
   margin: 0.15rem 0;
 }
@@ -261,8 +280,12 @@ body {
   margin-left: 0.4rem;
 }
 
-.lineage-node-extinct .lineage-id,
-.lineage-node-extinct .lineage-meta {
+/* Strike only the row of THIS extinct lineage, not its descendants —
+   children whose own row is alive should render normally even when an
+   ancestor branch has gone extinct. The `>` keeps the rule scoped to
+   the direct row inside this lineage-node. */
+.lineage-node-extinct > .lineage-node-row .lineage-id,
+.lineage-node-extinct > .lineage-node-row .lineage-meta {
   color: #555861;
   text-decoration: line-through;
 }
@@ -578,6 +601,24 @@ body {
 .timeline-panel {
   grid-column: span 2;
   min-width: 0;
+}
+
+.substrate-panel {
+  grid-column: span 2;
+  min-width: 0;
+  max-height: none;
+}
+
+.substrate-svg {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
+  background: #0e0f12;
+  border: 1px solid #23252b;
+  border-radius: 4px;
+  shape-rendering: crispEdges;
 }
 
 .timeline-svg {

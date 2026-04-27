@@ -18,6 +18,7 @@ import type { Directive } from '../sim/directive.js';
 import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
 import { tick } from '../sim/step.js';
 import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
+import { LATTICE_SIDE, MAX_RESOURCE_PER_CELL } from '../sim/substrate.js';
 import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
 import type {
@@ -30,6 +31,7 @@ import type {
   Query,
   QueryResult,
   SimEvent,
+  SubstrateProbe,
   TickEvent,
 } from '../protocol/types.js';
 import { EventLogWriter } from './event-log.js';
@@ -210,6 +212,8 @@ export class NodeHost {
         return this.queryDriftTelemetry(query.queryId, query.lineageId);
       case 'listSaves':
         return this.queryListSaves(query.queryId);
+      case 'substrate':
+        return this.querySubstrate(query.queryId);
       case 'lineageTree':
       case 'logSlice':
       case 'populationSummary':
@@ -227,6 +231,37 @@ export class NodeHost {
     }
     const index = await readSavesIndex(this.persistence.storage);
     return { queryId, kind: 'listSaves', saves: index.saves };
+  }
+
+  private querySubstrate(queryId: string): QueryResult {
+    if (this.state === null) {
+      return {
+        queryId,
+        kind: 'substrate',
+        side: LATTICE_SIDE,
+        cells: [],
+        maxResourcePerCell: MAX_RESOURCE_PER_CELL.toString(),
+        probes: [],
+      };
+    }
+    const cells = this.state.resources.map((r) => r.toString());
+    const probes: SubstrateProbe[] = [];
+    for (const probe of this.state.probes.values()) {
+      probes.push({
+        id: probe.id,
+        lineageId: probe.lineageId,
+        x: probe.position.x,
+        y: probe.position.y,
+      });
+    }
+    return {
+      queryId,
+      kind: 'substrate',
+      side: LATTICE_SIDE,
+      cells,
+      maxResourcePerCell: MAX_RESOURCE_PER_CELL.toString(),
+      probes,
+    };
   }
 
   private queryDriftTelemetry(queryId: string, lineageId: string): QueryResult {
