@@ -90,3 +90,44 @@ If they can do that, the design question — does selection pressure produce com
 ### Verdict
 
 Shipped as `r1-scarcity`. The R1 design question is now answerable from the dashboard: open a run, watch the lattice fill, watch lineages compete and die, compare drift envelopes between survivors. Selection pressure is the new variable, and lineage dominance no longer correlates with founding age alone.
+
+## Release 2 — The Engineer's Console
+
+**Design question:** _Does the player's role as meta-programmer feel meaningful?_
+
+R2 turns the player from a spectator into a participant. The simulation already produces lineages that compete, drift, and die; R2 lets the player author firmware modifications, queue them to fire on conditions, and suspend lineages from replicating. Interventions are part of the genetic record — a patch becomes a directive that descendants inherit and that mutation can drift forward. The Origin compute budget makes intervention scarce, so patch authoring is a decision rather than a tic.
+
+### Functional (from SPEC.md)
+
+- `⋯` Quarantine — a per-lineage suspension that halts replication for any probe in that lineage; reversible; survives save/load. The simplest intervention; lands first as the smoke test for the whole intervention pipeline.
+- `⋯` Origin compute — renewable u64 budget regenerated per tick. Patch authoring (and decree queueing) consumes it; quarantine is free. Exposed to the dashboard so the player can see what they can afford.
+- `⋯` Patches — directive editor authors a modification to a target lineage's firmware. Applied patches mutate the lineage's reference firmware so descendants inherit; the patch itself drifts forward like any directive (parameter drift, priority swap, loss/gain). Versioned: each patch carries an id and a target lineage id; the lineage tree records when the patch landed.
+- `⋯` Decrees — conditional patches queued to fire when their triggers match. R2 ships a narrow trigger set (population threshold, lineage near-extinction, drift-event); broader triggers wait on later releases that produce the events. Trigger evaluation is a pure function of state — no PRNG draws.
+- `⋯` Intervention-versioned lineage tree — the lineage tree shows patches as overlays on the lineages they touched, so the propagation of a player intervention is visible alongside natural speciation.
+- `⋯` PatchSaturated auto-pause trigger — fires when a player-authored patch reaches X% of the population. The trigger and the field number are reserved in the schema; R2 wires them.
+
+### Implicit (from ARCHITECTURE.md and PROCESS.md)
+
+- `⋯` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. Goldens for at least one R2 case (an applied patch that propagates through a lineage) are checked in and verified in CI.
+- `⋯` Save / load round-trips intervention state — quarantines, queued decrees, applied-patch metadata, and the Origin compute budget all survive a snapshot.
+- `⋯` Headless capability extends — `pnpm sim` accepts a command script that includes patches, decrees, and quarantines, and produces the same event log a UI-driven session would.
+- `⋯` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`.
+
+### Deferred to a later release (with rationale)
+
+- `⋯` Forensic replay scrub UI — listed in TODO under `#r2 #ui` and unblocked by R2's richer event set. Bundle into R2 if it fits the pacing; otherwise it ships when the Layer 2 review judges the affordance worth the integration noise. The data path (snapshots + log replay) is already in place; only the affordance is missing.
+- `—` Patch-incompatibility between forks — SPEC places this at R5 (Communion). Out of scope for R2.
+
+### Acceptance test (manual)
+
+A first-time visitor to the dashboard can, within ten minutes and without external instructions:
+
+- start a run at a chosen seed,
+- watch lineages emerge, compete, and one of them begin to fade,
+- author a patch that adjusts the fading lineage's firmware,
+- watch the patch propagate through descendants and either rescue the lineage or fail to,
+- queue a decree that responds to a future condition (e.g. another lineage near-extinction),
+- quarantine a lineage that's outcompeting the rest, and watch the rest of the swarm rebalance,
+- compare two clades in the lineage inspector and see, for each, the patches that have landed on it.
+
+If they can do that, the design question — does the player's role as meta-programmer feel meaningful — is answerable by playing.
