@@ -23,8 +23,8 @@ const TRIGGERS: readonly TriggerDef[] = [
   {
     id: 'lineageExtinction',
     label: 'Lineage extinction',
-    description: 'Pause when a lineage drops below threshold (waits for R1 death).',
-    available: false,
+    description: 'Pause when a lineage loses its last extant member.',
+    available: true,
   },
   {
     id: 'firstContact',

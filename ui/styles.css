@@ -208,6 +208,18 @@ body {
 .inspector-panel {
   grid-column: span 2;
   min-width: 0;
+  /* The lineage inspector now hosts firmware summary + multiple
+     parameter drift rows + sparklines; the default 360px panel cap
+     would clip the last row. Allow it to grow to fit content. */
+  max-height: none;
+}
+
+.firmware-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
 }
 
 /* The panel spans two columns so a long u64 threshold fits on one line.

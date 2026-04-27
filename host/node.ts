@@ -537,10 +537,10 @@ export class NodeHost {
   private maybeAutoPause(event: SimEvent): boolean {
     if (this.replaying) return false;
     let trigger: string | null = null;
-    // Significant-drift trigger: speciation events. Other R0-applicable
-    // triggers (lineage extinction) wait for their mechanics to land.
     if (event.kind === 'speciation' && this.autoPauseTriggers.has('speciation')) {
       trigger = 'speciation';
+    } else if (event.kind === 'extinction' && this.autoPauseTriggers.has('lineageExtinction')) {
+      trigger = 'lineageExtinction';
     }
     if (trigger === null) return false;
     this.paused = true;
