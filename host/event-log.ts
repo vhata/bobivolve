@@ -50,10 +50,18 @@ function bigintReplacer(_key: string, value: unknown): unknown {
   return value;
 }
 
+// Bigint reviver, keyed by the known bigint-bearing fields on the event
+// types we actually log. Heartbeats are NOT logged (see header), so the
+// dynamic-keyed map value `populationByLineage[lineageId]` does not need
+// restoration here — the only `populationByLineage` values that ever
+// reach this reviver via in-process structuredClone are still bigints
+// because they never went through JSON. If the host ever starts logging
+// heartbeats, this reviver needs an upgrade: either switch the codec to
+// the tagged-bigint encoding the snapshot codec uses (`{__bigint__: "…"}`)
+// or post-parse walk the populationByLineage object to convert each
+// dynamic-keyed entry. Both are fine; the cheap one is documenting the
+// constraint and preserving the choice until it bites.
 function bigintReviver(key: string, value: unknown): unknown {
-  // Tick fields and the SimTick/Seed/* family are bigints on the wire when
-  // produced via bigintReplacer. Restore them on read for the well-known
-  // bigint-bearing keys.
   if (typeof value !== 'string') return value;
   switch (key) {
     case 'tick':
@@ -64,6 +72,7 @@ function bigintReviver(key: string, value: unknown): unknown {
     case 'bornAtTick':
     case 'foundedAtTick':
     case 'threshold':
+    case 'rate':
     case 'nextProbeOrdinal':
     case 'nextLineageOrdinal':
       return BigInt(value);
