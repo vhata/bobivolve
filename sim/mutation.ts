@@ -61,6 +61,16 @@ function maybeMutateDirective(rng: Xoshiro256ss, directive: Directive): Directiv
         kind: 'replicate',
         threshold: driftU64(rng, directive.threshold),
       };
+    case 'gather':
+      return {
+        kind: 'gather',
+        rate: driftU64(rng, directive.rate),
+      };
+    case 'explore':
+      return {
+        kind: 'explore',
+        threshold: driftU64(rng, directive.threshold),
+      };
   }
 }
 

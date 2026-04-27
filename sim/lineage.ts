@@ -1,4 +1,10 @@
-import type { Directive, DirectiveStack, ReplicateDirective } from './directive.js';
+import type {
+  Directive,
+  DirectiveStack,
+  ExploreDirective,
+  GatherDirective,
+  ReplicateDirective,
+} from './directive.js';
 import type { LineageId, ProbeId, SimTick } from './types.js';
 
 // Lineage clustering. SPEC.md: probes are clustered into lineages based on
@@ -53,6 +59,10 @@ function directiveDiverged(child: Directive, reference: Directive): boolean {
   switch (child.kind) {
     case 'replicate':
       return parameterDiverged(child.threshold, (reference as ReplicateDirective).threshold);
+    case 'gather':
+      return parameterDiverged(child.rate, (reference as GatherDirective).rate);
+    case 'explore':
+      return parameterDiverged(child.threshold, (reference as ExploreDirective).threshold);
   }
 }
 

@@ -127,6 +127,16 @@ function directiveToInspector(directive: Directive): ProbeInspectorDirective {
         kind: 'replicate',
         params: { threshold: directive.threshold.toString() },
       };
+    case 'gather':
+      return {
+        kind: 'gather',
+        params: { rate: directive.rate.toString() },
+      };
+    case 'explore':
+      return {
+        kind: 'explore',
+        params: { threshold: directive.threshold.toString() },
+      };
   }
 }
 
@@ -230,26 +240,38 @@ export class NodeHost {
 
     // Walk extant probes in this lineage, accumulate per-parameter stats.
     // Reference values come from the lineage's referenceFirmware (set at
-    // speciation, immutable afterwards).
+    // speciation, immutable afterwards). Each directive contributes one
+    // parameter keyed by `${kind}.${param}` so a richer firmware does
+    // not collide.
     const accum = new Map<string, { sum: bigint; min: bigint; max: bigint; count: bigint }>();
+    const accumulate = (key: string, value: bigint): void => {
+      const existing = accum.get(key);
+      if (existing === undefined) {
+        accum.set(key, { sum: value, min: value, max: value, count: 1n });
+      } else {
+        accum.set(key, {
+          sum: existing.sum + value,
+          min: value < existing.min ? value : existing.min,
+          max: value > existing.max ? value : existing.max,
+          count: existing.count + 1n,
+        });
+      }
+    };
     let population = 0n;
     for (const probe of this.state.probes.values()) {
       if (probe.lineageId !== lineage.id) continue;
       population += 1n;
       for (const directive of probe.firmware) {
-        if (directive.kind !== 'replicate') continue;
-        const key = 'replicate.threshold';
-        const existing = accum.get(key);
-        const value = directive.threshold;
-        if (existing === undefined) {
-          accum.set(key, { sum: value, min: value, max: value, count: 1n });
-        } else {
-          accum.set(key, {
-            sum: existing.sum + value,
-            min: value < existing.min ? value : existing.min,
-            max: value > existing.max ? value : existing.max,
-            count: existing.count + 1n,
-          });
+        switch (directive.kind) {
+          case 'replicate':
+            accumulate('replicate.threshold', directive.threshold);
+            break;
+          case 'gather':
+            accumulate('gather.rate', directive.rate);
+            break;
+          case 'explore':
+            accumulate('explore.threshold', directive.threshold);
+            break;
         }
       }
     }
@@ -257,8 +279,17 @@ export class NodeHost {
     // Reference values from the lineage's frozen reference firmware.
     const reference = new Map<string, bigint>();
     for (const directive of lineage.referenceFirmware) {
-      if (directive.kind !== 'replicate') continue;
-      reference.set('replicate.threshold', directive.threshold);
+      switch (directive.kind) {
+        case 'replicate':
+          reference.set('replicate.threshold', directive.threshold);
+          break;
+        case 'gather':
+          reference.set('gather.rate', directive.rate);
+          break;
+        case 'explore':
+          reference.set('explore.threshold', directive.threshold);
+          break;
+      }
     }
 
     const parameters: Record<string, ParameterDrift> = {};

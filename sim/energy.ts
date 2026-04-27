@@ -19,13 +19,6 @@ export const INITIAL_ENERGY = 10_000n;
 // ticks.
 export const BASAL_DRAIN_PER_TICK = 1n;
 
-// Energy a probe absorbs from its cell each tick. The actual gain is
-// min(cell_resources, ABSORPTION_PER_PROBE_PER_TICK) — a probe in a
-// depleted cell gains nothing. Set above BASAL_DRAIN_PER_TICK so a
-// well-resourced probe nets positive each tick and can replicate;
-// below it would starve everyone everywhere.
-export const ABSORPTION_PER_PROBE_PER_TICK = 2n;
-
 // Energy transferred from parent to child on every successful
 // replication. The parent loses this amount; the child begins life
 // with exactly this much. Combined with the directive's threshold this
