@@ -245,23 +245,12 @@ body {
   margin-top: 0.25rem;
 }
 
-/* Deep-tree visual cap. Past MAX_VISUAL_DEPTH (8 levels) the JSX still
-   nests <ul> for structural correctness, but we stop adding indent so
-   the panel stays readable. The lineage-depth-tag in the row carries
-   the actual depth + parent so the player does not lose context. */
-.lineage-node-deep .lineage-children {
-  padding-left: 0;
-  margin-left: 0;
-  border-left: none;
-  margin-top: 0;
-}
-
-.lineage-depth-tag {
-  margin-left: 0.5rem;
-  font-size: 0.7rem;
-  color: #6e7178;
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
+/* Deep living chains can scroll horizontally rather than truncate or
+   collapse. The panel body's overflow already permits this; per-node
+   shrink-prevention keeps long names from wrapping when the tree is
+   deep. */
+.lineage-tree-panel .panel-body {
+  overflow-x: auto;
 }
 
 .lineage-node {
@@ -280,10 +269,9 @@ body {
   margin-left: 0.4rem;
 }
 
-/* Strike only the row of THIS extinct lineage, not its descendants —
-   children whose own row is alive should render normally even when an
-   ancestor branch has gone extinct. The `>` keeps the rule scoped to
-   the direct row inside this lineage-node. */
+/* The extinct-lineage class is no longer used — the lineage tree
+   filters dead lineages out entirely instead of styling them. The
+   selector lives on for any future "show extinct" toggle. */
 .lineage-node-extinct > .lineage-node-row .lineage-id,
 .lineage-node-extinct > .lineage-node-row .lineage-meta {
   color: #555861;
