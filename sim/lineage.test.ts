@@ -6,7 +6,7 @@ import { tickN } from './step.js';
 import { LineageId, ProbeId, Seed } from './types.js';
 
 describe('firmwareDiverged', () => {
-  const ref: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
+  const ref: DirectiveStack = [{ kind: 'replicate', threshold: 100_000n }];
 
   it('returns false for identical firmware', () => {
     expect(firmwareDiverged(ref, ref)).toBe(false);
@@ -14,12 +14,12 @@ describe('firmwareDiverged', () => {
 
   it('returns false for parameters within tolerance', () => {
     // Drift well below threshold/DIVISOR.
-    const child: DirectiveStack = [{ kind: 'replicate', threshold: (1n << 54n) + 1n }];
+    const child: DirectiveStack = [{ kind: 'replicate', threshold: 100_001n }];
     expect(firmwareDiverged(child, ref)).toBe(false);
   });
 
   it('returns true when drift exceeds reference / DIVISOR', () => {
-    const refValue = 1n << 54n;
+    const refValue = 100_000n;
     const breach = refValue + refValue / SPECIATION_DIVERGENCE_DIVISOR + 1n;
     const child: DirectiveStack = [{ kind: 'replicate', threshold: breach }];
     expect(firmwareDiverged(child, ref)).toBe(true);
@@ -27,15 +27,15 @@ describe('firmwareDiverged', () => {
 
   it('returns true when stacks differ in length', () => {
     const longer: DirectiveStack = [
-      { kind: 'replicate', threshold: 1n << 54n },
-      { kind: 'replicate', threshold: 1n << 54n },
+      { kind: 'replicate', threshold: 100_000n },
+      { kind: 'replicate', threshold: 100_000n },
     ];
     expect(firmwareDiverged(longer, ref)).toBe(true);
   });
 });
 
 describe('lineage clustering', () => {
-  const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1n << 54n }];
+  const TEST_FIRMWARE: DirectiveStack = [{ kind: 'replicate', threshold: 1000n }];
 
   it('seeds L0 as the founding lineage with the founder firmware as reference', () => {
     const state = createInitialState(Seed(7n), TEST_FIRMWARE);
@@ -47,15 +47,17 @@ describe('lineage clustering', () => {
     expect(l0?.referenceFirmware).toEqual(TEST_FIRMWARE);
   });
 
-  it('does not speciate when no drift has occurred', () => {
-    // Replication without any mutation event keeps everyone in L0. We can't
-    // easily prevent mutation entirely (it's a function of PRNG draws), but
-    // we can assert: lineage count is bounded, and every lineage has a
-    // founder probe that exists.
+  it('every registered lineage has a sane referenceFirmware', () => {
+    // Under R1, founder probes can die — so the previous assertion
+    // (that every lineage's founderProbeId still resolves in
+    // state.probes) is no longer a valid invariant. The lineage
+    // record itself must stay consistent: founderProbeId is non-empty
+    // and referenceFirmware is non-degenerate.
     const state = createInitialState(Seed(7n), TEST_FIRMWARE);
     tickN(state, 6000n);
     for (const lineage of state.lineages.values()) {
-      expect(state.probes.has(lineage.founderProbeId)).toBe(true);
+      expect(lineage.founderProbeId.length).toBeGreaterThan(0);
+      expect(lineage.referenceFirmware.length).toBeGreaterThan(0);
     }
   });
 
@@ -78,14 +80,17 @@ describe('lineage clustering', () => {
     }
   });
 
-  it('each lineage references its founder probe by id', () => {
+  it('each lineage references its founder probe by id (when still alive)', () => {
     const state = createInitialState(Seed(42n), TEST_FIRMWARE);
     tickN(state, 8000n);
     for (const lineage of state.lineages.values()) {
       const founder = state.probes.get(lineage.founderProbeId);
-      expect(founder).toBeDefined();
-      expect(founder?.lineageId).toBe(lineage.id);
-      expect(founder?.firmware).toEqual(lineage.referenceFirmware);
+      // Founders can die under R1 — skip dead ones. For the survivors,
+      // the Probe object's lineageId and firmware must match the
+      // lineage's record.
+      if (founder === undefined) continue;
+      expect(founder.lineageId).toBe(lineage.id);
+      expect(founder.firmware).toEqual(lineage.referenceFirmware);
     }
   });
 

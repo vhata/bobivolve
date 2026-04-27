@@ -37,14 +37,12 @@ describe('createInitialState', () => {
     const state = createInitialState(Seed(42n));
     const founder = state.probes.get(ProbeId('P0'));
     expect(founder?.energy).toBe(INITIAL_ENERGY);
-    expect(state.initialEnergy).toBe(INITIAL_ENERGY);
   });
 
-  it('initialEnergy override flows through to the founder and to children', () => {
-    const state = createInitialState(Seed(42n), { initialEnergy: 50n });
+  it('founderEnergy override sets the founder energy at construction', () => {
+    const state = createInitialState(Seed(42n), { founderEnergy: 50n });
     const founder = state.probes.get(ProbeId('P0'));
     expect(founder?.energy).toBe(50n);
-    expect(state.initialEnergy).toBe(50n);
   });
 
   it('is deterministic across constructions with the same seed', () => {

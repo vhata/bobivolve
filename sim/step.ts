@@ -1,6 +1,10 @@
 import type { DeathEvent, ReplicationEvent, SimEvent, SpeciationEvent } from '../protocol/types.js';
 import type { Directive } from './directive.js';
-import { ABSORPTION_PER_PROBE_PER_TICK, BASAL_DRAIN_PER_TICK } from './energy.js';
+import {
+  ABSORPTION_PER_PROBE_PER_TICK,
+  BASAL_DRAIN_PER_TICK,
+  REPLICATION_COST_ENERGY,
+} from './energy.js';
 import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
@@ -128,8 +132,14 @@ function maybeReplicate(
   threshold: bigint,
   events: SimEvent[] | undefined,
 ): void {
-  const roll = state.rng.nextU64();
-  if (roll >= threshold) return;
+  // Energy-threshold gating per SPEC.md: "Probes replicate when their
+  // internal energy passes a directive-defined threshold." A probe must
+  // also be able to fund the replication cost; without it, the act
+  // would push the parent into starvation, which is not what the
+  // mechanic models.
+  if (parent.energy < threshold) return;
+  if (parent.energy < REPLICATION_COST_ENERGY) return;
+  parent.energy -= REPLICATION_COST_ENERGY;
 
   const mutation = maybeMutate(state.rng, parent.firmware);
   const childFirmware = mutation.firmware;
@@ -182,11 +192,10 @@ function maybeReplicate(
     // Children spawn at the parent's cell. Movement (if it ever lands)
     // is a directive's job, not replication's.
     position: parent.position,
-    // Children begin with the run's initial-energy budget. Replication
-    // does not yet cost the parent anything; that's a deliberate
-    // separation of commits — the cost lands once resources can fund
-    // the deficit.
-    energy: state.initialEnergy,
+    // The parent's REPLICATION_COST_ENERGY transfers across to the
+    // child. Total system energy is conserved by replication; only
+    // metabolism (regen, absorption, drain) changes the system total.
+    energy: REPLICATION_COST_ENERGY,
   };
   state.probes.set(childId, child);
 

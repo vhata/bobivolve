@@ -127,7 +127,7 @@ test('pause actually halts growth at 64× with a busy worker', async ({ page }) 
       },
       { timeout: 30_000 },
     )
-    .toBeGreaterThan(50);
+    .toBeGreaterThan(25);
 
   // Pause.
   await page.getByRole('button', { name: /^Pause$/ }).click();
@@ -159,7 +159,7 @@ test('pause clears the pending indicator within a reasonable window', async ({ p
       },
       { timeout: 30_000 },
     )
-    .toBeGreaterThan(50);
+    .toBeGreaterThan(25);
 
   // Click pause. data-pending should be true momentarily, then false
   // once the worker acks. data-stuck should never go true under nominal

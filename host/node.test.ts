@@ -16,7 +16,12 @@ import type { Command, ReplicationEvent, SimEvent, TickEvent } from '../protocol
 // the existing sim-level golden.
 const SEED_42 = 42n;
 const TICKS_3000 = 3000n;
-const GOLDEN_POP_SEED_42_TEST = 27n;
+// Live population at end of run (after deaths). Locked against the
+// sim-level golden in sim/step.test.ts.
+const GOLDEN_LIVE_POP_SEED_42 = 33n;
+// Total probes ever spawned (founder + every replication). Differs
+// from live population because R1 has deaths.
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 133n;
 
 function makeFakeClock(): () => number {
   // Returns a clock whose readings advance by 1ms per call, deterministically.
@@ -103,13 +108,16 @@ describe('NodeHost replication events', () => {
     const replications = events.filter(
       (e): e is ReplicationEvent & { simTick: bigint } => e.kind === 'replication',
     );
-    // Founder + replications == final population (at this seed, no death).
-    expect(BigInt(replications.length) + 1n).toBe(GOLDEN_POP_SEED_42_TEST);
+    // Founder + every replication = total ever spawned. Some have died
+    // by tick 3000 under R1 metabolism, so the live population is lower.
+    expect(BigInt(replications.length) + 1n).toBe(GOLDEN_TOTAL_SPAWNED_SEED_42);
 
-    // Every replication event names a probe id and a lineage id.
+    // Every replication event names a well-formed probe id and a
+    // well-formed lineage id (children of speciating parents land in
+    // a new lineage, so the id is no longer always L0).
     for (const e of replications) {
       expect(e.childProbeId).toMatch(/^P\d+$/);
-      expect(e.lineageId).toBe('L0');
+      expect(e.lineageId).toMatch(/^L\d+$/);
     }
   });
 
@@ -179,7 +187,7 @@ describe('NodeHost heartbeat', () => {
       let sum = 0n;
       for (const v of Object.values(last.populationByLineage)) sum += v;
       expect(sum).toBe(last.populationTotal);
-      expect(last.populationTotal).toBe(GOLDEN_POP_SEED_42_TEST);
+      expect(last.populationTotal).toBe(GOLDEN_LIVE_POP_SEED_42);
     }
   });
 });

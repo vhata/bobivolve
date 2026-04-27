@@ -7,12 +7,11 @@
 // part of the (seed → event-log) contract. Changing them changes every
 // existing golden. Tunable here only; never duplicate.
 
-// Default energy for newly-minted probes: founder at construction, every
-// child at replication. Set generously so that the existing R0-era
-// goldens — which run for at most 5000 ticks — see no deaths and
-// continue to produce identical event logs. Death is exercised by tests
-// that pass an explicit lower override to createInitialState.
-export const INITIAL_ENERGY = 1_000_000n;
+// Founder's starting energy at run construction. Children do NOT start
+// here — they start with REPLICATION_COST_ENERGY transferred from the
+// parent, keeping total system energy bounded by metabolism rather
+// than by spawning fresh reserves out of nothing.
+export const INITIAL_ENERGY = 10_000n;
 
 // Energy lost per probe per tick from basal metabolism, deducted before
 // any directive runs. With the default INITIAL_ENERGY a probe with no
@@ -26,3 +25,12 @@ export const BASAL_DRAIN_PER_TICK = 1n;
 // well-resourced probe nets positive each tick and can replicate;
 // below it would starve everyone everywhere.
 export const ABSORPTION_PER_PROBE_PER_TICK = 2n;
+
+// Energy transferred from parent to child on every successful
+// replication. The parent loses this amount; the child begins life
+// with exactly this much. Combined with the directive's threshold this
+// gates the rate at which a probe can fund offspring — a probe in a
+// steady cell of net (ABSORPTION - DRAIN) earns the cost back every
+// COST / net ticks. Selection pressure favours lineages whose firmware
+// lets them earn the cost faster than their neighbours.
+export const REPLICATION_COST_ENERGY = 1000n;

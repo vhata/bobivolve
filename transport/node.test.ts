@@ -15,7 +15,10 @@ import type { Command, ReplicationEvent, SimEvent } from '../protocol/types.js';
 
 const SEED_42 = 42n;
 const TICKS_3000 = 3000n;
-const GOLDEN_POP_SEED_42_TEST = 27n;
+// Total probes ever spawned (founder + every replication) for the
+// seed=42, 3000-tick run under R1 metabolic mechanics. Some of these
+// have since died, so this is not the live population.
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 133n;
 
 function fakeClock(): () => number {
   let t = 0;
@@ -94,7 +97,7 @@ describe('NodeTransport contract', () => {
     // production determinism golden will assert this against a checked-in
     // file; here we assert the property without committing the file.
     expect(a).toEqual(b);
-    expect(BigInt(a.length) + 1n).toBe(GOLDEN_POP_SEED_42_TEST);
+    expect(BigInt(a.length) + 1n).toBe(GOLDEN_TOTAL_SPAWNED_SEED_42);
   });
 
   it('different seeds produce different replication streams', () => {
