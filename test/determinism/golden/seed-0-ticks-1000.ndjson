@@ -19,7 +19,7 @@
 {"kind":"replication","simTick":"6","parentProbeId":"P12","childProbeId":"P18","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"6","parentProbeId":"P13","childProbeId":"P19","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"6","parentProbeId":"P14","childProbeId":"P20","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"6","parentLineageId":"L0","newLineageId":"L1","newLineageName":"Refuges","founderProbeId":"P21"}
+{"kind":"speciation","simTick":"6","parentLineageId":"L0","newLineageId":"L1","newLineageName":"Wayward Sounds","founderProbeId":"P21"}
 {"kind":"replication","simTick":"6","parentProbeId":"P15","childProbeId":"P21","lineageId":"L1","mutated":true}
 {"kind":"replication","simTick":"7","parentProbeId":"P0","childProbeId":"P22","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"7","parentProbeId":"P16","childProbeId":"P23","lineageId":"L0","mutated":false}
@@ -43,7 +43,7 @@
 {"kind":"replication","simTick":"9","parentProbeId":"P32","childProbeId":"P41","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"9","parentProbeId":"P33","childProbeId":"P42","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"9","parentProbeId":"P34","childProbeId":"P43","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"9","parentLineageId":"L0","newLineageId":"L2","newLineageName":"Reeds","founderProbeId":"P44"}
+{"kind":"speciation","simTick":"9","parentLineageId":"L0","newLineageId":"L2","newLineageName":"High Ledgers","founderProbeId":"P44"}
 {"kind":"replication","simTick":"9","parentProbeId":"P35","childProbeId":"P44","lineageId":"L2","mutated":true}
 {"kind":"replication","simTick":"9","parentProbeId":"P36","childProbeId":"P45","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"10","parentProbeId":"P0","childProbeId":"P46","lineageId":"L0","mutated":false}
@@ -82,7 +82,7 @@
 {"kind":"replication","simTick":"13","parentProbeId":"P71","childProbeId":"P79","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"13","parentProbeId":"P72","childProbeId":"P80","lineageId":"L2","mutated":false}
 {"kind":"replication","simTick":"14","parentProbeId":"P73","childProbeId":"P81","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"14","parentLineageId":"L0","newLineageId":"L3","newLineageName":"Lagoons","founderProbeId":"P82"}
+{"kind":"speciation","simTick":"14","parentLineageId":"L0","newLineageId":"L3","newLineageName":"Quiet Granaries","founderProbeId":"P82"}
 {"kind":"replication","simTick":"14","parentProbeId":"P74","childProbeId":"P82","lineageId":"L3","mutated":true}
 {"kind":"replication","simTick":"14","parentProbeId":"P75","childProbeId":"P83","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"14","parentProbeId":"P76","childProbeId":"P84","lineageId":"L0","mutated":false}
@@ -91,7 +91,7 @@
 {"kind":"replication","simTick":"14","parentProbeId":"P79","childProbeId":"P87","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"14","parentProbeId":"P80","childProbeId":"P88","lineageId":"L2","mutated":false}
 {"kind":"replication","simTick":"15","parentProbeId":"P81","childProbeId":"P89","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"15","parentLineageId":"L3","newLineageId":"L4","newLineageName":"Veldts","founderProbeId":"P90"}
+{"kind":"speciation","simTick":"15","parentLineageId":"L3","newLineageId":"L4","newLineageName":"Gathered Kestrels","founderProbeId":"P90"}
 {"kind":"replication","simTick":"15","parentProbeId":"P82","childProbeId":"P90","lineageId":"L4","mutated":true}
 {"kind":"replication","simTick":"15","parentProbeId":"P83","childProbeId":"P91","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"15","parentProbeId":"P84","childProbeId":"P92","lineageId":"L0","mutated":true}
@@ -170,7 +170,7 @@
 {"kind":"death","simTick":"25","probeId":"P42","lineageId":"L0"}
 {"kind":"death","simTick":"25","probeId":"P44","lineageId":"L2"}
 {"kind":"death","simTick":"25","probeId":"P45","lineageId":"L1"}
-{"kind":"speciation","simTick":"26","parentLineageId":"L4","newLineageId":"L5","newLineageName":"Slaters","founderProbeId":"P114"}
+{"kind":"speciation","simTick":"26","parentLineageId":"L4","newLineageId":"L5","newLineageName":"Mended Ledgers","founderProbeId":"P114"}
 {"kind":"replication","simTick":"26","parentProbeId":"P113","childProbeId":"P114","lineageId":"L5","mutated":true}
 {"kind":"death","simTick":"26","probeId":"P33","lineageId":"L0"}
 {"kind":"death","simTick":"26","probeId":"P34","lineageId":"L0"}
@@ -194,7 +194,7 @@
 {"kind":"replication","simTick":"80","parentProbeId":"P125","childProbeId":"P127","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"80","parentProbeId":"P126","childProbeId":"P128","lineageId":"L2","mutated":false}
 {"kind":"replication","simTick":"81","parentProbeId":"P127","childProbeId":"P129","lineageId":"L1","mutated":false}
-{"kind":"speciation","simTick":"81","parentLineageId":"L2","newLineageId":"L6","newLineageName":"Sentinels","founderProbeId":"P130"}
+{"kind":"speciation","simTick":"81","parentLineageId":"L2","newLineageId":"L6","newLineageName":"Branching Yeomen","founderProbeId":"P130"}
 {"kind":"replication","simTick":"81","parentProbeId":"P128","childProbeId":"P130","lineageId":"L6","mutated":true}
 {"kind":"replication","simTick":"82","parentProbeId":"P129","childProbeId":"P131","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"83","parentProbeId":"P131","childProbeId":"P132","lineageId":"L1","mutated":false}
@@ -218,7 +218,7 @@
 {"kind":"replication","simTick":"110","parentProbeId":"P142","childProbeId":"P149","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"110","parentProbeId":"P148","childProbeId":"P150","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"111","parentProbeId":"P150","childProbeId":"P151","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"112","parentLineageId":"L0","newLineageId":"L7","newLineageName":"Wrens","founderProbeId":"P152"}
+{"kind":"speciation","simTick":"112","parentLineageId":"L0","newLineageId":"L7","newLineageName":"Idle Anchorites","founderProbeId":"P152"}
 {"kind":"replication","simTick":"112","parentProbeId":"P151","childProbeId":"P152","lineageId":"L7","mutated":true}
 {"kind":"replication","simTick":"113","parentProbeId":"P152","childProbeId":"P153","lineageId":"L7","mutated":false}
 {"kind":"replication","simTick":"114","parentProbeId":"P153","childProbeId":"P154","lineageId":"L7","mutated":false}
@@ -229,7 +229,7 @@
 {"kind":"replication","simTick":"118","parentProbeId":"P158","childProbeId":"P159","lineageId":"L7","mutated":false}
 {"kind":"replication","simTick":"119","parentProbeId":"P159","childProbeId":"P160","lineageId":"L7","mutated":true}
 {"kind":"replication","simTick":"120","parentProbeId":"P155","childProbeId":"P161","lineageId":"L1","mutated":false}
-{"kind":"speciation","simTick":"120","parentLineageId":"L7","newLineageId":"L8","newLineageName":"Storehouses","founderProbeId":"P162"}
+{"kind":"speciation","simTick":"120","parentLineageId":"L7","newLineageId":"L8","newLineageName":"Watchful Estuaries","founderProbeId":"P162"}
 {"kind":"replication","simTick":"120","parentProbeId":"P160","childProbeId":"P162","lineageId":"L8","mutated":true}
 {"kind":"replication","simTick":"121","parentProbeId":"P162","childProbeId":"P163","lineageId":"L8","mutated":true}
 {"kind":"replication","simTick":"122","parentProbeId":"P119","childProbeId":"P164","lineageId":"L5","mutated":false}
@@ -266,7 +266,7 @@
 {"kind":"replication","simTick":"137","parentProbeId":"P181","childProbeId":"P184","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"137","parentProbeId":"P182","childProbeId":"P185","lineageId":"L0","mutated":false}
 {"kind":"death","simTick":"137","probeId":"P140","lineageId":"L0"}
-{"kind":"speciation","simTick":"138","parentLineageId":"L0","newLineageId":"L9","newLineageName":"Wells","founderProbeId":"P186"}
+{"kind":"speciation","simTick":"138","parentLineageId":"L0","newLineageId":"L9","newLineageName":"Scattered Watches","founderProbeId":"P186"}
 {"kind":"replication","simTick":"138","parentProbeId":"P184","childProbeId":"P186","lineageId":"L9","mutated":true}
 {"kind":"replication","simTick":"138","parentProbeId":"P185","childProbeId":"P187","lineageId":"L0","mutated":false}
 {"kind":"death","simTick":"138","probeId":"P150","lineageId":"L0"}
@@ -278,7 +278,7 @@
 {"kind":"replication","simTick":"141","parentProbeId":"P190","childProbeId":"P192","lineageId":"L9","mutated":false}
 {"kind":"replication","simTick":"141","parentProbeId":"P191","childProbeId":"P193","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"142","parentProbeId":"P192","childProbeId":"P194","lineageId":"L9","mutated":false}
-{"kind":"speciation","simTick":"142","parentLineageId":"L0","newLineageId":"L10","newLineageName":"Saddles","founderProbeId":"P195"}
+{"kind":"speciation","simTick":"142","parentLineageId":"L0","newLineageId":"L10","newLineageName":"Young Heralds","founderProbeId":"P195"}
 {"kind":"replication","simTick":"142","parentProbeId":"P193","childProbeId":"P195","lineageId":"L10","mutated":true}
 {"kind":"death","simTick":"142","probeId":"P164","lineageId":"L5"}
 {"kind":"replication","simTick":"143","parentProbeId":"P194","childProbeId":"P196","lineageId":"L9","mutated":true}
@@ -296,20 +296,20 @@
 {"kind":"death","simTick":"147","probeId":"P103","lineageId":"L0"}
 {"kind":"death","simTick":"147","probeId":"P193","lineageId":"L0"}
 {"kind":"replication","simTick":"148","parentProbeId":"P202","childProbeId":"P204","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"148","parentLineageId":"L9","newLineageId":"L11","newLineageName":"Bowyers","founderProbeId":"P205"}
+{"kind":"speciation","simTick":"148","parentLineageId":"L9","newLineageId":"L11","newLineageName":"Errant Cedars","founderProbeId":"P205"}
 {"kind":"replication","simTick":"148","parentProbeId":"P203","childProbeId":"P205","lineageId":"L11","mutated":true}
 {"kind":"death","simTick":"148","probeId":"P191","lineageId":"L0"}
 {"kind":"replication","simTick":"149","parentProbeId":"P101","childProbeId":"P206","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"149","parentProbeId":"P204","childProbeId":"P207","lineageId":"L0","mutated":false}
 {"kind":"death","simTick":"149","probeId":"P101","lineageId":"L0"}
 {"kind":"death","simTick":"149","probeId":"P189","lineageId":"L0"}
-{"kind":"speciation","simTick":"150","parentLineageId":"L11","newLineageId":"L12","newLineageName":"Knights","founderProbeId":"P208"}
+{"kind":"speciation","simTick":"150","parentLineageId":"L11","newLineageId":"L12","newLineageName":"Bold Chandlers","founderProbeId":"P208"}
 {"kind":"replication","simTick":"150","parentProbeId":"P205","childProbeId":"P208","lineageId":"L12","mutated":true}
 {"kind":"replication","simTick":"150","parentProbeId":"P207","childProbeId":"P209","lineageId":"L0","mutated":false}
 {"kind":"death","simTick":"150","probeId":"P187","lineageId":"L0"}
 {"kind":"replication","simTick":"151","parentProbeId":"P183","childProbeId":"P210","lineageId":"L6","mutated":false}
 {"kind":"replication","simTick":"151","parentProbeId":"P209","childProbeId":"P211","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"152","parentLineageId":"L0","newLineageId":"L13","newLineageName":"Echoes","founderProbeId":"P212"}
+{"kind":"speciation","simTick":"152","parentLineageId":"L0","newLineageId":"L13","newLineageName":"Weary Nomads","founderProbeId":"P212"}
 {"kind":"replication","simTick":"152","parentProbeId":"P211","childProbeId":"P212","lineageId":"L13","mutated":true}
 {"kind":"death","simTick":"152","probeId":"P182","lineageId":"L0"}
 {"kind":"replication","simTick":"153","parentProbeId":"P212","childProbeId":"P213","lineageId":"L13","mutated":false}
@@ -332,7 +332,7 @@
 {"kind":"replication","simTick":"165","parentProbeId":"P218","childProbeId":"P227","lineageId":"L5","mutated":false}
 {"kind":"death","simTick":"165","probeId":"P155","lineageId":"L1"}
 {"kind":"death","simTick":"165","probeId":"P224","lineageId":"L13"}
-{"kind":"speciation","simTick":"166","parentLineageId":"L12","newLineageId":"L14","newLineageName":"Hawks","founderProbeId":"P228"}
+{"kind":"speciation","simTick":"166","parentLineageId":"L12","newLineageId":"L14","newLineageName":"Frayed Forges","founderProbeId":"P228"}
 {"kind":"replication","simTick":"166","parentProbeId":"P208","childProbeId":"P228","lineageId":"L14","mutated":true}
 {"kind":"replication","simTick":"172","parentProbeId":"P227","childProbeId":"P229","lineageId":"L5","mutated":true}
 {"kind":"replication","simTick":"179","parentProbeId":"P226","childProbeId":"P230","lineageId":"L6","mutated":false}
@@ -370,12 +370,12 @@
 {"kind":"replication","simTick":"199","parentProbeId":"P206","childProbeId":"P247","lineageId":"L0","mutated":false}
 {"kind":"death","simTick":"199","probeId":"P206","lineageId":"L0"}
 {"kind":"death","simTick":"199","probeId":"P239","lineageId":"L8"}
-{"kind":"speciation","simTick":"200","parentLineageId":"L5","newLineageId":"L15","newLineageName":"Fens","founderProbeId":"P248"}
+{"kind":"speciation","simTick":"200","parentLineageId":"L5","newLineageId":"L15","newLineageName":"Sharp Causeways","founderProbeId":"P248"}
 {"kind":"replication","simTick":"200","parentProbeId":"P246","childProbeId":"P248","lineageId":"L15","mutated":true}
 {"kind":"replication","simTick":"200","parentProbeId":"P247","childProbeId":"P249","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"201","parentProbeId":"P249","childProbeId":"P250","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"202","parentProbeId":"P250","childProbeId":"P251","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"203","parentLineageId":"L14","newLineageId":"L16","newLineageName":"Kindlers","founderProbeId":"P252"}
+{"kind":"speciation","simTick":"203","parentLineageId":"L14","newLineageId":"L16","newLineageName":"Singing Drifters","founderProbeId":"P252"}
 {"kind":"replication","simTick":"203","parentProbeId":"P228","childProbeId":"P252","lineageId":"L16","mutated":true}
 {"kind":"replication","simTick":"203","parentProbeId":"P251","childProbeId":"P253","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"204","parentProbeId":"P253","childProbeId":"P254","lineageId":"L0","mutated":false}
@@ -475,7 +475,7 @@
 {"kind":"replication","simTick":"297","parentProbeId":"P304","childProbeId":"P305","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"298","parentProbeId":"P291","childProbeId":"P306","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"298","parentProbeId":"P305","childProbeId":"P307","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"299","parentLineageId":"L0","newLineageId":"L17","newLineageName":"Foxes","founderProbeId":"P308"}
+{"kind":"speciation","simTick":"299","parentLineageId":"L0","newLineageId":"L17","newLineageName":"Lonely Boughs","founderProbeId":"P308"}
 {"kind":"replication","simTick":"299","parentProbeId":"P307","childProbeId":"P308","lineageId":"L17","mutated":true}
 {"kind":"death","simTick":"300","probeId":"P307","lineageId":"L0"}
 {"kind":"death","simTick":"301","probeId":"P298","lineageId":"L15"}
@@ -483,7 +483,7 @@
 {"kind":"death","simTick":"302","probeId":"P304","lineageId":"L0"}
 {"kind":"replication","simTick":"303","parentProbeId":"P306","childProbeId":"P309","lineageId":"L1","mutated":false}
 {"kind":"death","simTick":"304","probeId":"P303","lineageId":"L0"}
-{"kind":"speciation","simTick":"305","parentLineageId":"L10","newLineageId":"L18","newLineageName":"Slaters","founderProbeId":"P310"}
+{"kind":"speciation","simTick":"305","parentLineageId":"L10","newLineageId":"L18","newLineageName":"Found Hares","founderProbeId":"P310"}
 {"kind":"replication","simTick":"305","parentProbeId":"P292","childProbeId":"P310","lineageId":"L18","mutated":true}
 {"kind":"death","simTick":"305","probeId":"P123","lineageId":"L2"}
 {"kind":"death","simTick":"305","probeId":"P292","lineageId":"L10"}
@@ -584,9 +584,9 @@
 {"kind":"death","simTick":"382","probeId":"P225","lineageId":"L13"}
 {"kind":"replication","simTick":"383","parentProbeId":"P361","childProbeId":"P362","lineageId":"L13","mutated":false}
 {"kind":"replication","simTick":"384","parentProbeId":"P362","childProbeId":"P363","lineageId":"L13","mutated":false}
-{"kind":"speciation","simTick":"385","parentLineageId":"L13","newLineageId":"L19","newLineageName":"Vagabonds","founderProbeId":"P364"}
+{"kind":"speciation","simTick":"385","parentLineageId":"L13","newLineageId":"L19","newLineageName":"Wandering Bedesmen","founderProbeId":"P364"}
 {"kind":"replication","simTick":"385","parentProbeId":"P363","childProbeId":"P364","lineageId":"L19","mutated":true}
-{"kind":"speciation","simTick":"386","parentLineageId":"L19","newLineageId":"L20","newLineageName":"Wardens","founderProbeId":"P365"}
+{"kind":"speciation","simTick":"386","parentLineageId":"L19","newLineageId":"L20","newLineageName":"Patient Lanterns","founderProbeId":"P365"}
 {"kind":"replication","simTick":"386","parentProbeId":"P364","childProbeId":"P365","lineageId":"L20","mutated":true}
 {"kind":"replication","simTick":"392","parentProbeId":"P334","childProbeId":"P366","lineageId":"L1","mutated":true}
 {"kind":"replication","simTick":"393","parentProbeId":"P366","childProbeId":"P367","lineageId":"L1","mutated":false}
@@ -598,7 +598,7 @@
 {"kind":"replication","simTick":"401","parentProbeId":"P353","childProbeId":"P371","lineageId":"L8","mutated":false}
 {"kind":"death","simTick":"401","probeId":"P353","lineageId":"L8"}
 {"kind":"death","simTick":"401","probeId":"P367","lineageId":"L1"}
-{"kind":"speciation","simTick":"402","parentLineageId":"L8","newLineageId":"L21","newLineageName":"Spruces","founderProbeId":"P372"}
+{"kind":"speciation","simTick":"402","parentLineageId":"L8","newLineageId":"L21","newLineageName":"Roving Bowyers","founderProbeId":"P372"}
 {"kind":"replication","simTick":"402","parentProbeId":"P371","childProbeId":"P372","lineageId":"L21","mutated":true}
 {"kind":"death","simTick":"402","probeId":"P366","lineageId":"L1"}
 {"kind":"replication","simTick":"403","parentProbeId":"P372","childProbeId":"P373","lineageId":"L21","mutated":false}
@@ -626,7 +626,7 @@
 {"kind":"replication","simTick":"422","parentProbeId":"P385","childProbeId":"P386","lineageId":"L21","mutated":true}
 {"kind":"replication","simTick":"423","parentProbeId":"P386","childProbeId":"P387","lineageId":"L21","mutated":false}
 {"kind":"replication","simTick":"424","parentProbeId":"P387","childProbeId":"P388","lineageId":"L21","mutated":false}
-{"kind":"speciation","simTick":"425","parentLineageId":"L21","newLineageId":"L22","newLineageName":"Highmen","founderProbeId":"P389"}
+{"kind":"speciation","simTick":"425","parentLineageId":"L21","newLineageId":"L22","newLineageName":"Unbroken Talus","founderProbeId":"P389"}
 {"kind":"replication","simTick":"425","parentProbeId":"P388","childProbeId":"P389","lineageId":"L22","mutated":true}
 {"kind":"death","simTick":"425","probeId":"P383","lineageId":"L21"}
 {"kind":"replication","simTick":"426","parentProbeId":"P379","childProbeId":"P390","lineageId":"L15","mutated":true}
@@ -655,7 +655,7 @@
 {"kind":"death","simTick":"452","probeId":"P391","lineageId":"L22"}
 {"kind":"death","simTick":"452","probeId":"P393","lineageId":"L22"}
 {"kind":"death","simTick":"455","probeId":"P339","lineageId":"L18"}
-{"kind":"speciation","simTick":"456","parentLineageId":"L15","newLineageId":"L23","newLineageName":"Thanes","founderProbeId":"P403"}
+{"kind":"speciation","simTick":"456","parentLineageId":"L15","newLineageId":"L23","newLineageName":"Dim Glimmer","founderProbeId":"P403"}
 {"kind":"replication","simTick":"456","parentProbeId":"P402","childProbeId":"P403","lineageId":"L23","mutated":true}
 {"kind":"death","simTick":"460","probeId":"P384","lineageId":"L21"}
 {"kind":"replication","simTick":"464","parentProbeId":"P403","childProbeId":"P404","lineageId":"L23","mutated":false}
@@ -673,14 +673,14 @@
 {"kind":"replication","simTick":"480","parentProbeId":"P406","childProbeId":"P410","lineageId":"L23","mutated":false}
 {"kind":"death","simTick":"480","probeId":"P301","lineageId":"L15"}
 {"kind":"death","simTick":"482","probeId":"P311","lineageId":"L18"}
-{"kind":"speciation","simTick":"483","parentLineageId":"L0","newLineageId":"L24","newLineageName":"Reedwalkers","founderProbeId":"P411"}
+{"kind":"speciation","simTick":"483","parentLineageId":"L0","newLineageId":"L24","newLineageName":"Faint Petrels","founderProbeId":"P411"}
 {"kind":"replication","simTick":"483","parentProbeId":"P408","childProbeId":"P411","lineageId":"L24","mutated":true}
 {"kind":"replication","simTick":"488","parentProbeId":"P410","childProbeId":"P412","lineageId":"L23","mutated":false}
 {"kind":"death","simTick":"490","probeId":"P408","lineageId":"L0"}
 {"kind":"death","simTick":"494","probeId":"P247","lineageId":"L0"}
 {"kind":"replication","simTick":"496","parentProbeId":"P412","childProbeId":"P413","lineageId":"L23","mutated":false}
 {"kind":"replication","simTick":"501","parentProbeId":"P257","childProbeId":"P414","lineageId":"L6","mutated":false}
-{"kind":"speciation","simTick":"501","parentLineageId":"L22","newLineageId":"L25","newLineageName":"Quadrants","founderProbeId":"P415"}
+{"kind":"speciation","simTick":"501","parentLineageId":"L22","newLineageId":"L25","newLineageName":"Wary Almanacs","founderProbeId":"P415"}
 {"kind":"replication","simTick":"501","parentProbeId":"P400","childProbeId":"P415","lineageId":"L25","mutated":true}
 {"kind":"death","simTick":"501","probeId":"P400","lineageId":"L22"}
 {"kind":"replication","simTick":"502","parentProbeId":"P415","childProbeId":"P416","lineageId":"L25","mutated":false}
@@ -699,7 +699,7 @@
 {"kind":"replication","simTick":"513","parentProbeId":"P420","childProbeId":"P426","lineageId":"L24","mutated":false}
 {"kind":"death","simTick":"513","probeId":"P421","lineageId":"L25"}
 {"kind":"death","simTick":"514","probeId":"P419","lineageId":"L25"}
-{"kind":"speciation","simTick":"515","parentLineageId":"L6","newLineageId":"L26","newLineageName":"Echoes","founderProbeId":"P427"}
+{"kind":"speciation","simTick":"515","parentLineageId":"L6","newLineageId":"L26","newLineageName":"Gathered Knights","founderProbeId":"P427"}
 {"kind":"replication","simTick":"515","parentProbeId":"P414","childProbeId":"P427","lineageId":"L26","mutated":true}
 {"kind":"death","simTick":"519","probeId":"P417","lineageId":"L25"}
 {"kind":"replication","simTick":"520","parentProbeId":"P425","childProbeId":"P428","lineageId":"L23","mutated":false}
@@ -758,11 +758,11 @@
 {"kind":"death","simTick":"692","probeId":"P382","lineageId":"L21"}
 {"kind":"replication","simTick":"694","parentProbeId":"P440","childProbeId":"P453","lineageId":"L17","mutated":false}
 {"kind":"death","simTick":"694","probeId":"P440","lineageId":"L17"}
-{"kind":"speciation","simTick":"695","parentLineageId":"L17","newLineageId":"L27","newLineageName":"Veins","founderProbeId":"P454"}
+{"kind":"speciation","simTick":"695","parentLineageId":"L17","newLineageId":"L27","newLineageName":"Mended Surveyors","founderProbeId":"P454"}
 {"kind":"replication","simTick":"695","parentProbeId":"P453","childProbeId":"P454","lineageId":"L27","mutated":true}
 {"kind":"replication","simTick":"696","parentProbeId":"P454","childProbeId":"P455","lineageId":"L27","mutated":false}
 {"kind":"replication","simTick":"697","parentProbeId":"P455","childProbeId":"P456","lineageId":"L27","mutated":false}
-{"kind":"speciation","simTick":"698","parentLineageId":"L27","newLineageId":"L28","newLineageName":"Boughs","founderProbeId":"P457"}
+{"kind":"speciation","simTick":"698","parentLineageId":"L27","newLineageId":"L28","newLineageName":"Distant Reefs","founderProbeId":"P457"}
 {"kind":"replication","simTick":"698","parentProbeId":"P456","childProbeId":"P457","lineageId":"L28","mutated":true}
 {"kind":"replication","simTick":"704","parentProbeId":"P457","childProbeId":"P458","lineageId":"L28","mutated":false}
 {"kind":"replication","simTick":"706","parentProbeId":"P426","childProbeId":"P459","lineageId":"L24","mutated":false}
@@ -788,15 +788,15 @@
 {"kind":"replication","simTick":"756","parentProbeId":"P470","childProbeId":"P471","lineageId":"L18","mutated":false}
 {"kind":"replication","simTick":"757","parentProbeId":"P471","childProbeId":"P472","lineageId":"L18","mutated":false}
 {"kind":"replication","simTick":"758","parentProbeId":"P472","childProbeId":"P473","lineageId":"L18","mutated":false}
-{"kind":"speciation","simTick":"759","parentLineageId":"L18","newLineageId":"L29","newLineageName":"Veldts","founderProbeId":"P474"}
+{"kind":"speciation","simTick":"759","parentLineageId":"L18","newLineageId":"L29","newLineageName":"Lean Whorls","founderProbeId":"P474"}
 {"kind":"replication","simTick":"759","parentProbeId":"P473","childProbeId":"P474","lineageId":"L29","mutated":true}
 {"kind":"replication","simTick":"760","parentProbeId":"P474","childProbeId":"P475","lineageId":"L29","mutated":false}
 {"kind":"replication","simTick":"761","parentProbeId":"P475","childProbeId":"P476","lineageId":"L29","mutated":false}
-{"kind":"speciation","simTick":"762","parentLineageId":"L29","newLineageId":"L30","newLineageName":"Glimmer","founderProbeId":"P477"}
+{"kind":"speciation","simTick":"762","parentLineageId":"L29","newLineageId":"L30","newLineageName":"Tireless Hospices","founderProbeId":"P477"}
 {"kind":"replication","simTick":"762","parentProbeId":"P476","childProbeId":"P477","lineageId":"L30","mutated":true}
 {"kind":"replication","simTick":"763","parentProbeId":"P477","childProbeId":"P478","lineageId":"L30","mutated":false}
 {"kind":"replication","simTick":"764","parentProbeId":"P478","childProbeId":"P479","lineageId":"L30","mutated":false}
-{"kind":"speciation","simTick":"765","parentLineageId":"L30","newLineageId":"L31","newLineageName":"Seekers","founderProbeId":"P480"}
+{"kind":"speciation","simTick":"765","parentLineageId":"L30","newLineageId":"L31","newLineageName":"Far Threads","founderProbeId":"P480"}
 {"kind":"replication","simTick":"765","parentProbeId":"P479","childProbeId":"P480","lineageId":"L31","mutated":true}
 {"kind":"death","simTick":"766","probeId":"P479","lineageId":"L30"}
 {"kind":"death","simTick":"767","probeId":"P478","lineageId":"L30"}
@@ -818,7 +818,7 @@
 {"kind":"replication","simTick":"803","parentProbeId":"P483","childProbeId":"P484","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"804","parentProbeId":"P484","childProbeId":"P485","lineageId":"L0","mutated":false}
 {"kind":"replication","simTick":"805","parentProbeId":"P485","childProbeId":"P486","lineageId":"L0","mutated":false}
-{"kind":"speciation","simTick":"806","parentLineageId":"L0","newLineageId":"L32","newLineageName":"Thatchers","founderProbeId":"P487"}
+{"kind":"speciation","simTick":"806","parentLineageId":"L0","newLineageId":"L32","newLineageName":"Branching Coopers","founderProbeId":"P487"}
 {"kind":"replication","simTick":"806","parentProbeId":"P486","childProbeId":"P487","lineageId":"L32","mutated":true}
 {"kind":"replication","simTick":"807","parentProbeId":"P487","childProbeId":"P488","lineageId":"L32","mutated":true}
 {"kind":"death","simTick":"807","probeId":"P466","lineageId":"L18"}
@@ -829,7 +829,7 @@
 {"kind":"death","simTick":"812","probeId":"P487","lineageId":"L32"}
 {"kind":"death","simTick":"813","probeId":"P486","lineageId":"L0"}
 {"kind":"death","simTick":"814","probeId":"P485","lineageId":"L0"}
-{"kind":"speciation","simTick":"816","parentLineageId":"L20","newLineageId":"L33","newLineageName":"Drifters","founderProbeId":"P491"}
+{"kind":"speciation","simTick":"816","parentLineageId":"L20","newLineageId":"L33","newLineageName":"Idle Embers","founderProbeId":"P491"}
 {"kind":"replication","simTick":"816","parentProbeId":"P451","childProbeId":"P491","lineageId":"L33","mutated":true}
 {"kind":"replication","simTick":"821","parentProbeId":"P491","childProbeId":"P492","lineageId":"L33","mutated":false}
 {"kind":"death","simTick":"824","probeId":"P484","lineageId":"L0"}
@@ -851,7 +851,7 @@
 {"kind":"replication","simTick":"836","parentProbeId":"P502","childProbeId":"P504","lineageId":"L31","mutated":false}
 {"kind":"replication","simTick":"837","parentProbeId":"P504","childProbeId":"P505","lineageId":"L31","mutated":false}
 {"kind":"replication","simTick":"838","parentProbeId":"P505","childProbeId":"P506","lineageId":"L31","mutated":false}
-{"kind":"speciation","simTick":"839","parentLineageId":"L31","newLineageId":"L34","newLineageName":"Roots","founderProbeId":"P507"}
+{"kind":"speciation","simTick":"839","parentLineageId":"L31","newLineageId":"L34","newLineageName":"Sated Thanes","founderProbeId":"P507"}
 {"kind":"replication","simTick":"839","parentProbeId":"P506","childProbeId":"P507","lineageId":"L34","mutated":true}
 {"kind":"replication","simTick":"840","parentProbeId":"P507","childProbeId":"P508","lineageId":"L34","mutated":false}
 {"kind":"replication","simTick":"841","parentProbeId":"P501","childProbeId":"P509","lineageId":"L28","mutated":false}
@@ -890,7 +890,7 @@
 {"kind":"replication","simTick":"882","parentProbeId":"P524","childProbeId":"P525","lineageId":"L34","mutated":false}
 {"kind":"replication","simTick":"883","parentProbeId":"P523","childProbeId":"P526","lineageId":"L24","mutated":true}
 {"kind":"replication","simTick":"883","parentProbeId":"P525","childProbeId":"P527","lineageId":"L34","mutated":false}
-{"kind":"speciation","simTick":"884","parentLineageId":"L34","newLineageId":"L35","newLineageName":"Steppes","founderProbeId":"P528"}
+{"kind":"speciation","simTick":"884","parentLineageId":"L34","newLineageId":"L35","newLineageName":"Wayward Mistwalkers","founderProbeId":"P528"}
 {"kind":"replication","simTick":"884","parentProbeId":"P527","childProbeId":"P528","lineageId":"L35","mutated":true}
 {"kind":"replication","simTick":"885","parentProbeId":"P521","childProbeId":"P529","lineageId":"L33","mutated":true}
 {"kind":"replication","simTick":"885","parentProbeId":"P528","childProbeId":"P530","lineageId":"L35","mutated":false}
@@ -904,7 +904,7 @@
 {"kind":"replication","simTick":"891","parentProbeId":"P536","childProbeId":"P537","lineageId":"L35","mutated":false}
 {"kind":"replication","simTick":"892","parentProbeId":"P537","childProbeId":"P538","lineageId":"L35","mutated":false}
 {"kind":"replication","simTick":"893","parentProbeId":"P538","childProbeId":"P539","lineageId":"L35","mutated":false}
-{"kind":"speciation","simTick":"894","parentLineageId":"L35","newLineageId":"L36","newLineageName":"Skywatchers","founderProbeId":"P540"}
+{"kind":"speciation","simTick":"894","parentLineageId":"L35","newLineageId":"L36","newLineageName":"Deep Vespers","founderProbeId":"P540"}
 {"kind":"replication","simTick":"894","parentProbeId":"P539","childProbeId":"P540","lineageId":"L36","mutated":true}
 {"kind":"replication","simTick":"895","parentProbeId":"P529","childProbeId":"P541","lineageId":"L33","mutated":false}
 {"kind":"replication","simTick":"895","parentProbeId":"P540","childProbeId":"P542","lineageId":"L36","mutated":false}
@@ -918,9 +918,9 @@
 {"kind":"replication","simTick":"903","parentProbeId":"P549","childProbeId":"P550","lineageId":"L36","mutated":false}
 {"kind":"death","simTick":"903","probeId":"P509","lineageId":"L28"}
 {"kind":"replication","simTick":"904","parentProbeId":"P550","childProbeId":"P551","lineageId":"L36","mutated":false}
-{"kind":"speciation","simTick":"905","parentLineageId":"L36","newLineageId":"L37","newLineageName":"Gleamers","founderProbeId":"P552"}
+{"kind":"speciation","simTick":"905","parentLineageId":"L36","newLineageId":"L37","newLineageName":"Fading Compasses","founderProbeId":"P552"}
 {"kind":"replication","simTick":"905","parentProbeId":"P551","childProbeId":"P552","lineageId":"L37","mutated":true}
-{"kind":"speciation","simTick":"906","parentLineageId":"L37","newLineageId":"L38","newLineageName":"Banners","founderProbeId":"P553"}
+{"kind":"speciation","simTick":"906","parentLineageId":"L37","newLineageId":"L38","newLineageName":"Restless Lichens","founderProbeId":"P553"}
 {"kind":"replication","simTick":"906","parentProbeId":"P552","childProbeId":"P553","lineageId":"L38","mutated":true}
 {"kind":"death","simTick":"907","probeId":"P526","lineageId":"L24"}
 {"kind":"death","simTick":"911","probeId":"P552","lineageId":"L37"}
@@ -945,7 +945,7 @@
 {"kind":"replication","simTick":"954","parentProbeId":"P562","childProbeId":"P563","lineageId":"L1","mutated":false}
 {"kind":"replication","simTick":"955","parentProbeId":"P563","childProbeId":"P564","lineageId":"L1","mutated":false}
 {"kind":"death","simTick":"955","probeId":"P507","lineageId":"L34"}
-{"kind":"speciation","simTick":"956","parentLineageId":"L1","newLineageId":"L39","newLineageName":"Hares","founderProbeId":"P565"}
+{"kind":"speciation","simTick":"956","parentLineageId":"L1","newLineageId":"L39","newLineageName":"Resolute Heaths","founderProbeId":"P565"}
 {"kind":"replication","simTick":"956","parentProbeId":"P564","childProbeId":"P565","lineageId":"L39","mutated":true}
 {"kind":"death","simTick":"956","probeId":"P531","lineageId":"L35"}
 {"kind":"replication","simTick":"957","parentProbeId":"P565","childProbeId":"P566","lineageId":"L39","mutated":true}
@@ -981,7 +981,7 @@
 {"kind":"death","simTick":"988","probeId":"P481","lineageId":"L0"}
 {"kind":"death","simTick":"988","probeId":"P575","lineageId":"L39"}
 {"kind":"replication","simTick":"989","parentProbeId":"P580","childProbeId":"P582","lineageId":"L32","mutated":false}
-{"kind":"speciation","simTick":"989","parentLineageId":"L39","newLineageId":"L40","newLineageName":"Embers","founderProbeId":"P583"}
+{"kind":"speciation","simTick":"989","parentLineageId":"L39","newLineageId":"L40","newLineageName":"Forsaken Shoals","founderProbeId":"P583"}
 {"kind":"replication","simTick":"989","parentProbeId":"P581","childProbeId":"P583","lineageId":"L40","mutated":true}
 {"kind":"replication","simTick":"990","parentProbeId":"P583","childProbeId":"P584","lineageId":"L40","mutated":false}
 {"kind":"replication","simTick":"991","parentProbeId":"P584","childProbeId":"P585","lineageId":"L40","mutated":false}
