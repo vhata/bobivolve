@@ -14,7 +14,11 @@ The disciplines in `ARCHITECTURE.md` and `PROCESS.md` are not advisory; they gov
 
 ## Patterns established by feedback
 
-Three load-bearing patterns the player has explicitly asked for. These live here, in git, so they survive a laptop death; the assistant's auto-memory may carry the same patterns as redundancy but the source of truth is this list.
+Four load-bearing patterns the player has explicitly asked for. These live here, in git, so they survive a laptop death; the assistant's auto-memory may carry the same patterns as redundancy but the source of truth is this list.
+
+### Codify new ideas in TODO.md before deciding to implement
+
+When a new feature, polish item, or design idea surfaces in conversation — whether it came from the assistant or the player — the immediate move is an entry in `TODO.md` with the rationale captured at idea-time. _Then_, separately, decide whether to implement now or leave it. Do not ask "should we build this now?" without writing it down first; ideas evaporate, and the in-conversation tradeoff analysis is the most valuable part to preserve. The default is "codify, then defer"; pulling the entry forward is a second decision the player makes deliberately.
 
 ### Release tags require explicit sign-off
 
