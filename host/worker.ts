@@ -54,7 +54,27 @@ const host = new NodeHost({
   },
 });
 
+// High-frequency, no-UI-consumer event filter. At fat population the
+// host emits hundreds of `replication` and `death` events per second.
+// The UI store discards both (they're explicit no-ops in handleEvent),
+// and no panel subscribes to them — but the postMessage + structured-
+// clone + main-thread dispatch cost is paid every time, which at high
+// speeds saturates the main thread's event loop and makes pause feel
+// laggy because the worker→main queue grows faster than main can drain
+// it.
+//
+// Filtering here drops them at the worker boundary BEFORE the postMessage
+// hop. The on-disk event log still receives them (host.emit() appends to
+// the log before calling subscribers), so persistence is unaffected and
+// goldens are unchanged.
+//
+// If the dashboard ever grows a per-replication or per-death surface,
+// move the filter into a kind-aware "should the UI care?" check rather
+// than blindly dropping. Today the answer is "no, the UI does not
+// care", and the perf win is dramatic at fat population.
+const SUPPRESSED_KINDS: ReadonlySet<SimEvent['kind']> = new Set(['replication', 'death']);
 host.subscribe((event: SimEvent) => {
+  if (SUPPRESSED_KINDS.has(event.kind)) return;
   const msg: EventMessage = { type: 'event', event };
   ctx.postMessage(msg);
 });
