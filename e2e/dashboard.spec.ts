@@ -397,6 +397,32 @@ test('clicking a lineage in the tree selects it in the inspector', async ({ page
   await expect(page.locator('.inspector-panel')).toContainText('P0');
 });
 
+test('player-driven pause survives opening and closing the patch editor', async ({ page }) => {
+  // Regression: modal-on-action used to call resume() unconditionally
+  // on cleanup, which un-paused whatever the player had explicitly
+  // paused before opening. The fix is to capture pre-existing paused
+  // state on mount and only resume if the modal was the one that
+  // paused.
+  await page.goto('/');
+
+  // Pause first.
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+
+  // Select L0 and open the patch editor.
+  const l0Row = page.locator('.lineage-tree button[aria-pressed]').first();
+  await l0Row.click();
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  await expect(page.locator('.patch-editor-overlay')).toBeVisible();
+
+  // Cancel out of the modal.
+  await page.locator('.patch-editor-button', { hasText: 'Cancel' }).click();
+  await expect(page.locator('.patch-editor-overlay')).toHaveCount(0);
+
+  // Pause must still hold — the controls button still reads Resume.
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+});
+
 test('quarantine toggle flips the inspector and the tree pip', async ({ page }) => {
   // Player intervention smoke: select L0, hit Quarantine, see the
   // inspector flip its meta and the tree row carry the quarantine pip;
@@ -405,16 +431,16 @@ test('quarantine toggle flips the inspector and the tree pip', async ({ page }) 
   const l0Row = page.locator('.lineage-tree button[aria-pressed]').first();
   await l0Row.click();
 
-  const quarantineButton = page.locator('.lineage-action');
-  await expect(quarantineButton).toContainText('Quarantine');
+  const quarantineButton = page.getByRole('button', { name: 'Quarantine' });
+  await expect(quarantineButton).toBeVisible();
 
   await quarantineButton.click();
   await expect(page.locator('.inspector-panel .panel-meta')).toContainText('quarantined');
-  await expect(quarantineButton).toContainText('Release quarantine');
+  await expect(page.getByRole('button', { name: 'Release quarantine' })).toBeVisible();
   await expect(page.locator('.lineage-tree .lineage-quarantine-pip').first()).toBeVisible();
 
-  await quarantineButton.click();
+  await page.getByRole('button', { name: 'Release quarantine' }).click();
   await expect(page.locator('.inspector-panel .panel-meta')).not.toContainText('quarantined');
-  await expect(quarantineButton).toContainText('Quarantine');
+  await expect(page.getByRole('button', { name: 'Quarantine' })).toBeVisible();
   await expect(page.locator('.lineage-tree .lineage-quarantine-pip')).toHaveCount(0);
 });
