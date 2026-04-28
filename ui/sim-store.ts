@@ -16,6 +16,7 @@ import type {
   ListSavesResult,
   SaveSummary,
   SimEvent,
+  TickEvent,
 } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
 
@@ -222,63 +223,98 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     if (changed) set({ pendingCommands: updated });
   }
 
+  // Heartbeats are explicitly best-effort per ARCHITECTURE.md. Coalesce
+  // them via requestAnimationFrame: at fat population the worker can
+  // emit them faster than the main thread can render the cascade of
+  // store-update + panel-rerender triggered by each one, and dropping
+  // intermediate frames keeps the dashboard responsive — the latest
+  // heartbeat is always the one we render. Click handlers, ack
+  // processing, etc. all run on the main thread and lose to a flood
+  // of un-throttled heartbeats; this is the throttle that keeps pause
+  // (and Cmd-W) snappy under load.
+  let pendingTick: (TickEvent & { simTick: bigint }) | null = null;
+  let tickRafHandle: number | null = null;
+
+  function applyPendingTick(): void {
+    tickRafHandle = null;
+    const event = pendingTick;
+    pendingTick = null;
+    if (event === null) return;
+
+    const byLineage = new Map(Object.entries(event.populationByLineage));
+    const history = [...get().populationHistory];
+    history.push({
+      tick: event.simTick,
+      byLineage,
+      total: event.populationTotal,
+    });
+    // Bounded buffer with simple decimation: when full, drop every
+    // other entry so we keep the curve shape across longer runs.
+    if (history.length > HISTORY_CAPACITY) {
+      for (let i = 0; i < history.length - 1; i += 1) {
+        history.splice(i, 1);
+      }
+    }
+    // Reconcile against the host's authoritative state. The optimistic
+    // projection holds while a pause / resume / setSpeed command is in
+    // flight (the player just clicked, the ack hasn't arrived yet —
+    // trust the optimistic flip). Once no such command is pending, the
+    // heartbeat's `paused` and `speed` become truth, so any class of
+    // message-drop or projection-drift bug self-corrects on the next
+    // heartbeat.
+    const current = get();
+    const pausePending = hasPendingKind(current.pendingCommands, 'pause', 'resume');
+    const speedPending = hasPendingKind(current.pendingCommands, 'setSpeed');
+    const reconciledPaused = pausePending ? current.paused : event.paused;
+    const reconciledSpeed: SimSpeed = speedPending
+      ? current.speed
+      : (asSimSpeed(event.speed) ?? current.speed);
+
+    // While paused, force the actualSpeed readout to 0 — a stale
+    // heartbeat from an in-flight runUntil could otherwise leave the
+    // previous non-zero reading lingering on the screen.
+    //
+    // While running, a heartbeat that reports actualSpeed=0 (because
+    // the pulse couldn't fit a single tick in its wall-clock budget)
+    // is a momentary measurement artefact, not a sign the sim has
+    // stopped. Hold the previous reading instead of blipping the
+    // readout to 0 and back.
+    const nextActualSpeed = reconciledPaused
+      ? 0
+      : event.actualSpeed > 0
+        ? event.actualSpeed
+        : current.actualSpeed;
+    set({
+      simTick: event.simTick,
+      populationTotal: event.populationTotal,
+      populationByLineage: byLineage,
+      populationHistory: history,
+      actualSpeed: nextActualSpeed,
+      originCompute: event.originCompute,
+      originComputeMax: event.originComputeMax,
+      paused: reconciledPaused,
+      speed: reconciledSpeed,
+    });
+  }
+
+  function cancelPendingTick(): void {
+    if (tickRafHandle !== null) {
+      cancelAnimationFrame(tickRafHandle);
+      tickRafHandle = null;
+    }
+    pendingTick = null;
+  }
+
   const handleEvent = (event: SimEvent): void => {
     switch (event.kind) {
       case 'tick': {
-        const byLineage = new Map(Object.entries(event.populationByLineage));
-        const history = [...get().populationHistory];
-        history.push({
-          tick: event.simTick,
-          byLineage,
-          total: event.populationTotal,
-        });
-        // Bounded buffer with simple decimation: when full, drop every
-        // other entry so we keep the curve shape across longer runs.
-        if (history.length > HISTORY_CAPACITY) {
-          for (let i = 0; i < history.length - 1; i += 1) {
-            history.splice(i, 1);
-          }
+        // Replace any pending heartbeat — the latest one wins. rAF
+        // scheduling caps the dashboard update rate at display refresh
+        // (≤60Hz), independent of how fast the worker emits.
+        pendingTick = event;
+        if (tickRafHandle === null) {
+          tickRafHandle = requestAnimationFrame(applyPendingTick);
         }
-        // Reconcile against the host's authoritative state. The
-        // optimistic projection holds while a pause / resume / setSpeed
-        // command is in flight (the player just clicked, the ack hasn't
-        // arrived yet — trust the optimistic flip). Once no such
-        // command is pending, the heartbeat's `paused` and `speed`
-        // become truth, so any class of message-drop or projection-
-        // drift bug self-corrects on the next heartbeat.
-        const current = get();
-        const pausePending = hasPendingKind(current.pendingCommands, 'pause', 'resume');
-        const speedPending = hasPendingKind(current.pendingCommands, 'setSpeed');
-        const reconciledPaused = pausePending ? current.paused : event.paused;
-        const reconciledSpeed: SimSpeed = speedPending
-          ? current.speed
-          : (asSimSpeed(event.speed) ?? current.speed);
-
-        // While paused, force the actualSpeed readout to 0 — a stale
-        // heartbeat from an in-flight runUntil could otherwise leave
-        // the previous non-zero reading lingering on the screen.
-        //
-        // While running, a heartbeat that reports actualSpeed=0
-        // (because the pulse couldn't fit a single tick in its
-        // wall-clock budget) is a momentary measurement artefact, not a
-        // sign the sim has stopped. Hold the previous reading instead
-        // of blipping the readout to 0 and back.
-        const nextActualSpeed = reconciledPaused
-          ? 0
-          : event.actualSpeed > 0
-            ? event.actualSpeed
-            : current.actualSpeed;
-        set({
-          simTick: event.simTick,
-          populationTotal: event.populationTotal,
-          populationByLineage: byLineage,
-          populationHistory: history,
-          actualSpeed: nextActualSpeed,
-          originCompute: event.originCompute,
-          originComputeMax: event.originComputeMax,
-          paused: reconciledPaused,
-          speed: reconciledSpeed,
-        });
         return;
       }
       case 'replication':
@@ -435,6 +471,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         clearInterval(retryHandle);
         retryHandle = null;
       }
+      cancelPendingTick();
       transport.close();
       // Pending commands sent to the now-closed transport will never see
       // their ack — drop them so the retry loop doesn't try to re-send
