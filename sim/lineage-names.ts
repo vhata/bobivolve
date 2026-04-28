@@ -1,11 +1,18 @@
 // Lay-person legible lineage names. SPEC.md mentions named lineages
 // throughout — "Lineages emerge, compete, dominate, and collapse" — but
 // leaves the naming scheme as an ARCHITECTURE.md open question. R0 ships
-// a deterministic name function that picks an evocative word from a
-// curated list, indexed by a hash of the lineage's ordinal.
+// a deterministic name function: hash the lineage's ordinal, split the
+// hash into two halves, index an adjective with the low half and a noun
+// with the high half. The combination ("Wandering Pioneers", "Stubborn
+// Drifters") gives ~ADJECTIVES × NAMES distinct names — more headroom
+// before the birthday paradox produces collisions than a single-word
+// scheme.
 //
-// The word list is intentionally evocative-but-neutral; the player will
-// project meaning onto whichever lineages happen to dominate.
+// The word lists are intentionally evocative-but-neutral; the player
+// will project meaning onto whichever lineages happen to dominate.
+// Adjectives are derived from the ordinal alone, never from the
+// lineage's directives or its place in the tree — anything else would
+// break determinism.
 
 const NAMES: readonly string[] = [
   'Pioneers',
@@ -143,8 +150,7 @@ const NAMES: readonly string[] = [
   'Ledgers',
   'Tallies',
   'Cairnsmen',
-  'Hayward',
-  'Wardens',
+  'Haywards',
   'Reeves',
   'Beadles',
   'Vergers',
@@ -166,8 +172,6 @@ const NAMES: readonly string[] = [
   'Slaters',
   'Thatchers',
   'Tilers',
-  'Stewards',
-  'Heralds',
   'Knights',
   'Pages',
   'Squires',
@@ -205,6 +209,71 @@ const NAMES: readonly string[] = [
   'Reserves',
 ];
 
+const ADJECTIVES: readonly string[] = [
+  'Wandering',
+  'Stubborn',
+  'Errant',
+  'Distant',
+  'Quiet',
+  'Silent',
+  'Fading',
+  'Rising',
+  'Quickening',
+  'Patient',
+  'Wary',
+  'Bold',
+  'Cautious',
+  'Restless',
+  'Steady',
+  'Wild',
+  'Lonely',
+  'Gathered',
+  'Scattered',
+  'Steadfast',
+  'Wayward',
+  'Hidden',
+  'Lost',
+  'Found',
+  'Ancient',
+  'Young',
+  'Far',
+  'High',
+  'Low',
+  'Deep',
+  'Shallow',
+  'Bright',
+  'Dim',
+  'Faint',
+  'Sharp',
+  'Keen',
+  'Idle',
+  'Glimmering',
+  'Whispering',
+  'Singing',
+  'Drowsy',
+  'Watchful',
+  'Hungry',
+  'Sated',
+  'Threadbare',
+  'Spare',
+  'Lean',
+  'Hollow',
+  'Roving',
+  'Tireless',
+  'Weary',
+  'Hopeful',
+  'Resolute',
+  'Forsaken',
+  'Renewed',
+  'Unbroken',
+  'Mended',
+  'Frayed',
+  'Tangled',
+  'Branching',
+  'Trailing',
+  'Vagrant',
+];
+
 const FNV_OFFSET = 0xcbf29ce484222325n;
 const FNV_PRIME = 0x100000001b3n;
 const U64_MASK = 0xffffffffffffffffn;
@@ -220,11 +289,16 @@ function fnv1a(value: bigint): bigint {
   return hash;
 }
 
-// Deterministic name for a lineage given its ordinal. The seed of the
-// run is implicitly encoded by the founding probe's lineage assignments;
-// a different seed produces the same name list but in a different order
-// of speciation.
+// Deterministic name for a lineage given its ordinal. Splits the FNV
+// hash into two 32-bit halves and uses each as an independent index
+// into the adjective and noun lists. A different seed produces the
+// same name space but in a different order of speciation.
 export function lineageName(ordinal: bigint): string {
-  const idx = Number(fnv1a(ordinal) % BigInt(NAMES.length));
-  return NAMES[idx] ?? `Lineage-${ordinal.toString()}`;
+  const hash = fnv1a(ordinal);
+  const adjIdx = Number((hash & 0xffffffffn) % BigInt(ADJECTIVES.length));
+  const nounIdx = Number((hash >> 32n) % BigInt(NAMES.length));
+  const adjective = ADJECTIVES[adjIdx];
+  const noun = NAMES[nounIdx];
+  if (adjective === undefined || noun === undefined) return `Lineage-${ordinal.toString()}`;
+  return `${adjective} ${noun}`;
 }
