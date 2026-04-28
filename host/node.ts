@@ -260,6 +260,7 @@ export class NodeHost {
       case 'decreeQueue':
         return this.queryDecreeQueue(query.queryId);
       case 'lineageTree':
+        return this.queryLineageTree(query.queryId);
       case 'logSlice':
       case 'populationSummary':
         // Result bodies for these are still placeholders in the schema;
@@ -268,6 +269,22 @@ export class NodeHost {
         // surface live for early UI integration.
         return { queryId: query.queryId, kind: query.kind } as QueryResult;
     }
+  }
+
+  private queryLineageTree(queryId: string): QueryResult {
+    if (this.state === null) {
+      return { queryId, kind: 'lineageTree', lineages: [] };
+    }
+    const lineages = [...this.state.lineages.values()].map((l) => ({
+      id: l.id,
+      name: l.name,
+      parentLineageId: l.parentLineageId ?? '',
+      foundedAtTick: l.foundedAtTick,
+      founderProbeId: l.founderProbeId,
+      patches: l.patches.slice(),
+      quarantined: this.state!.quarantinedLineages.has(l.id),
+    }));
+    return { queryId, kind: 'lineageTree', lineages };
   }
 
   private queryDecreeQueue(queryId: string): QueryResult {

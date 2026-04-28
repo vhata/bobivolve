@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import type {
   DecreeTriggerSpec,
   DirectiveSpec,
+  LineageTreeResult,
   ListSavesResult,
   SaveSummary,
   SimEvent,
@@ -127,6 +128,11 @@ export interface SimStoreState {
   // Cancel a queued decree by id. Idempotent at the host (no-op ack
   // for an unknown id).
   readonly revokeDecree: (decreeId: string) => void;
+  // Pull the lineage slab from the host and rebuild the lineages map
+  // and the quarantined set. Called from the load-ack path so the
+  // dashboard reflects the restored snapshot rather than starting
+  // empty after every Load.
+  readonly rehydrateAfterLoad: () => Promise<void>;
 }
 
 let nextCommandOrdinal = 0;
@@ -316,6 +322,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             // Refresh the saves list so the new entry appears in the UI
             // without the player needing to hit a Refresh button.
             void get().refreshSaves();
+          } else if (ackedEntry.kind === 'load') {
+            set({ pendingCommands: pending });
+            // Rehydrate intervention state from the loaded snapshot.
+            // The host's load handler resets the run, restores state
+            // from the snap, and emits a single heartbeat — but no
+            // events fire for the lineages, patches, or quarantines
+            // that already existed pre-save. Pulling lineageTree gives
+            // us all of that in one shot. Decrees come back via the
+            // DecreesPanel's regular poll.
+            void get().rehydrateAfterLoad();
           } else {
             set({ pendingCommands: pending });
           }
@@ -602,6 +618,41 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-revokeDecree');
       transport.send({ kind: 'revokeDecree', commandId, decreeId });
+    },
+    rehydrateAfterLoad: async () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      try {
+        const result = (await transport.query({
+          kind: 'lineageTree',
+          queryId: '',
+        })) as LineageTreeResult & { queryId: string };
+        const lineages = new Map<string, LineageNode>();
+        const quarantined = new Set<string>();
+        for (const entry of result.lineages) {
+          lineages.set(entry.id, {
+            id: entry.id,
+            name: entry.name,
+            parentId: entry.parentLineageId === '' ? null : entry.parentLineageId,
+            foundedAtTick: entry.foundedAtTick,
+            founderProbeId: entry.founderProbeId,
+          });
+          if (entry.quarantined) quarantined.add(entry.id);
+        }
+        // Preserve current selection if the lineage exists in the
+        // restored slab; otherwise fall back to L0.
+        const selected = get().selectedLineageId;
+        const selectedExists = lineages.has(selected);
+        set({
+          lineages,
+          quarantinedLineages: quarantined,
+          selectedLineageId: selectedExists ? selected : 'L0',
+        });
+      } catch {
+        // Swallow — the rehydration is best-effort. If it fails the
+        // dashboard remains usable, just with the post-Load empty
+        // lineage view until events start firing again.
+      }
     },
     refreshSaves: async () => {
       const transport = get().transport;

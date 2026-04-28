@@ -361,9 +361,30 @@ message SubstrateQuery {}
 message ListSavesQuery {}
 
 // Result message bodies. Shapes evolve alongside the dashboard
-// implementation. Bodies still marked `{}` are placeholders to be
-// fleshed out when the matching UI panel lands.
-message LineageTree {}
+// implementation.
+
+// LineageTree — full slab of lineage state. Used by the dashboard to
+// rehydrate after a Load (the snapshot carries the lineage map and
+// the quarantined set, but the client clears its store on Load and
+// would otherwise stay empty until events fire). Names, parentage,
+// founding ticks, applied patches, and quarantine flags all live
+// here so a single fetch reproduces the UI's lineage view.
+message LineageTree {
+  repeated LineageTreeEntry lineages = 1;
+}
+
+message LineageTreeEntry {
+  string id = 1;
+  string name = 2;
+  // Empty string for the founding lineage, otherwise the lineage that
+  // speciated to produce this one. Empty-string-as-null follows proto3
+  // convention for optional strings.
+  string parent_lineage_id = 3;
+  string founded_at_tick = 4;
+  string founder_probe_id = 5;
+  repeated string patches = 6;
+  bool quarantined = 7;
+}
 
 // ProbeInspector — per-probe identity and firmware. The `probe`
 // field is unset (proto3 default) when the probe id was not found
