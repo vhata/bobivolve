@@ -408,6 +408,46 @@ body {
   flex-wrap: wrap;
 }
 
+/* Persistent action bar at the top of the inspector. Stays visible
+   regardless of how the player has scrolled the detail/drift
+   sections — the intervention surface is the most discoverable
+   element of the panel. */
+.inspector-action-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0 0 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line-soft);
+  flex: 0 0 auto;
+}
+
+.lineage-action-primary {
+  font-weight: 500;
+  background: var(--surface-3);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.lineage-action-primary:hover:not(:disabled) {
+  background: var(--data-soft);
+  border-color: var(--data);
+}
+
+/* When the player has the lineage under quarantine, the toggle reads
+   "Release quarantine" and is tinted with the warn accent so the
+   active hold is visible at a glance. */
+.lineage-action-primary.lineage-action-active {
+  background: var(--accent-soft);
+  border-color: var(--warn);
+  color: var(--accent);
+}
+
+.lineage-action-primary.lineage-action-active:hover:not(:disabled) {
+  background: var(--warn);
+  color: var(--bg-deep);
+}
+
 .lineage-action {
   font-family: inherit;
   font-size: 0.85rem;

@@ -323,6 +323,49 @@ export function LineageInspectorPanel(): React.JSX.Element {
           </span>
         ) : null}
       </header>
+      {lineage !== undefined && error === null ? (
+        <div className="inspector-action-bar">
+          <button
+            type="button"
+            className={
+              isQuarantined
+                ? 'lineage-action lineage-action-primary lineage-action-active'
+                : 'lineage-action lineage-action-primary'
+            }
+            onClick={onToggleQuarantine}
+            disabled={!isLineageKnown}
+            title={
+              isQuarantined
+                ? 'Release this lineage; replication resumes from the next tick.'
+                : "Suspend this lineage's replication. Reversible."
+            }
+          >
+            {isQuarantined ? 'Release quarantine' : 'Quarantine'}
+          </button>
+          <button
+            type="button"
+            className="lineage-action lineage-action-primary"
+            onClick={() => {
+              setPatchEditorOpen(true);
+            }}
+            disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
+            title="Author firmware modifications. Pauses the sim while editing; descendants inherit and drift."
+          >
+            Apply patch
+          </button>
+          <button
+            type="button"
+            className="lineage-action lineage-action-primary"
+            onClick={() => {
+              setDecreeComposerOpen(true);
+            }}
+            disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
+            title="Queue a conditional patch that fires when its trigger condition holds."
+          >
+            Queue decree
+          </button>
+        </div>
+      ) : null}
       <div className="panel-body">
         {error !== null ? (
           <p className="inspector-error">{error}</p>
@@ -330,45 +373,6 @@ export function LineageInspectorPanel(): React.JSX.Element {
           <p className="panel-empty">unknown lineage {selectedLineageId}</p>
         ) : (
           <>
-            <div className="inspector-actions">
-              <button
-                type="button"
-                className={
-                  isQuarantined ? 'lineage-action lineage-action-active' : 'lineage-action'
-                }
-                onClick={onToggleQuarantine}
-                disabled={!isLineageKnown}
-                title={
-                  isQuarantined
-                    ? 'Release this lineage; replication resumes from the next tick.'
-                    : "Suspend this lineage's replication. Reversible."
-                }
-              >
-                {isQuarantined ? 'Release quarantine' : 'Quarantine'}
-              </button>
-              <button
-                type="button"
-                className="lineage-action"
-                onClick={() => {
-                  setPatchEditorOpen(true);
-                }}
-                disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
-                title="Author firmware modifications. Pauses the sim while editing; descendants inherit and drift."
-              >
-                Apply patch
-              </button>
-              <button
-                type="button"
-                className="lineage-action"
-                onClick={() => {
-                  setDecreeComposerOpen(true);
-                }}
-                disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
-                title="Queue a conditional patch that fires when its trigger condition holds."
-              >
-                Queue decree
-              </button>
-            </div>
             <dl className="inspector-detail">
               <div>
                 <dt>founder</dt>
