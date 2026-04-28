@@ -200,6 +200,12 @@ message Tick {
   // unchanged", not "value zero".
   string origin_compute = 4;
   string origin_compute_max = 5;
+  // Authoritative run-loop state at the heartbeat tick. The store
+  // reconciles its optimistic projection against these when no pending
+  // command for the same field is in flight, so any class of message-
+  // drop or projection-drift bug self-corrects on the next heartbeat.
+  bool paused = 6;
+  uint32 speed = 7;
 }
 
 message Replication {

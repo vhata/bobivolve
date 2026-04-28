@@ -136,6 +136,23 @@ function mintCommandId(prefix: string): string {
   return id;
 }
 
+// True if any pending command's kind matches one of the supplied kinds.
+// Used by the heartbeat reconciliation path to keep the optimistic
+// projection while a command for that field is in flight.
+function hasPendingKind(
+  pending: ReadonlyMap<string, PendingCommand>,
+  ...kinds: readonly PendingCommand['kind'][]
+): boolean {
+  for (const cmd of pending.values()) {
+    if (kinds.includes(cmd.kind)) return true;
+  }
+  return false;
+}
+
+function asSimSpeed(n: number): SimSpeed | null {
+  return n === 1 || n === 4 || n === 16 || n === 64 ? n : null;
+}
+
 // L0 is the founding lineage — every fresh run starts with it. The sim
 // emits a Speciation event for every subsequent lineage but never one for
 // L0; the store seeds it implicitly.
@@ -216,17 +233,31 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             history.splice(i, 1);
           }
         }
-        // While paused, force the readout to 0 — a stale heartbeat from
-        // an in-flight runUntil could otherwise leave the previous
-        // non-zero reading lingering on the screen.
+        // Reconcile against the host's authoritative state. The
+        // optimistic projection holds while a pause / resume / setSpeed
+        // command is in flight (the player just clicked, the ack hasn't
+        // arrived yet — trust the optimistic flip). Once no such
+        // command is pending, the heartbeat's `paused` and `speed`
+        // become truth, so any class of message-drop or projection-
+        // drift bug self-corrects on the next heartbeat.
+        const current = get();
+        const pausePending = hasPendingKind(current.pendingCommands, 'pause', 'resume');
+        const speedPending = hasPendingKind(current.pendingCommands, 'setSpeed');
+        const reconciledPaused = pausePending ? current.paused : event.paused;
+        const reconciledSpeed: SimSpeed = speedPending
+          ? current.speed
+          : (asSimSpeed(event.speed) ?? current.speed);
+
+        // While paused, force the actualSpeed readout to 0 — a stale
+        // heartbeat from an in-flight runUntil could otherwise leave
+        // the previous non-zero reading lingering on the screen.
         //
         // While running, a heartbeat that reports actualSpeed=0
         // (because the pulse couldn't fit a single tick in its
         // wall-clock budget) is a momentary measurement artefact, not a
         // sign the sim has stopped. Hold the previous reading instead
         // of blipping the readout to 0 and back.
-        const current = get();
-        const nextSpeed = current.paused
+        const nextActualSpeed = reconciledPaused
           ? 0
           : event.actualSpeed > 0
             ? event.actualSpeed
@@ -236,9 +267,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           populationTotal: event.populationTotal,
           populationByLineage: byLineage,
           populationHistory: history,
-          actualSpeed: nextSpeed,
+          actualSpeed: nextActualSpeed,
           originCompute: event.originCompute,
           originComputeMax: event.originComputeMax,
+          paused: reconciledPaused,
+          speed: reconciledSpeed,
         });
         return;
       }

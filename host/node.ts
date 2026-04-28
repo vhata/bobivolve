@@ -983,6 +983,8 @@ export class NodeHost {
       populationByLineage,
       originCompute: state.originCompute,
       originComputeMax: ORIGIN_COMPUTE_MAX,
+      paused: this.paused,
+      speed: this.speed,
     };
     this.emit(event);
 
