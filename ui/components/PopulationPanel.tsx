@@ -3,6 +3,7 @@
 // store's bounded populationHistory buffer; the list reads the latest
 // snapshot.
 
+import { lineageColor } from '../lineage-color.js';
 import { useSimStore } from '../sim-store.js';
 import type { PopulationHistoryPoint } from '../sim-store.js';
 
@@ -78,7 +79,14 @@ export function PopulationPanel(): React.JSX.Element {
           <ul className="lineage-list">
             {lineages.map(([id, count]) => (
               <li key={id}>
-                <span className="lineage-id">{id}</span>
+                <span className="lineage-id">
+                  <span
+                    className="lineage-swatch"
+                    style={{ background: lineageColor(id) }}
+                    aria-hidden="true"
+                  />
+                  {id}
+                </span>
                 <span className="lineage-count">{count.toString()}</span>
               </li>
             ))}

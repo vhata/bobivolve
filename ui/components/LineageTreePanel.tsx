@@ -8,6 +8,7 @@
 // full depth without any indent cap. Speciation history of dead
 // branches still lives in the events timeline.
 
+import { lineageColor } from '../lineage-color.js';
 import type { LineageNode, PopulationHistoryPoint } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
 
@@ -181,6 +182,11 @@ function TreeNodeView({
         aria-pressed={selected}
       >
         <span className="lineage-id">
+          <span
+            className="lineage-swatch"
+            style={{ background: lineageColor(node.lineage.id) }}
+            aria-hidden="true"
+          />
           {isQuarantined ? <span className="lineage-quarantine-pip">⊘</span> : null}
           {node.lineage.name}
           {node.lineage.name !== node.lineage.id ? (
