@@ -1246,3 +1246,22 @@ body {
   font-variant-numeric: tabular-nums;
   color: #8aaaff;
 }
+
+.lineage-trend {
+  display: inline-block;
+  margin-right: 0.4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineage-trend-rising {
+  color: #6cd07a;
+}
+
+.lineage-trend-falling {
+  color: #e6a04a;
+}
+
+.lineage-trend-stable {
+  color: #6e7178;
+}
