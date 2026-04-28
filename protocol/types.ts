@@ -346,6 +346,19 @@ export type Query = QueryBody & {
 
 export interface LineageTreeResult {
   readonly kind: 'lineageTree';
+  readonly lineages: readonly LineageTreeEntry[];
+}
+
+export interface LineageTreeEntry {
+  readonly id: string;
+  readonly name: string;
+  // Empty string for the founding lineage, otherwise the lineage that
+  // speciated to produce this one.
+  readonly parentLineageId: string;
+  readonly foundedAtTick: bigint;
+  readonly founderProbeId: string;
+  readonly patches: readonly string[];
+  readonly quarantined: boolean;
 }
 
 export interface ProbeInspectorResult {
