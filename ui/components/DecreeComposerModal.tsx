@@ -8,7 +8,7 @@
 // Like the patch editor, this is modal-on-action: the sim pauses while
 // the modal is open and resumes on close.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DECREE_AUTHORING_COST } from '../../sim/compute.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
@@ -75,10 +75,22 @@ export function DecreeComposerModal({
   const [patchTargetLineageId, setPatchTargetLineageId] = useState(defaultPatchTargetLineageId);
   const [draft, setDraft] = useState<DraftRow[]>(() => toDraft(initialFirmware));
 
+  // Modal-on-action: pause on open, resume on close — but only if WE
+  // paused. Same fix as PatchEditorModal; without the guard, closing
+  // the composer would un-pause whatever the player had explicitly
+  // paused.
+  const pausedByMeRef = useRef(false);
   useEffect(() => {
-    pause();
+    const wasPausedAtOpen = useSimStore.getState().paused;
+    if (!wasPausedAtOpen) {
+      pause();
+      pausedByMeRef.current = true;
+    }
     return () => {
-      resume();
+      if (pausedByMeRef.current) {
+        resume();
+        pausedByMeRef.current = false;
+      }
     };
   }, [pause, resume]);
 

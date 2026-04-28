@@ -7,7 +7,7 @@
 // numeric parameter, sees the cost vs current budget, and either Applies
 // or Cancels. Either action resumes the sim.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PATCH_AUTHORING_COST } from '../../sim/compute.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
@@ -75,12 +75,26 @@ export function PatchEditorModal({
 
   const [draft, setDraft] = useState<DraftRow[]>(() => toDraft(initialFirmware));
 
-  // Modal-on-action: pause on open, resume on close. The cleanup runs
-  // whether the modal closes via Apply or Cancel.
+  // Modal-on-action: pause on open, resume on close — but only if WE
+  // paused. If the player had paused the sim before opening the modal,
+  // we leave it paused on close. Without this guard, closing the modal
+  // would un-pause whatever the player had explicitly paused, which is
+  // the bug that prompted this fix. The ref survives renders within
+  // this component instance; in StrictMode dev the mount→unmount→mount
+  // cycle still produces a transient resume→pause flicker, which
+  // production builds don't see.
+  const pausedByMeRef = useRef(false);
   useEffect(() => {
-    pause();
+    const wasPausedAtOpen = useSimStore.getState().paused;
+    if (!wasPausedAtOpen) {
+      pause();
+      pausedByMeRef.current = true;
+    }
     return () => {
-      resume();
+      if (pausedByMeRef.current) {
+        resume();
+        pausedByMeRef.current = false;
+      }
     };
   }, [pause, resume]);
 
