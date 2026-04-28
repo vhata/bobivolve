@@ -185,6 +185,17 @@ body {
 
 .lineage-id {
   color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lineage-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
 }
 
 .lineage-count {

@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { SubstrateProbe, SubstrateResult } from '../../protocol/types.js';
+import { lineageColor } from '../lineage-color.js';
 import type { LineageNode } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
 
@@ -33,21 +34,8 @@ const DEFAULT_FILTERS: MapFilters = {
   probeScope: 'all',
 };
 
-function lineageHue(id: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return Math.abs(hash) % 360;
-}
-
-function lineageColor(id: string): string {
-  return `hsl(${lineageHue(id).toString()}, 70%, 65%)`;
-}
-
 function cellFill(value: bigint, max: bigint): string {
-  if (max === 0n) return '#0e0f12';
+  if (max === 0n) return 'oklch(0.13 0.005 60)';
   const ratio = Number((value * 100n) / max) / 100;
   const clamped = Math.max(0, Math.min(1, ratio));
   const lightness = (5 + clamped * 30).toFixed(1);
