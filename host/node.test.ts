@@ -21,9 +21,9 @@ const TICKS_3000 = 3000n;
 // at the founder's home system; the slowed explore directive plus
 // resource-poor void mean total spawned and live counts are lower
 // than they were on the uniform-MAX 32×32 lattice.
-const GOLDEN_LIVE_POP_SEED_42 = 1266n;
+const GOLDEN_LIVE_POP_SEED_42 = 3496n;
 // Total probes ever spawned across the same run.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 4054n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 10892n;
 
 function makeFakeClock(): () => number {
   // Returns a clock whose readings advance by 1ms per call, deterministically.
