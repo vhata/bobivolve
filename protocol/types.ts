@@ -159,6 +159,11 @@ export interface TickEvent {
   // without having to hard-code the sim tuning.
   readonly originCompute: bigint;
   readonly originComputeMax: bigint;
+  // Authoritative run-loop state at this heartbeat tick. The sim-store
+  // reconciles its optimistic projection against these when no pending
+  // command for the same field is in flight.
+  readonly paused: boolean;
+  readonly speed: number;
 }
 
 export interface ReplicationEvent {
