@@ -8,6 +8,7 @@
 // full depth without any indent cap. Speciation history of dead
 // branches still lives in the events timeline.
 
+import { useMemo } from 'react';
 import { lineageColor } from '../lineage-color.js';
 import type { LineageNode, PopulationHistoryPoint } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
@@ -231,23 +232,30 @@ export function LineageTreePanel(): React.JSX.Element {
   const selectLineage = useSimStore((s) => s.selectLineage);
   const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
 
-  const roots = buildLivingTree(lineages, populationByLineage);
-  // Living lineage count for the panel header — distinct from
-  // lineages.size (which counts every lineage ever recorded).
-  let livingCount = 0;
-  for (const id of lineages.keys()) {
-    if ((populationByLineage.get(id) ?? 0n) > 0n) livingCount += 1;
-  }
+  // Memoise the tree build and trend computation against their
+  // actual inputs. The panel re-renders on every heartbeat (because
+  // it subscribes to populationByLineage and populationHistory), and
+  // these computations are O(lineages × history-window) — without
+  // memoisation, a fat run does this work many times per second
+  // even though the inputs only change incrementally.
+  const { roots, livingCount } = useMemo(() => {
+    const tree = buildLivingTree(lineages, populationByLineage);
+    let count = 0;
+    for (const id of lineages.keys()) {
+      if ((populationByLineage.get(id) ?? 0n) > 0n) count += 1;
+    }
+    return { roots: tree, livingCount: count };
+  }, [lineages, populationByLineage]);
 
-  // Compute per-lineage trend once for the whole render. Subscribing
-  // to populationHistory means this panel re-renders on every Tick
-  // heartbeat, which is the right cadence for the trend signal.
-  const trendByLineage = new Map<string, Trend>();
-  for (const id of lineages.keys()) {
-    const current = populationByLineage.get(id) ?? 0n;
-    if (current === 0n) continue;
-    trendByLineage.set(id, computeTrend(id, populationHistory, current));
-  }
+  const trendByLineage = useMemo(() => {
+    const trends = new Map<string, Trend>();
+    for (const id of lineages.keys()) {
+      const current = populationByLineage.get(id) ?? 0n;
+      if (current === 0n) continue;
+      trends.set(id, computeTrend(id, populationHistory, current));
+    }
+    return trends;
+  }, [lineages, populationByLineage, populationHistory]);
 
   return (
     <section className="panel lineage-tree-panel">

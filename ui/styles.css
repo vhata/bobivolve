@@ -2,9 +2,11 @@
    headings, monospace for numerics. Tokens borrowed from the design
    prototype; class names are our own so the existing components stay
    wired without a rewrite.
-*/
 
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400..600;1,400..600&family=Inter+Tight:wght@400..600&family=JetBrains+Mono:wght@400..600&display=swap');
+   Web fonts (Newsreader / Inter Tight / JetBrains Mono) are loaded via
+   non-blocking <link> in index.html — using @import here would block
+   rendering on the font CDN's response time.
+*/
 
 :root {
   --bg: oklch(0.16 0.005 60);
