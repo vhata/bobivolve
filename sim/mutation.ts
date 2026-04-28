@@ -169,6 +169,14 @@ function maybeMutateDirective(rng: Xoshiro256ss, directive: Directive): Directiv
 // which is acceptable here — the bias is deterministic and irrelevant to
 // the design question.
 //
+// Sub-DRIFT_DIVISOR values: when value/DRIFT_DIVISOR floors to zero,
+// proportional drift can't bite — but the parameter still wants to
+// drift over enough generations, so we drift by exactly ±1 in that
+// regime. Without this, a founder gather rate of 2 would never mutate
+// (its proportional max is 2/64 = 0), and the player would never see
+// gather drift on the inspector. Same draw count as the proportional
+// path; only the sign bit of the existing r is consumed.
+//
 // One PRNG draw consumed unconditionally — even on a zero-value input
 // where the result is fixed. Skipping the draw on a "trivial" path
 // would make the PRNG-consumption count depend on input value, which
@@ -181,7 +189,13 @@ export function driftU64(rng: Xoshiro256ss, value: bigint): bigint {
   if (value === 0n) return 0n;
 
   const max = value / DRIFT_DIVISOR;
-  if (max === 0n) return value;
+  if (max === 0n) {
+    const sign = (r & 1n) === 0n ? 1n : -1n;
+    const next = value + sign;
+    if (next < 1n) return 1n;
+    if (next > U64_MAX) return U64_MAX;
+    return next;
+  }
 
   const sign = (r & 1n) === 0n ? 1n : -1n;
   const magnitude = (r >> 1n) % (max + 1n);

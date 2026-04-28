@@ -19,7 +19,7 @@ const TICKS_3000 = 3000n;
 // seed=42, 3000-tick run under R1 metabolic mechanics on the
 // procedural-systems substrate with the production FOUNDER_FIRMWARE.
 // Some of these have since died, so this is not the live population.
-const GOLDEN_TOTAL_SPAWNED_SEED_42 = 4054n;
+const GOLDEN_TOTAL_SPAWNED_SEED_42 = 10892n;
 
 function fakeClock(): () => number {
   let t = 0;

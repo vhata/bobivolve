@@ -36,10 +36,23 @@ describe('driftU64', () => {
     expect(driftU64(rng, 0n)).toBe(0n);
   });
 
-  it('returns small values unchanged when value < DRIFT_DIVISOR', () => {
+  it('drifts sub-DRIFT_DIVISOR values by exactly ±1', () => {
+    // value = 32, DRIFT_DIVISOR = 64 → proportional max is 0. The
+    // sub-DRIFT_DIVISOR branch drifts by ±1 instead so small parameters
+    // (notably the founder gather.rate) still bite over generations.
     const rng = Xoshiro256ss.fromSeed(1n);
-    // value = 32, DRIFT_DIVISOR = 64 → max = 0, so no drift.
-    expect(driftU64(rng, 32n)).toBe(32n);
+    const result = driftU64(rng, 32n);
+    expect(result === 31n || result === 33n).toBe(true);
+  });
+
+  it('drifts a value of 1 to either 1 (clamped from 0) or 2', () => {
+    // value = 1: proportional max is 0; ±1 branch may attempt 0 (which
+    // floors to 1) or 2.
+    for (let seed = 1n; seed <= 8n; seed += 1n) {
+      const rng = Xoshiro256ss.fromSeed(seed);
+      const result = driftU64(rng, 1n);
+      expect(result === 1n || result === 2n).toBe(true);
+    }
   });
 });
 
