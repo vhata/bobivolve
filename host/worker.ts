@@ -46,8 +46,19 @@ const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobal
 // command resets the slot (deletes the old log, fresh writer), so
 // successive runs in the same browser tab don't accumulate. Save / Load
 // buttons in the UI act on the current slot.
+// Heartbeat at 4Hz. The dashboard's panels subscribe to slices that
+// the heartbeat updates and rerender on every Tick — at fat
+// population the cumulative VDOM allocation outpaces GC and the main
+// thread starves. Empirically at 10Hz CPU was still pegged; clicking
+// Pause and seeing the heap and DOM-node graphs collapse from
+// 150MB / 250k-nodes to 4MB / 4.6k-nodes confirmed the load was
+// render-churn, not retained state.
+//
+// 4Hz still feels live: population, t/s readout, and Origin compute
+// all update every 250ms. The store's rAF coalescer caps further
+// downstream, so this is the upstream throttle.
 const host = new NodeHost({
-  heartbeatHz: 60,
+  heartbeatHz: 4,
   persistence: {
     storage: new OPFSStorage({ root: 'bobivolve' }),
     runId: 'default',
