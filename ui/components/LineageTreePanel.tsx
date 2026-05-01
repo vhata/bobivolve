@@ -8,10 +8,64 @@
 // full depth without any indent cap. Speciation history of dead
 // branches still lives in the events timeline.
 
-import { useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { lineageColor } from '../lineage-color.js';
 import type { LineageNode, PopulationHistoryPoint } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
+
+// At fat population the tree-build (~O(lineages²) on parent-chain
+// walks) and trend computation (O(living × history-window) BigInt
+// arithmetic) are the hot path. The store updates populationByLineage
+// every heartbeat, which invalidates the panel's useMemo and forces a
+// rebuild — at scale this saturates the main thread and starves the
+// click handler for Pause. Throttle the inputs to a slower cadence
+// than the heartbeat: the tree topology and trend glyphs are
+// glance-level signals that do not benefit from sub-second updates.
+const TREE_REBUILD_INTERVAL_MS = 750;
+
+// Hard cap on the number of living lineages to surface in the tree.
+// On long runs the simulation can produce thousands of co-existing
+// lineages, most of them holding only a handful of probes. Rendering
+// every one as an `<li>` (with several nested spans + a button) is
+// what was outpacing GC and starving the main thread. The player
+// can't usefully scan thousands of rows anyway; the dashboard is a
+// glance-level surface, so we keep the most populous N and surface
+// the rest as a "+ N more" footer for awareness.
+//
+// Hide-don't-compress: per CLAUDE.md the rule is to filter out what
+// the player does not need to see, not to truncate or visually
+// compress what they do need. A small clade with two probes is
+// substantially less load-bearing than the dominant clades, so
+// dropping it from the tree (rather than collapsing depth or
+// shortening rows) is the right axis to filter on.
+const TREE_LINEAGE_LIMIT = 60;
+
+// Mirror an upstream value into local state, but only update the
+// mirror at most once per intervalMs. The component re-renders when
+// the mirror updates, not when upstream changes.
+function useThrottled<T>(value: T, intervalMs: number): T {
+  const [throttled, setThrottled] = useState<T>(value);
+  const lastUpdateRef = useRef<number>(0);
+  const latestValueRef = useRef<T>(value);
+  latestValueRef.current = value;
+  useEffect(() => {
+    const now = performance.now();
+    const elapsed = now - lastUpdateRef.current;
+    if (elapsed >= intervalMs) {
+      setThrottled(value);
+      lastUpdateRef.current = now;
+      return;
+    }
+    const handle = setTimeout(() => {
+      setThrottled(latestValueRef.current);
+      lastUpdateRef.current = performance.now();
+    }, intervalMs - elapsed);
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [value, intervalMs]);
+  return throttled;
+}
 
 // Per-row trend signal. The player needs to spot fading lineages
 // without watching every population number. Compare the lineage's
@@ -93,16 +147,34 @@ interface TreeNode {
   readonly children: readonly TreeNode[];
 }
 
+interface BuiltTree {
+  readonly roots: TreeNode[];
+  readonly visibleCount: number;
+  readonly hiddenCount: number;
+}
+
 function buildLivingTree(
   lineages: ReadonlyMap<string, LineageNode>,
   populationByLineage: ReadonlyMap<string, bigint>,
-): TreeNode[] {
-  // Step 1: enumerate living lineages.
-  const living = new Map<string, LineageNode>();
+): BuiltTree {
+  // Step 1: enumerate living lineages and their populations, then
+  // keep only the top TREE_LINEAGE_LIMIT by population. The hidden
+  // count is surfaced in the panel header so the player knows how
+  // many small clades are off-screen.
+  const all: { id: string; lineage: LineageNode; population: bigint }[] = [];
   for (const [id, lineage] of lineages) {
     const population = populationByLineage.get(id) ?? 0n;
-    if (population > 0n) living.set(id, lineage);
+    if (population > 0n) all.push({ id, lineage, population });
   }
+  const totalLiving = all.length;
+  all.sort((a, b) => {
+    if (a.population !== b.population) return b.population > a.population ? 1 : -1;
+    return a.id.localeCompare(b.id);
+  });
+  const kept = all.slice(0, TREE_LINEAGE_LIMIT);
+  const living = new Map<string, LineageNode>();
+  for (const entry of kept) living.set(entry.id, entry.lineage);
+  const hiddenCount = totalLiving - kept.length;
 
   // Step 2: re-parent each living lineage to its nearest living
   // ancestor. Walk the parentId chain skipping any non-living entry.
@@ -148,22 +220,28 @@ function buildLivingTree(
       }));
   }
 
-  return build(null);
+  return { roots: build(null), visibleCount: kept.length, hiddenCount };
 }
 
-function TreeNodeView({
+interface TreeNodeViewProps {
+  readonly node: TreeNode;
+  readonly selectedId: string;
+  readonly onSelect: (id: string) => void;
+  readonly quarantinedLineages: ReadonlySet<string>;
+  readonly trendByLineage: ReadonlyMap<string, Trend>;
+}
+
+// Memoised so unchanged subtrees skip reconciliation. The throttled
+// tree build keeps `node` references stable across heartbeats when
+// the underlying tree didn't change, so React.memo's default
+// referential prop check is sufficient.
+const TreeNodeView = memo(function TreeNodeView({
   node,
   selectedId,
   onSelect,
   quarantinedLineages,
   trendByLineage,
-}: {
-  node: TreeNode;
-  selectedId: string;
-  onSelect: (id: string) => void;
-  quarantinedLineages: ReadonlySet<string>;
-  trendByLineage: ReadonlyMap<string, Trend>;
-}): React.JSX.Element {
+}: TreeNodeViewProps): React.JSX.Element {
   const selected = node.lineage.id === selectedId;
   const isQuarantined = quarantinedLineages.has(node.lineage.id);
   const trend = trendByLineage.get(node.lineage.id) ?? 'unknown';
@@ -222,7 +300,7 @@ function TreeNodeView({
       ) : null}
     </li>
   );
-}
+});
 
 export function LineageTreePanel(): React.JSX.Element {
   const lineages = useSimStore((s) => s.lineages);
@@ -232,30 +310,33 @@ export function LineageTreePanel(): React.JSX.Element {
   const selectLineage = useSimStore((s) => s.selectLineage);
   const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
 
-  // Memoise the tree build and trend computation against their
-  // actual inputs. The panel re-renders on every heartbeat (because
-  // it subscribes to populationByLineage and populationHistory), and
-  // these computations are O(lineages × history-window) — without
-  // memoisation, a fat run does this work many times per second
-  // even though the inputs only change incrementally.
-  const { roots, livingCount } = useMemo(() => {
-    const tree = buildLivingTree(lineages, populationByLineage);
+  // Throttle the heartbeat-driven inputs so the expensive recomputes
+  // (tree build, trend window, render) only run a couple of times a
+  // second instead of on every store update. A fresh map identity
+  // arrives on every heartbeat even when the contents barely changed,
+  // so without this throttle the useMemos invalidate at heartbeat
+  // rate and saturate the main thread on fat runs.
+  const populationByLineageThrottled = useThrottled(populationByLineage, TREE_REBUILD_INTERVAL_MS);
+  const populationHistoryThrottled = useThrottled(populationHistory, TREE_REBUILD_INTERVAL_MS);
+
+  const { roots, livingCount, hiddenCount } = useMemo(() => {
+    const tree = buildLivingTree(lineages, populationByLineageThrottled);
     let count = 0;
     for (const id of lineages.keys()) {
-      if ((populationByLineage.get(id) ?? 0n) > 0n) count += 1;
+      if ((populationByLineageThrottled.get(id) ?? 0n) > 0n) count += 1;
     }
-    return { roots: tree, livingCount: count };
-  }, [lineages, populationByLineage]);
+    return { roots: tree.roots, livingCount: count, hiddenCount: tree.hiddenCount };
+  }, [lineages, populationByLineageThrottled]);
 
   const trendByLineage = useMemo(() => {
     const trends = new Map<string, Trend>();
     for (const id of lineages.keys()) {
-      const current = populationByLineage.get(id) ?? 0n;
+      const current = populationByLineageThrottled.get(id) ?? 0n;
       if (current === 0n) continue;
-      trends.set(id, computeTrend(id, populationHistory, current));
+      trends.set(id, computeTrend(id, populationHistoryThrottled, current));
     }
     return trends;
-  }, [lineages, populationByLineage, populationHistory]);
+  }, [lineages, populationByLineageThrottled, populationHistoryThrottled]);
 
   return (
     <section className="panel lineage-tree-panel">
@@ -269,18 +350,23 @@ export function LineageTreePanel(): React.JSX.Element {
         {roots.length === 0 ? (
           <p className="panel-empty">no living lineages</p>
         ) : (
-          <ul className="lineage-tree">
-            {roots.map((root) => (
-              <TreeNodeView
-                key={root.lineage.id}
-                node={root}
-                selectedId={selectedLineageId}
-                onSelect={selectLineage}
-                quarantinedLineages={quarantinedLineages}
-                trendByLineage={trendByLineage}
-              />
-            ))}
-          </ul>
+          <>
+            <ul className="lineage-tree">
+              {roots.map((root) => (
+                <TreeNodeView
+                  key={root.lineage.id}
+                  node={root}
+                  selectedId={selectedLineageId}
+                  onSelect={selectLineage}
+                  quarantinedLineages={quarantinedLineages}
+                  trendByLineage={trendByLineage}
+                />
+              ))}
+            </ul>
+            {hiddenCount > 0 ? (
+              <p className="panel-empty">+ {hiddenCount.toString()} smaller clades hidden</p>
+            ) : null}
+          </>
         )}
       </div>
     </section>
