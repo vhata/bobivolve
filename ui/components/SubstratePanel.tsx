@@ -5,12 +5,21 @@
 // query at a low cadence so the dashboard does not pay heartbeat-rate
 // rendering cost for what is essentially a slow snapshot.
 //
+// Renders to a <canvas> rather than SVG. With a 64×64 grid that's
+// 4096 cells and the SVG path produced 8k+ DOM elements per refresh
+// — every poll reconciled the entire tree, dominated DevTools' DOM
+// node count, and starved the main thread under load. Canvas is one
+// element and one draw pass per update. Trade-off: native SVG
+// `<title>` hover tooltips are gone; if hover identification of
+// individual probes becomes load-bearing, a mousemove → cell-lookup
+// → custom tooltip is the path back.
+//
 // Filters: the player can dim the resource heatmap or restrict which
 // probes show — useful on a busy map for picking out where a
 // specific clade actually lives. Filter state is shared between the
 // panel and the expanded modal so toggling stays consistent.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SubstrateProbe, SubstrateResult } from '../../protocol/types.js';
 import { lineageColor } from '../lineage-color.js';
 import type { LineageNode } from '../sim-store.js';
@@ -287,76 +296,81 @@ function SubstrateGrid({
   visibleSet: ReadonlySet<string> | null;
   sizePx: number;
 }): React.JSX.Element {
-  const side = view.side;
-  const cellPx = sizePx / side;
-  const max = BigInt(view.maxResourcePerCell);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const cellRects: React.JSX.Element[] = [];
-  if (filters.showResources) {
-    for (let y = 0; y < side; y++) {
-      for (let x = 0; x < side; x++) {
-        const idx = y * side + x;
-        const cellStr = view.cells[idx] ?? '0';
-        const value = BigInt(cellStr);
-        cellRects.push(
-          <rect
-            key={`c-${idx.toString()}`}
-            x={x * cellPx}
-            y={y * cellPx}
-            width={cellPx}
-            height={cellPx}
-            fill={cellFill(value, max)}
-          >
-            <title>
-              ({x}, {y}) — {value.toString()} resource
-            </title>
-          </rect>,
-        );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+
+    // Buffer sized for the logical sizePx scaled by device pixel
+    // ratio so cells and probes stay crisp on Retina displays. CSS
+    // handles the display dimensions (aspect-ratio + width:100%) so
+    // the canvas can shrink responsively in the expanded modal; we
+    // only own the pixel buffer here.
+    const dpr = window.devicePixelRatio > 1 ? window.devicePixelRatio : 1;
+    canvas.width = Math.round(sizePx * dpr);
+    canvas.height = Math.round(sizePx * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const side = view.side;
+    const cellPx = sizePx / side;
+    const max = BigInt(view.maxResourcePerCell);
+
+    // Background: matches the SVG's previous void colour so void cells
+    // and the canvas backdrop are indistinguishable.
+    ctx.fillStyle = 'oklch(0.13 0.005 60)';
+    ctx.fillRect(0, 0, sizePx, sizePx);
+
+    if (filters.showResources) {
+      for (let y = 0; y < side; y++) {
+        for (let x = 0; x < side; x++) {
+          const idx = y * side + x;
+          const cellStr = view.cells[idx] ?? '0';
+          const value = BigInt(cellStr);
+          ctx.fillStyle = cellFill(value, max);
+          // +0.5 width/height closes the seam between adjacent cells
+          // when cellPx isn't an integer; the SVG version got the same
+          // effect from shape-rendering: crispEdges.
+          ctx.fillRect(x * cellPx, y * cellPx, cellPx + 0.5, cellPx + 0.5);
+        }
       }
     }
-  }
 
-  const otherProbes: React.JSX.Element[] = [];
-  const highlightedProbes: React.JSX.Element[] = [];
-  const dotRadius = Math.max(1.5, cellPx / 4);
-  const renderDot = (probe: SubstrateProbe): React.JSX.Element => {
-    const cx = (probe.x + 0.5) * cellPx;
-    const cy = (probe.y + 0.5) * cellPx;
-    const isHighlighted = probe.lineageId === highlightLineageId;
-    return (
-      <circle
-        key={`p-${probe.id}`}
-        cx={cx}
-        cy={cy}
-        r={dotRadius}
-        fill={lineageColor(probe.lineageId)}
-        stroke={isHighlighted ? '#ffffff' : 'none'}
-        strokeWidth={isHighlighted ? 1 : 0}
-      >
-        <title>
-          {probe.id} — {probe.lineageId} @ ({probe.x}, {probe.y})
-        </title>
-      </circle>
-    );
-  };
-  for (const probe of view.probes) {
-    if (visibleSet !== null && !visibleSet.has(probe.lineageId)) continue;
-    const node = renderDot(probe);
-    if (probe.lineageId === highlightLineageId) highlightedProbes.push(node);
-    else otherProbes.push(node);
-  }
+    const dotRadius = Math.max(1.5, cellPx / 4);
+    const drawProbe = (probe: SubstrateProbe, isHighlighted: boolean): void => {
+      const cx = (probe.x + 0.5) * cellPx;
+      const cy = (probe.y + 0.5) * cellPx;
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+      ctx.fillStyle = lineageColor(probe.lineageId);
+      ctx.fill();
+      if (isHighlighted) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      }
+    };
+    // Two passes so the highlighted lineage's probes draw on top.
+    for (const probe of view.probes) {
+      if (visibleSet !== null && !visibleSet.has(probe.lineageId)) continue;
+      if (probe.lineageId === highlightLineageId) continue;
+      drawProbe(probe, false);
+    }
+    for (const probe of view.probes) {
+      if (visibleSet !== null && !visibleSet.has(probe.lineageId)) continue;
+      if (probe.lineageId !== highlightLineageId) continue;
+      drawProbe(probe, true);
+    }
+  }, [view, highlightLineageId, filters, visibleSet, sizePx]);
 
   return (
-    <svg
-      viewBox={`0 0 ${sizePx.toString()} ${sizePx.toString()}`}
-      preserveAspectRatio="xMidYMid meet"
-      className="substrate-svg"
+    <canvas
+      ref={canvasRef}
+      className="substrate-canvas"
       role="img"
       aria-label="Sub-lattice resource heatmap with probe overlay"
-    >
-      {cellRects}
-      {otherProbes}
-      {highlightedProbes}
-    </svg>
+    />
   );
 }
