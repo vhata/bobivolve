@@ -27,8 +27,7 @@
   --warn: oklch(0.76 0.16 50); /* quarantine */
   --good: oklch(0.78 0.1 155); /* growth */
   --bad: oklch(0.7 0.18 25); /* decline */
-  --shadow:
-    0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px oklch(0 0 0 / 0.35);
+  --shadow: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px oklch(0 0 0 / 0.35);
 
   --serif: 'Newsreader', 'Source Serif 4', 'Iowan Old Style', Georgia, serif;
   --sans: 'Inter Tight', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -49,16 +48,8 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(
-      1200px 800px at 12% -10%,
-      oklch(0.24 0.02 60 / 0.35),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 600px at 100% 110%,
-      oklch(0.22 0.02 220 / 0.25),
-      transparent 55%
-    ),
+    radial-gradient(1200px 800px at 12% -10%, oklch(0.24 0.02 60 / 0.35), transparent 60%),
+    radial-gradient(900px 600px at 100% 110%, oklch(0.22 0.02 220 / 0.25), transparent 55%),
     var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -1374,4 +1365,170 @@ body {
 
 .lineage-trend-stable {
   color: var(--text-3);
+}
+
+/* New-visitor tour. The backdrop dims the dashboard; the spotlight
+   class keeps a single panel visible above it. The tour controls all
+   navigation, so spotlighted panels are non-interactive. */
+.bobivolve-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bobivolve-header > .bobivolve-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nux-help-button {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.2rem;
+}
+
+.nux-help-button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--data);
+}
+
+.nux-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(8, 9, 12, 0.65);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 1.5rem;
+}
+
+.nux-card {
+  position: relative;
+  z-index: 202;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  width: min(420px, 95vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.nux-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nux-step-counter {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.nux-skip {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.nux-skip:hover {
+  color: var(--text);
+}
+
+.nux-card-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.nux-card-body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.nux-card-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  gap: 0.5rem;
+}
+
+.nux-nav {
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nux-nav:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.nux-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nux-nav-primary {
+  background: var(--data-soft);
+  border-color: var(--data);
+}
+
+.nux-nav-primary:hover:not(:disabled) {
+  background: var(--data);
+  color: var(--bg-deep);
+}
+
+.nux-spotlight {
+  position: relative;
+  z-index: 201;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  pointer-events: none;
+}
+
+/* The action bar normally stretches the panel width and carries a
+   bottom padding + separator border. When it's the tour's spotlight
+   target, shrink it to its content and absorb the padding into margin
+   so the outline hugs just the three buttons without shifting the
+   panel content below. */
+.inspector-action-bar.nux-spotlight {
+  align-self: flex-start;
+  padding-bottom: 0;
+  margin-bottom: 1.5rem;
+  border-bottom: none;
 }

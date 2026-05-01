@@ -8,6 +8,16 @@ import { expect, test } from '@playwright/test';
 // (population > 1), confirming the sim → worker → transport → store →
 // React pipeline is end-to-end live.
 
+// Suppress the new-visitor tour for the dashboard suite; its auto-fire
+// would block clicks and screenshots. The NUX has its own dedicated
+// suite (nux.spec.ts) that exercises auto-fire and the reopen
+// affordance directly.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('bobivolve:nux-seen', '1');
+  });
+});
+
 function readNumeric(text: string): number {
   const match = text.match(/-?\d+(?:[\d_,]*\d)?/);
   if (match === null) return Number.NaN;

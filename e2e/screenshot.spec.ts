@@ -6,7 +6,17 @@ import { test } from '@playwright/test';
 // regression set — the visibility test next door covers structural
 // invariants that matter.
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('bobivolve:nux-seen', '1');
+  });
+});
+
 test('snapshot the dashboard visually', async ({ page }) => {
+  // Vite cold-start plus a 3s sim soak plus a fullPage capture can
+  // brush against the default 30s budget on first run; the test isn't
+  // in the regression set, so be generous with the budget.
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 1400, height: 1100 });
   await page.goto('/');
   // Let some growth happen so the panels have content to show.
