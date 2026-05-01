@@ -134,12 +134,10 @@ If they can do that, the design question — does the player's role as meta-prog
 
 ### Verdict
 
-R2 mechanic surface complete: every intervention shape ships end-to-end through the dashboard. Origin compute gates all three (one-shot for patches and decrees; per-tick maintenance while a quarantine is held). The lineage inspector exposes the lineage's patches list so a clade's intervention history follows it through speciation. PatchSaturated is wired both as a sim event and an auto-pause trigger.
+R2 mechanic surface complete: every intervention shape ships end-to-end through the dashboard. Origin compute gates all three (one-shot for patches and decrees; per-tick maintenance while a quarantine is held). The lineage inspector exposes the lineage's patches list so a clade's intervention history follows it through speciation. PatchSaturated is wired both as a sim event and an auto-pause trigger. The new-visitor tour delivers the first-time-visitor onboarding the acceptance test depends on: it auto-fires once on first load, walks the player through run → lineages → drift → interventions → pacing in the same order the acceptance test exercises them, and a header "?" reopens it on demand.
 
 Open before tag (deferred items, all tracked in `TODO.md`):
 
 - Forensic replay scrub UI — the data path (snapshots + log replay) supports it; the affordance is gated on layout pacing, not technical readiness.
-- Intervention state restoration after Load — the snapshot carries the quarantined set, queued decrees, and applied patches, but the dashboard resets each on Load and only re-learns from new events. The fix is either re-emitting synthetic events at Load completion or adding a state-snapshot query the UI pulls on Load ack.
-- Gather-rate drift tuning — small mechanic-balance polish.
 
 Sign-off awaited before `r2-engineers-console` is tagged.

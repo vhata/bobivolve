@@ -16,5 +16,4 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 ## Release 2 — The Engineer's Console
 
 - Forensic replay: state-rewind scrub UI (load nearest snapshot + advance to selected tick); the events-timeline shape is in place, the data path supports it, the affordance waits on richer events for R2's player intervention #r2 #ui
-- New-user experience overlay (NUX) — a guided tour that walks the player through the dashboard in the order they need to learn it (lineages → drift → intervention surface). Auto-fires once on first visit, then sleeps; a permanent "?" button reopens it on demand. Justified by the R2 acceptance test in `ACCEPTANCE.md` ("a first-time visitor … within ten minutes … without external instructions"). Tooltips alone are insufficient because they require the player to know to hover. #r2 #ui
 - Phylogeny view as an alternate tab beside the living-lineages tree — branching SVG on a tick axis, retrospective. Living tree stays the default per the present-tense glance argument; phylogeny answers "how did we get here?" for players who want it. New `LineageTreePanel` view-toggle component. #r2 #ui #pulled-from-prototype
