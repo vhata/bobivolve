@@ -759,14 +759,13 @@ body {
   max-height: none;
 }
 
-.substrate-svg {
+.substrate-canvas {
   display: block;
   width: 100%;
   aspect-ratio: 1 / 1;
   background: var(--bg-deep);
   border: 1px solid var(--line-soft);
   border-radius: 4px;
-  shape-rendering: crispEdges;
 }
 
 /* The substrate panel is a button so the whole grid is clickable. */
@@ -817,7 +816,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.substrate-modal .substrate-svg {
+.substrate-modal .substrate-canvas {
   width: min(80vh, 720px);
   max-width: 100%;
 }

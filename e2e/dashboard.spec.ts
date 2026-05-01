@@ -304,21 +304,41 @@ test('lineage inspector surfaces the speciation rule', async ({ page }) => {
 
 test('substrate panel renders the lattice and at least one probe dot', async ({ page }) => {
   await page.goto('/');
-  // Wait for the substrate query to round-trip (REFRESH_INTERVAL_MS is
-  // 750ms; allow a few cycles for slow CI).
+  // Substrate now renders to a canvas, so individual cells/probes
+  // aren't queryable as DOM elements. Verify the canvas is mounted
+  // with a non-zero pixel buffer, then sample its centre to confirm
+  // the useEffect actually drew something — under normal operation
+  // the centre is either resource-tinted or a probe colour, never
+  // the pure-black backdrop.
+  const canvas = page.locator('.substrate-panel canvas.substrate-canvas');
+  await expect(canvas).toBeVisible();
+
   await expect
     .poll(
-      async () => {
-        const cells = await page.locator('.substrate-svg rect').count();
-        return cells;
-      },
+      async () =>
+        await canvas.evaluate((el) => {
+          const c = el as HTMLCanvasElement;
+          return c.width > 0 && c.height > 0;
+        }),
       { timeout: 10_000 },
     )
-    .toBeGreaterThan(0);
-  // 64×64 = 4096 cells; the founder is on the lattice from tick 0.
-  const cellCount = await page.locator('.substrate-svg rect').count();
-  expect(cellCount).toBe(4096);
-  await expect.poll(async () => page.locator('.substrate-svg circle').count()).toBeGreaterThan(0);
+    .toBe(true);
+
+  await expect
+    .poll(
+      async () =>
+        await canvas.evaluate((el) => {
+          const c = el as HTMLCanvasElement;
+          const ctx = c.getContext('2d');
+          if (ctx === null) return null;
+          const x = Math.floor(c.width / 2);
+          const y = Math.floor(c.height / 2);
+          const data = ctx.getImageData(x, y, 1, 1).data;
+          return [data[0], data[1], data[2], data[3]].join(',');
+        }),
+      { timeout: 10_000, intervals: [500] },
+    )
+    .not.toBe('0,0,0,255');
 });
 
 test('Save click pauses the sim and prompts for a slot name', async ({ page }) => {
