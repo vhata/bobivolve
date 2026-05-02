@@ -64,7 +64,7 @@ Code review is layered. Each layer catches what the cheaper layers cannot.
 
 **Layer 2 — Project-aware review.** A custom review agent that reads `SPEC.md`, `ARCHITECTURE.md`, and `PROCESS.md` before looking at the staged changes about to be committed. Catches what lint cannot: seam-contract violations that exceed simple pattern-matching; drift between spec and implementation; missing updates to `FEATURES.md`, `TODO.md`, or `README.md`; naming and abstraction concerns weighed against the project's idioms; principles in this document that the diff has slipped past. Surfaces findings before fixing, so judgment calls stay in the loop. Runs at the end of every meaningful chunk of work, before commit.
 
-This skill is to be authored when R0 implementation begins. Until it exists, the generic `my-code-review` skill is an acceptable but inferior stand-in for this layer.
+The skill is `bobivolve-review`; it ships with the repository under `.claude/skills/bobivolve-review/`.
 
 **Layer 3 — Generic-smell pass.** After the project-aware review, a generic code-review skill (currently `my-code-review`) catches the standard concerns that are not project-specific: duplication, dead code, missing error handling, naming inconsistencies, simplification opportunities. Optional once Layer 2 is reliable; useful in the interim.
 

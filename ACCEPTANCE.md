@@ -22,7 +22,7 @@ The list for a release is fleshed out when work on that release begins; speculat
 - `✓` Mutation — parameter drift on inherited firmware. Priority swap and directive loss/gain are deferred to R1: with a single `replicate` directive kind they reduce to no-ops or trivially destructive cases, so they need richer firmware to be meaningful.
 - `✓` Lineage clustering — clades emerge, named lay-person legibly, and split at the divergence threshold; the lineage tree records descent
 - `✓` Dashboard — always-on UI: run controls, sim controls, auto-pause, population, lineage tree, lineage inspector, events timeline
-- `—` Forensic replay — events-timeline shape shipped; full state-rewind scrub deferred. The data path (host Save/Load + snapshot replay) is already in place; the UI affordance is gated on R1+ producing more events worth rewinding to (death, extinction, contact). Building it now would polish a button with little to do.
+- `✓` Forensic replay — events-timeline shape shipped here; full state-rewind scrub landed in R2 once richer events were available to rewind to.
 
 ### Implicit (from ARCHITECTURE.md and PROCESS.md)
 
@@ -48,7 +48,7 @@ If they can do that, the design question — does the firmware-as-data idea prod
 
 ### Verdict
 
-Shipped as `r0-petri-dish`. Two items deferred with rationale: extra mutation kinds (gated on R1's richer firmware) and the state-rewind scrub UI (gated on later releases producing more events worth rewinding to). The R0 design question — does firmware-as-data drift produce something interesting on its own — is answerable by playing the dashboard.
+Shipped as `r0-petri-dish`. The R0 design question — does firmware-as-data drift produce something interesting on its own — is answerable by playing the dashboard. Both deferrals from the original R0 scope have since landed: the extra mutation kinds (priority swap, directive loss/gain) shipped with R1, and the state-rewind scrub UI shipped with R2.
 
 ## Release 1 — Scarcity
 
@@ -99,23 +99,25 @@ R2 turns the player from a spectator into a participant. The simulation already 
 
 ### Functional (from SPEC.md)
 
-- `⋯` Quarantine — a per-lineage suspension that halts replication for any probe in that lineage; reversible; survives save/load. The simplest intervention; lands first as the smoke test for the whole intervention pipeline.
-- `⋯` Origin compute — renewable u64 budget regenerated per tick, gating every player intervention per SPEC's "all gated by the Origin compute budget". Patch and decree authoring consume a one-shot cost on submission; quarantine consumes a smaller per-tick maintenance cost while held, ending when the suspension is lifted. Exposed to the dashboard so the player can see what they can afford and what their current holds are draining.
-- `⋯` Patches — directive editor authors a modification to a target lineage's firmware. Applied patches mutate the lineage's reference firmware so descendants inherit; the patch itself drifts forward like any directive (parameter drift, priority swap, loss/gain). Versioned: each patch carries an id and a target lineage id; the lineage tree records when the patch landed.
-- `⋯` Decrees — conditional patches queued to fire when their triggers match. R2 ships a narrow trigger set (population threshold, lineage near-extinction, drift-event); broader triggers wait on later releases that produce the events. Trigger evaluation is a pure function of state — no PRNG draws.
-- `⋯` Intervention-versioned lineage tree — the lineage tree shows patches as overlays on the lineages they touched, so the propagation of a player intervention is visible alongside natural speciation.
-- `⋯` PatchSaturated auto-pause trigger — fires when a player-authored patch reaches X% of the population. The trigger and the field number are reserved in the schema; R2 wires them.
+- `✓` Quarantine — a per-lineage suspension that halts replication for any probe in that lineage; reversible; survives save/load.
+- `✓` Origin compute — renewable u64 budget regenerated per tick, gating every player intervention. Patch and decree authoring consume a one-shot cost on submission; quarantine consumes a smaller per-tick maintenance cost while held. Exposed in the dashboard so the player can see what they can afford and what their current holds are draining.
+- `✓` Patches — directive editor authors a modification to a target lineage's firmware. Applied patches overwrite the lineage's reference firmware and every extant probe; descendants inherit, and the patch drifts forward like any directive. Versioned: each patch carries an id and a target lineage id, and the inspector renders the patches that have landed on the clade.
+- `✓` Decrees — modal composer queues a conditional patch (trigger + target lineage + firmware). R2 ships a narrow trigger set (lineage population below threshold); broader triggers wait on later releases that produce the events. Trigger evaluation is a pure function of state — no PRNG draws.
+- `✓` Intervention-versioned lineage inspector — each lineage's patches list is rendered next to its identity panel; child lineages inherit their parent's patches at speciation so the history follows the clade.
+- `✓` PatchSaturated auto-pause trigger — fires once when a player-authored patch's carriers exceed 50% of the population.
+- `✓` Forensic replay — clicking an event in the timeline rewinds the sim to that tick. The host loads the latest in-run snapshot at-or-before the target, replays any logged commands, and lands exactly on the target. Destructive — post-rewind state is forfeit; the action sits behind a confirm modal and a "rewinding…" overlay.
+- `✓` Phylogeny view — alternate tab beside the living-lineages tree. Renders every lineage the run produced on a tick axis, with branching at speciation moments and a lifeline showing each clade's duration.
+- `✓` New-visitor tour — guided overlay walks first-time players through the dashboard in the order the acceptance test exercises it; auto-fires once on first visit, "?" in the header reopens.
 
 ### Implicit (from ARCHITECTURE.md and PROCESS.md)
 
-- `⋯` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. Goldens for at least one R2 case (an applied patch that propagates through a lineage) are checked in and verified in CI.
-- `⋯` Save / load round-trips intervention state — quarantines, queued decrees, applied-patch metadata, and the Origin compute budget all survive a snapshot.
-- `⋯` Headless capability extends — `pnpm sim` accepts a command script that includes patches, decrees, and quarantines, and produces the same event log a UI-driven session would.
-- `⋯` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`.
+- `✓` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. Goldens are checked in and verified in CI.
+- `✓` Save / load round-trips intervention state — quarantines, queued decrees, applied-patch metadata, and the Origin compute budget all survive a snapshot.
+- `✓` Headless capability extends — `pnpm sim` accepts a command script that includes patches, decrees, and quarantines, and produces the same event log a UI-driven session would.
+- `✓` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`.
 
 ### Deferred to a later release (with rationale)
 
-- `⋯` Forensic replay scrub UI — listed in TODO under `#r2 #ui` and unblocked by R2's richer event set. Bundle into R2 if it fits the pacing; otherwise it ships when the Layer 2 review judges the affordance worth the integration noise. The data path (snapshots + log replay) is already in place; only the affordance is missing.
 - `—` Patch-incompatibility between forks — SPEC places this at R5 (Communion). Out of scope for R2.
 
 ### Acceptance test (manual)
