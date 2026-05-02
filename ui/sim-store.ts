@@ -275,9 +275,23 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     // message-drop or projection-drift bug self-corrects on the next
     // heartbeat.
     const current = get();
-    const pausePending = hasPendingKind(current.pendingCommands, 'pause', 'resume');
+    // `paused` is now command-driven: set by pause / resume actions,
+    // by the autoPaused handler, by newRun / load / rewindToTick.
+    // Heartbeats no longer influence it.
+    //
+    // The previous server-authoritative shape was meant to recover
+    // from a desync between host and store, but it introduced a race:
+    // any heartbeat in flight at the moment a pause / autoPause
+    // landed carried the pre-pause `paused: false` and would arrive
+    // after the optimistic / event-driven flip, overwriting the
+    // correct state. The pendingCommands gate caught the
+    // user-initiated cases but not autoPaused. Trusting the client
+    // projection of explicit state transitions removes the race
+    // entirely; if a desync ever does occur, the existing
+    // pendingCommands retry path re-sends pause / resume after a
+    // second of no-ack and rolls the host back into agreement.
     const speedPending = hasPendingKind(current.pendingCommands, 'setSpeed');
-    const reconciledPaused = pausePending ? current.paused : event.paused;
+    const reconciledPaused = current.paused;
     const reconciledSpeed: SimSpeed = speedPending
       ? current.speed
       : (asSimSpeed(event.speed) ?? current.speed);
