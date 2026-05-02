@@ -38,6 +38,15 @@ const ROW_HEIGHT = 14;
 const ROW_PADDING = 8; // top/bottom gutter
 const LEFT_PADDING = 4;
 const RIGHT_PADDING = 4;
+// Hard cap on rendered rows. Browsers limit canvas dimensions
+// (Chrome / Firefox cap a single dimension around 32,767 px); a long
+// run can produce tens of thousands of lineages, and at ROW_HEIGHT=14
+// even a few thousand rows blow past the limit and the canvas paints
+// blank. Cap to 1500 rows (≈ 21,000 px tall) which sits comfortably
+// below the ceiling, and surface the dropped count as a footer. A
+// scaling design (dynamic row height, virtualisation, or decimation
+// by foundedAtTick) is logged in TODO.md as future polish.
+const MAX_RENDERED_ROWS = 1500;
 
 interface LayoutEntry {
   readonly lineage: LineageNode;
@@ -51,6 +60,9 @@ interface Layout {
   readonly minTick: bigint;
   readonly maxTick: bigint;
   readonly rowsTotal: number;
+  // Lineages truncated past MAX_RENDERED_ROWS, surfaced as a footer
+  // so the player knows the canvas isn't a complete history.
+  readonly truncatedCount: number;
   // row index → lineage id, for click-to-select.
   readonly idByRow: readonly string[];
   readonly rowById: ReadonlyMap<string, number>;
@@ -81,15 +93,24 @@ function buildLayout(
 
   // Pre-order DFS from the root (founder). Row index increments as we
   // visit each lineage; children come immediately after their parent.
+  // Once we've allocated MAX_RENDERED_ROWS rows the rest are dropped
+  // and counted for the footer; we keep walking only to count, not to
+  // emit entries.
   const entries: LayoutEntry[] = [];
   const idByRow: string[] = [];
   const rowById = new Map<string, number>();
   let minTick = 0n;
   let maxTick = currentTick;
   let row = 0;
+  let truncatedCount = 0;
   function visit(parentId: string | null): void {
     const children = childrenOf.get(parentId) ?? [];
     for (const lineage of children) {
+      if (row >= MAX_RENDERED_ROWS) {
+        truncatedCount += 1;
+        visit(lineage.id);
+        continue;
+      }
       const population = populationByLineage.get(lineage.id) ?? 0n;
       const alive = population > 0n;
       let endTick: bigint;
@@ -120,6 +141,7 @@ function buildLayout(
     minTick,
     maxTick,
     rowsTotal: entries.length,
+    truncatedCount,
     idByRow,
     rowById,
   };
@@ -281,6 +303,12 @@ export function PhylogenyView({
         aria-label="Phylogeny — every lineage on a tick axis"
         onClick={onClickCanvas}
       />
+      {layout.truncatedCount > 0 ? (
+        <p className="panel-empty">
+          + {layout.truncatedCount.toString()} lineages past row {MAX_RENDERED_ROWS.toString()} not
+          rendered (long-run scaling is logged as future work)
+        </p>
+      ) : null}
     </div>
   );
 }
