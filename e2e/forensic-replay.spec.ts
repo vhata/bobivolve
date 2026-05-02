@@ -25,13 +25,14 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
   const rewindButton = page.locator('.timeline-panel .timeline-rewind').first();
   await expect(rewindButton).toBeVisible({ timeout: 45_000 });
 
-  // Pause the sim before reading the row. The list reverses entries
-  // (latest at top) and re-renders on every speciation event — without
-  // pausing, a new speciation between read and click could shift the
-  // first row to a later tick, leaving the test asserting against a
-  // tick that was never actually clicked.
+  // Pause the sim before reading the row. The events panel only makes
+  // its rows clickable while paused (modal-on-action) — and the list
+  // is fed by a 250ms-interval flush of buffered speciations, so we
+  // wait long enough after pause for the post-pause flush to land
+  // before reading the visible top row.
   await page.getByRole('button', { name: /^Pause$/ }).click({ force: true });
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(400);
 
   // Capture the target tick from the (now-stable) latest-speciation row.
   const tickText = await rewindButton.locator('.timeline-tick').textContent();
