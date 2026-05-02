@@ -6,7 +6,7 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 
 ## Status
 
-**Release 1 — Scarcity** (tagged `r1-scarcity`). Probes now live on a 32×32 sub-lattice with diffusing resources, carry an energy reservoir that drains each tick, and replicate only when they've gathered enough to fund the cost. Lineages compete for cells; some go extinct. Firmware grew from one directive to three (`gather`, `explore`, `replicate`) and the structural mutations — priority swap, directive loss, directive gain — are unblocked. The R1 design question this release answers is whether selection pressure produces competitive lineage dynamics. **Release 2 — The Engineer's Console** is next.
+**Release 2 — The Engineer's Console** (tagged `r2-engineers-console`). The player is now an active participant: author firmware patches, queue conditional decrees, quarantine clades, all gated by a renewable Origin compute budget. The lineage inspector exposes each clade's intervention history; the dashboard adds a phylogeny view alongside the living tree, and forensic replay lets the player rewind the sim to any past speciation event. The R2 design question this release answers is whether the player's role as meta-programmer feels meaningful. **Release 3 — First Contact** is next.
 
 ## How to run
 
