@@ -166,6 +166,15 @@ ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
     case 'pause':
       stopPulsing();
       break;
+    case 'rewindToTick':
+      // Forensic-replay rewind. The host pauses on completion, but
+      // until then the pulser would keep advancing the live state and
+      // race the rewind work item — leaving the dashboard staring at
+      // a heartbeat that overshot the target. Stop pulsing here so
+      // the worker idles while the rewind enqueues, restores, and
+      // replays. The player resumes manually after inspecting.
+      stopPulsing();
+      break;
     default:
       break;
   }

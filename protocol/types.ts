@@ -122,6 +122,16 @@ export interface LoadCommand {
   readonly slot: string;
 }
 
+export interface RewindToTickCommand {
+  readonly kind: 'rewindToTick';
+  // Destructive rewind. The host loads the latest in-run snapshot at-or-
+  // before this tick, replays any logged commands between snap.tick and
+  // here, then advances the sim to land exactly on this tick. The post-
+  // tick state is forfeit. Pauses on completion. Save before rewinding
+  // if the current state is worth preserving.
+  readonly tick: bigint;
+}
+
 export type CommandBody =
   | NewRunCommand
   | SetSpeedCommand
@@ -135,7 +145,8 @@ export type CommandBody =
   | QueueDecreeCommand
   | RevokeDecreeCommand
   | SaveCommand
-  | LoadCommand;
+  | LoadCommand
+  | RewindToTickCommand;
 
 export type Command = CommandBody & {
   // Caller-supplied id. The sim echoes it on CommandAck / CommandError so the

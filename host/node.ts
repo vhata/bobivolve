@@ -44,7 +44,7 @@ import type {
   SubstrateProbe,
   TickEvent,
 } from '../protocol/types.js';
-import { EventLogWriter } from './event-log.js';
+import { EventLogReader, EventLogWriter, type SnapLogEntry } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
@@ -483,17 +483,22 @@ export class NodeHost {
   // commands are acknowledged via commandAck once their effect has been
   // applied to host state.
   send(cmd: Command): void {
-    // Log every command except Load and newRun:
+    // Log every command except Load, newRun, and RewindToTick:
     //  - Load is a meta-control that forks the timeline; logging it would
     //    cause a circular reference on future loads.
     //  - newRun is logged inside handleNewRun, after the writer is reset
     //    for the new run, so the cmd lands in the right slot.
+    //  - RewindToTick rewrites in-memory state to a historical snapshot;
+    //    persisting it would require either truncating the log or
+    //    appending a fork marker, neither of which is in scope for the
+    //    destructive-MVP shape (see handleRewindToTick).
     // Save IS logged — it marks a checkpoint in the run history.
     if (
       !this.replaying &&
       this.logWriter !== null &&
       cmd.kind !== 'load' &&
-      cmd.kind !== 'newRun'
+      cmd.kind !== 'newRun' &&
+      cmd.kind !== 'rewindToTick'
     ) {
       this.logWriter.appendCommand(this.state?.simTick ?? 0n, cmd);
     }
@@ -542,6 +547,9 @@ export class NodeHost {
         return;
       case 'load':
         this.handleLoad(cmd.commandId, cmd.slot);
+        return;
+      case 'rewindToTick':
+        this.handleRewindToTick(cmd.commandId, cmd.tick);
         return;
     }
   }
@@ -825,6 +833,16 @@ export class NodeHost {
     return this.state?.simTick ?? null;
   }
 
+  // Quarantined lineages and pause flag. Exposed for tests so rewind /
+  // load behaviour can be asserted on without a query round-trip; not
+  // part of the seam.
+  quarantinedLineages(): ReadonlySet<string> {
+    return this.state?.quarantinedLineages ?? new Set();
+  }
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   // ── command handlers ───────────────────────────────────────────────────────
 
   private handleNewRun(commandId: string, seed: bigint): void {
@@ -853,6 +871,15 @@ export class NodeHost {
     // canonical (seed, command-log) description survives.
     if (!this.replaying && this.logWriter !== null) {
       this.logWriter.appendCommand(0n, { kind: 'newRun', commandId, seed });
+    }
+
+    // Eagerly capture a tick-0 snapshot so forensic-replay rewinds
+    // from any later tick always have an anchor. Without this the
+    // first snap doesn't land until SNAPSHOT_CADENCE ticks in, and
+    // any rewind attempted before then would error out for "no
+    // snapshot at-or-before". The cost is one snapshot per run.
+    if (!this.replaying) {
+      this.scheduleSnapshot();
     }
     this.ack(commandId);
   }
@@ -1148,6 +1175,126 @@ export class NodeHost {
     // Emit a heartbeat so the UI's projected state catches up to the
     // restored sim state. Without this, the dashboard keeps rendering
     // whatever it had before the Load and looks like nothing happened.
+    if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+      this.emitHeartbeat();
+    }
+
+    this.ack(commandId);
+  }
+
+  // Forensic replay — destructive scrub. Restores state to the latest
+  // in-run snapshot at-or-before targetTick, replays any logged
+  // commands between snap.tick and targetTick, then advances the sim
+  // to land on targetTick. Pauses on completion.
+  //
+  // Limitations of the destructive-MVP shape:
+  //  - Post-rewind state is forfeit. Save before rewinding if the
+  //    current state is worth preserving; the existing Save command
+  //    captures a snapshot at the live tick.
+  //  - The on-disk log is left intact. Any post-targetTick entries
+  //    become a stale fork; future post-rewind events get appended at
+  //    the new (rewound) tick numbers, so the log is no longer
+  //    monotonic in tick after a rewind. Save / Load on save slots
+  //    continue to work normally because they round-trip through a
+  //    single snapshot, not the log; replay-from-fresh of the active
+  //    log will diverge from the rewound state, which is the price
+  //    we accept for the simpler implementation.
+  //  - The non-destructive variant ("preview, then commit") is tracked
+  //    in TODO.md as a future stretch under #r2-stretch.
+  private handleRewindToTick(commandId: string, targetTick: bigint): void {
+    if (this.persistence === undefined) {
+      this.error(commandId, 'cannot rewind: no persistence configured');
+      return;
+    }
+    if (this.state === null) {
+      this.error(commandId, 'cannot rewind before newRun');
+      return;
+    }
+    if (targetTick > this.state.simTick) {
+      this.error(
+        commandId,
+        `cannot rewind to a future tick (target=${targetTick}, now=${this.state.simTick})`,
+      );
+      return;
+    }
+    this.enqueue(async () => {
+      await this.doRewindToTick(commandId, targetTick);
+    });
+  }
+
+  private async doRewindToTick(commandId: string, targetTick: bigint): Promise<void> {
+    if (this.persistence === undefined) return;
+    const persistence = this.persistence;
+
+    // Drain any buffered log entries to storage before reading. The
+    // writer buffers cmd/ev/snap appends in memory until a flush; if a
+    // snapshot was scheduled between the last flush and this rewind,
+    // its snap entry might still be in the buffer rather than on disk.
+    if (this.logWriter !== null) {
+      await this.logWriter.flush();
+    }
+
+    // Read the active run's log to find the latest snap entry at or
+    // before the target. Snapshots fire on the SNAPSHOT_CADENCE_TICKS
+    // cadence (plus tick 0 for the initial newRun), so the worst-case
+    // replay distance is the snapshot cadence; in practice often much
+    // less because we land on the most recent snap.
+    const reader = new EventLogReader(persistence.storage, logKey(persistence.runId));
+    const entries = await reader.readAll();
+
+    let bestSnap: SnapLogEntry | null = null;
+    for (const entry of entries) {
+      if (entry.type !== 'snap') continue;
+      if (entry.tick > targetTick) continue;
+      if (bestSnap === null || entry.tick > bestSnap.tick) bestSnap = entry;
+    }
+
+    if (bestSnap === null) {
+      this.error(commandId, `no snapshot available at-or-before tick ${targetTick.toString()}`);
+      return;
+    }
+
+    const snapBytes = await persistence.storage.read(bestSnap.snapshotKey);
+    if (snapBytes === null) {
+      this.error(commandId, `snapshot file missing for tick ${bestSnap.tick.toString()}`);
+      return;
+    }
+
+    const restored = restore(deserializeSnapshot(snapBytes));
+    this.state = restored;
+    this.lastSnapAtTick = restored.simTick;
+
+    // Replay logged commands strictly between the snap and the target
+    // (inclusive of `entry.tick === targetTick`). Set `replaying` so
+    // emit() / ack() / log writes don't fire — replay is silent. The
+    // command handlers still update in-memory state (lineages,
+    // quarantines, etc.) which is what we want to recover.
+    this.replaying = true;
+    try {
+      for (const entry of entries) {
+        if (entry.type !== 'cmd') continue;
+        if (entry.tick <= bestSnap.tick) continue;
+        if (entry.tick > targetTick) break;
+        // Advance ticks until we reach this command's tick.
+        while (this.state.simTick < entry.tick) {
+          this.advanceUnpaused(1n);
+        }
+        // Re-execute. The send() switch dispatches to the handlers;
+        // the replaying flag suppresses emit/ack/log side-effects.
+        this.send(entry.command);
+      }
+      // Advance any remaining ticks to land exactly on the target.
+      while (this.state.simTick < targetTick) {
+        this.advanceUnpaused(1n);
+      }
+    } finally {
+      this.replaying = false;
+    }
+
+    this.paused = true;
+    this.resetHeartbeatBaseline();
+
+    // Single heartbeat so the UI catches up to the rewound state.
     if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
       this.emitHeartbeat();
     }

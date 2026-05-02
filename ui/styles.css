@@ -905,6 +905,36 @@ body {
   gap: 0.75rem;
 }
 
+/* Each timeline row is a button that rewinds the sim to that
+   event's tick. Styled to look like the surrounding text rows
+   rather than a chunky button — the affordance is the cursor and
+   hover state, not a heavy outline. */
+.timeline-rewind {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timeline-rewind:hover {
+  background: var(--surface-2);
+  border-color: var(--line-soft);
+}
+
+.timeline-rewind:focus-visible {
+  outline: 2px solid var(--data);
+  outline-offset: 0;
+}
+
 .timeline-tick {
   color: var(--text-3);
   min-width: 6rem;
