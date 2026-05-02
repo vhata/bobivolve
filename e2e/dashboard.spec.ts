@@ -248,10 +248,13 @@ test('every panel and control is visibly rendered', async ({ page }) => {
   }
   await expect(page.locator('.controls-panel .panel-meta')).toBeVisible();
 
-  // ── AutoPausePanel: four trigger checkboxes ───────────────────────────
+  // ── AutoPausePanel: five trigger checkboxes ──────────────────────────
+  // (significant drift, lineage extinction, patch saturated, first
+  // contact, treaty violation; the last two are R3+ and rendered
+  // disabled but still visible)
   const autopauseRows = page.locator('.autopause-row');
-  await expect(autopauseRows).toHaveCount(4);
-  for (let i = 0; i < 4; i += 1) {
+  await expect(autopauseRows).toHaveCount(5);
+  for (let i = 0; i < 5; i += 1) {
     await expect(autopauseRows.nth(i)).toBeVisible();
   }
 
