@@ -75,11 +75,11 @@ Schema evolution follows proto3 rules: new optional fields are additive, no fiel
 
 ### Message families
 
-- **Command (UI → sim).** `newRun`, `setSpeed`, `pause`, `resume`, `step`, `applyPatch`, `queueDecree`, `quarantine`, `configureAutoPause`, `save`, `load`. Fire-and-forget; the sim acknowledges via `SimEvent`.
+- **Command (UI → sim).** `newRun`, `setSpeed`, `pause`, `resume`, `step`, `applyPatch`, `queueDecree`, `revokeDecree`, `quarantine`, `releaseQuarantine`, `configureAutoPause`, `save`, `load`, `rewindToTick`. Fire-and-forget; the sim acknowledges via `SimEvent`.
 - **SimEvent (sim → UI).** Two delivery tiers:
   - *Heartbeat:* one `tick` event per UI frame at most, carrying population summary, `simTick`, and actual speed. Best-effort delivery; the UI may drop heartbeats under load and must not depend on them for correctness.
-  - *Domain events:* `replication`, `speciation`, `extinction`, `death`, `firstContact`, `treatyViolation`, `patchSaturated`, `autoPaused`, `commandAck`, `commandError`. Guaranteed in-order delivery.
-- **Query (UI → sim → reply).** `lineageTree`, `probeInspector`, `driftTelemetry`, `logSlice`, `populationSummary`. Pull-only; never pushed.
+  - *Domain events:* `replication`, `speciation`, `extinction`, `death`, `firstContact`, `treatyViolation`, `patchApplied`, `patchSaturated`, `decreeQueued`, `decreeFired`, `decreeRevoked`, `quarantineImposed`, `quarantineLifted`, `autoPaused`, `commandAck`, `commandError`. Guaranteed in-order delivery.
+- **Query (UI → sim → reply).** `lineageTree`, `probeInspector`, `driftTelemetry`, `logSlice`, `populationSummary`, `substrate`, `decreeQueue`, `listSaves`. Pull-only; never pushed.
 
 ## Transports
 
