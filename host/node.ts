@@ -58,6 +58,14 @@ const DEFAULT_HEARTBEAT_HZ = 60;
 // negligible next to BigInt-heavy tick work.
 const MAX_TICKS_PER_SLICE = 8;
 
+// Replay-loop chunk size. handleRewindToTick advances synchronously
+// from the latest snap to the target, and at fat population each
+// tick can take several ms; without yielding, a 30k-tick replay
+// blocks the worker thread for tens of seconds and pause clicks pile
+// up unacked. After every chunk of REPLAY_YIELD_TICKS we yield via
+// setTimeout(0) so the worker drains its postMessage queue.
+const REPLAY_YIELD_TICKS = 250n;
+
 // Snapshot cadence — a snapshot lands every N ticks while the run advances.
 // ARCHITECTURE.md flags this as an open question with ~30,000 as the
 // suggested heuristic; tunable per host.
@@ -1269,6 +1277,14 @@ export class NodeHost {
     // emit() / ack() / log writes don't fire — replay is silent. The
     // command handlers still update in-memory state (lineages,
     // quarantines, etc.) which is what we want to recover.
+    //
+    // Yield to the event loop every REPLAY_YIELD_TICKS so the worker
+    // can drain pending postMessage events (pause clicks etc.) while
+    // the replay walks forward. Without this, a rewind from snap
+    // tick 0 to target 30k would block the worker thread for the
+    // entire replay duration — observed as 20+ seconds of unacked
+    // commands at fat population. The yield is `setTimeout(0)`, not a
+    // microtask, so macrotasks (incoming postMessages) get a window.
     this.replaying = true;
     try {
       for (const entry of entries) {
@@ -1277,7 +1293,7 @@ export class NodeHost {
         if (entry.tick > targetTick) break;
         // Advance ticks until we reach this command's tick.
         while (this.state.simTick < entry.tick) {
-          this.advanceUnpaused(1n);
+          await this.advanceWithYield(entry.tick);
         }
         // Re-execute. The send() switch dispatches to the handlers;
         // the replaying flag suppresses emit/ack/log side-effects.
@@ -1285,7 +1301,7 @@ export class NodeHost {
       }
       // Advance any remaining ticks to land exactly on the target.
       while (this.state.simTick < targetTick) {
-        this.advanceUnpaused(1n);
+        await this.advanceWithYield(targetTick);
       }
     } finally {
       this.replaying = false;
@@ -1300,6 +1316,24 @@ export class NodeHost {
     }
 
     this.ack(commandId);
+  }
+
+  // Replay helper: advance up to REPLAY_YIELD_TICKS at once, then
+  // yield to the event loop so the worker can process pending
+  // postMessages (pause, etc.). Bounded by `until` so we never
+  // overshoot the next replay checkpoint.
+  private async advanceWithYield(until: bigint): Promise<void> {
+    if (this.state === null) return;
+    const remaining = until - this.state.simTick;
+    const cap = remaining > REPLAY_YIELD_TICKS ? REPLAY_YIELD_TICKS : remaining;
+    this.advanceUnpaused(cap);
+    // setTimeout(0) yields to the macrotask queue — microtasks alone
+    // don't drain incoming postMessage events.
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve();
+      }, 0);
+    });
   }
 
   private enqueue(work: () => Promise<void>): void {
