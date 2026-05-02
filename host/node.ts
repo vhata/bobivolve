@@ -97,8 +97,47 @@ function logKey(runId: string): string {
   return `runs/${runId}/log.ndjson`;
 }
 
+function snapshotsDirKey(runId: string): string {
+  return `runs/${runId}/snapshots`;
+}
+
 function snapshotKey(runId: string, tick: bigint): string {
-  return `runs/${runId}/snapshots/${tick.toString()}.snap`;
+  return `${snapshotsDirKey(runId)}/${tick.toString()}.snap`;
+}
+
+// Storage adapters that can sweep a directory clean — both NodeStorage and
+// OPFSStorage opt in. Declared here so the host can duck-type the
+// capability without forcing it onto the Storage port (which crosses the
+// sim/host seam and is intentionally minimal). A storage adapter that
+// does not implement this is treated as a no-op reaper.
+interface ReapableStorage {
+  reapDirectory(dirKey: string): Promise<number>;
+}
+
+function isReapable(storage: object): storage is ReapableStorage {
+  return (
+    'reapDirectory' in storage &&
+    typeof (storage as { reapDirectory: unknown }).reapDirectory === 'function'
+  );
+}
+
+// Sweep snapshot files left over from a previous run under the same runId.
+// newRun deletes the active log; once the snap log entries are gone, the
+// snapshot files in `runs/<runId>/snapshots/` are unreachable — they
+// cannot be loaded (no snap entry points at them) and they cannot be
+// rewound to (handleRewindToTick reads the log). They are pure waste.
+//
+// "Orphan" here is the strong form: every snap file under the runId's
+// snapshot directory at the moment newRun fires. The previous run's log
+// is being deleted in the same handleNewRun pass, so by the time anyone
+// could read it, no entry references any of these files. The fresh run
+// will write its own tick-0 snapshot moments later.
+//
+// Idempotent and safe on an empty / never-existed slot — a missing
+// directory yields 0 reaped.
+async function reapOrphanSnapshots(persistence: PersistenceOptions): Promise<number> {
+  if (!isReapable(persistence.storage)) return 0;
+  return persistence.storage.reapDirectory(snapshotsDirKey(persistence.runId));
 }
 
 // Named save slots live under `saves/`, separate from the active run's
@@ -857,8 +896,10 @@ export class NodeHost {
     // newRun starts a fresh run. If persistence is configured, the previous
     // run's log is deleted so the slot doesn't accumulate multiple newRun
     // entries (which would make Load replay them in sequence). Snapshot
-    // files become orphans; a future reaper can sweep them, but they are
-    // no longer referenced once the snap log entries are gone.
+    // files written by the previous run are also reaped — once the log is
+    // gone, the snap entries that pointed at them are gone too, and the
+    // files cannot be loaded or rewound to. The fresh run will write its
+    // own tick-0 snapshot moments later.
     const persistence = this.persistence;
     if (persistence !== undefined) {
       const storage = persistence.storage;
@@ -867,6 +908,7 @@ export class NodeHost {
       this.lastSnapAtTick = SimTick(0n);
       this.enqueue(async () => {
         await storage.delete(key);
+        await reapOrphanSnapshots(persistence);
       });
     }
 

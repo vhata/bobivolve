@@ -33,10 +33,21 @@ export interface OPFSStorageOptions {
 // satisfy it without dragging in the full lib.dom typings — and so this
 // module compiles under `lib: ["WebWorker"]` regardless of which DOM
 // version ships the OPFS types.
+// The slice of FileSystemHandle we discriminate on. `kind` is the spec's
+// file/directory marker; we read it to skip sub-directories during the
+// reap.
+interface OPFSEntryHandle {
+  readonly kind: 'file' | 'directory';
+}
+
 interface OPFSDirectoryHandle {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<OPFSFileHandle>;
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<OPFSDirectoryHandle>;
   removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
+  // Async iteration of `[name, handle]` pairs. OPFS spec exposes this via
+  // entries() (and Symbol.asyncIterator); we only need the entries() form.
+  // The handle's `kind` discriminates files from sub-directories.
+  entries(): AsyncIterableIterator<[string, OPFSEntryHandle]>;
 }
 
 interface OPFSFileHandle {
@@ -146,6 +157,36 @@ export class OPFSStorage implements Storage {
     }
   }
 
+  // Delete every regular file directly inside `dirKey` and return the count
+  // removed. Idempotent: a missing directory yields 0 with no error, an
+  // empty directory yields 0. Sub-directories are left in place — symmetric
+  // with NodeStorage.reapDirectory; the snapshot-reaper caller only needs
+  // the flat-files-in-one-directory case, and a recursive sweep would be
+  // too eager. Not part of the Storage interface; this is a host-level
+  // convenience the snapshot reaper relies on.
+  async reapDirectory(dirKey: string): Promise<number> {
+    const path = this.parseKey(dirKey);
+    // dirKey resolves to a directory, so its full segment list (dirs + file)
+    // is the directory path; parseKey treated the last segment as a file
+    // name, but at the directory level both interpretations yield the same
+    // walk. We re-walk read-only and stop at the directory itself.
+    const allDirs = [...path.dirs, path.file];
+    const dir = await this.resolveDirReadOnly(allDirs);
+    if (dir === null) return 0;
+    let reaped = 0;
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      try {
+        await dir.removeEntry(name);
+        reaped += 1;
+      } catch (e) {
+        if (isNotFound(e)) continue;
+        throw e;
+      }
+    }
+    return reaped;
+  }
+
   // Helper for tests / hosts that want a printable locator for a key.
   // OPFS has no notion of an absolute filesystem path, so we return the
   // normalised key itself — joined with `/`, prefixed by the storage
@@ -173,8 +214,12 @@ export class OPFSStorage implements Storage {
   }
 
   private async acquireRoot(): Promise<OPFSDirectoryHandle> {
+    // Route through `unknown` to detach from the real DOM
+    // FileSystemDirectoryHandle type. Our structural OPFSDirectoryHandle is
+    // a strict subset of the spec API and the cast is safe in practice;
+    // the direct-cast form clashes with lib.dom's typing of entries().
     const storage = (
-      globalThis as {
+      globalThis as unknown as {
         navigator?: { storage?: { getDirectory?: () => Promise<OPFSDirectoryHandle> } };
       }
     ).navigator?.storage;

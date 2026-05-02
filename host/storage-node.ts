@@ -10,7 +10,7 @@
 // (e.g. `./saves`, `~/.bobivolve`, or a temp dir for tests) so the adapter
 // itself does not encode any "where do save files live" policy.
 
-import { mkdir, readFile, rm, stat, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile, appendFile } from 'node:fs/promises';
 import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
 import type { Storage } from '../sim/ports.js';
 
@@ -91,6 +91,44 @@ export class NodeStorage implements Storage {
   // resolves to without performing IO.
   pathFor(key: string): string {
     return this.resolveKey(key);
+  }
+
+  // Delete every regular file directly inside `dirKey` and return the count
+  // removed. Idempotent: a missing directory yields 0 with no error, an
+  // empty directory yields 0. Sub-directories are left in place — the
+  // current callers (snapshot reaper) only place flat files inside their
+  // target directories, and a recursive sweep would risk being too eager
+  // if the directory layout grows. Not part of the Storage interface; this
+  // is a host-level convenience the snapshot reaper relies on.
+  async reapDirectory(dirKey: string): Promise<number> {
+    const path = this.resolveKey(dirKey);
+    let entries: string[];
+    try {
+      entries = await readdir(path);
+    } catch (e) {
+      if (isNotFound(e)) return 0;
+      throw e;
+    }
+    let reaped = 0;
+    for (const entry of entries) {
+      const childPath = join(path, entry);
+      let info;
+      try {
+        info = await stat(childPath);
+      } catch (e) {
+        if (isNotFound(e)) continue;
+        throw e;
+      }
+      if (!info.isFile()) continue;
+      try {
+        await rm(childPath);
+        reaped += 1;
+      } catch (e) {
+        if (isNotFound(e)) continue;
+        throw e;
+      }
+    }
+    return reaped;
   }
 
   // Helper for hosts that compose keys for slots and event-log files.

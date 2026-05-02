@@ -93,4 +93,58 @@ describe('NodeStorage', () => {
     expect(p.startsWith(root)).toBe(true);
     expect(p.endsWith(join('saves', 'run-42'))).toBe(true);
   });
+
+  describe('reapDirectory', () => {
+    it('returns 0 on a missing directory (idempotent on never-existed slot)', async () => {
+      expect(await storage.reapDirectory('runs/no-such-run/snapshots')).toBe(0);
+    });
+
+    it('returns 0 on an empty directory', async () => {
+      // Force the directory into existence by writing a file then deleting
+      // it — leaves the parent dir behind.
+      await storage.write('runs/empty-run/snapshots/0.snap', new TextEncoder().encode('x'));
+      await storage.delete('runs/empty-run/snapshots/0.snap');
+      expect(await storage.reapDirectory('runs/empty-run/snapshots')).toBe(0);
+    });
+
+    it('removes every file in the target directory and reports the count', async () => {
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('a'));
+      await storage.write('runs/r/snapshots/500.snap', new TextEncoder().encode('b'));
+      await storage.write('runs/r/snapshots/1000.snap', new TextEncoder().encode('c'));
+
+      const reaped = await storage.reapDirectory('runs/r/snapshots');
+      expect(reaped).toBe(3);
+      expect(await storage.exists('runs/r/snapshots/0.snap')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/500.snap')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/1000.snap')).toBe(false);
+    });
+
+    it('does not touch siblings outside the target directory', async () => {
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('a'));
+      await storage.write('runs/r/log.ndjson', new TextEncoder().encode('log'));
+      await storage.write('runs/other/snapshots/0.snap', new TextEncoder().encode('other'));
+
+      await storage.reapDirectory('runs/r/snapshots');
+
+      expect(await storage.exists('runs/r/log.ndjson')).toBe(true);
+      expect(await storage.exists('runs/other/snapshots/0.snap')).toBe(true);
+    });
+
+    it('skips sub-directories — only flat files are reaped', async () => {
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('a'));
+      // Force a sub-directory to exist alongside the snap files.
+      await storage.write('runs/r/snapshots/nested/inner', new TextEncoder().encode('x'));
+
+      const reaped = await storage.reapDirectory('runs/r/snapshots');
+      expect(reaped).toBe(1);
+      expect(await storage.exists('runs/r/snapshots/0.snap')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/nested/inner')).toBe(true);
+    });
+
+    it('is idempotent on a second call', async () => {
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('a'));
+      expect(await storage.reapDirectory('runs/r/snapshots')).toBe(1);
+      expect(await storage.reapDirectory('runs/r/snapshots')).toBe(0);
+    });
+  });
 });

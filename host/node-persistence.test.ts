@@ -182,4 +182,44 @@ describe('NodeHost persistence', () => {
     expect(await storage.exists('runs/files/snapshots/500.snap')).toBe(true);
     expect(await storage.exists('runs/files/snapshots/1000.snap')).toBe(true);
   });
+
+  it('newRun reaps orphan snapshot files left from a prior run on the same slot', async () => {
+    // Phase 1: run + accumulate a few cadence snapshots on slot 'reap'.
+    {
+      const host = makeHost('reap', 500n);
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(1500n);
+      await host.flush();
+    }
+
+    // Sanity: snapshots from the first run are on disk.
+    expect(await storage.exists('runs/reap/snapshots/500.snap')).toBe(true);
+    expect(await storage.exists('runs/reap/snapshots/1000.snap')).toBe(true);
+    expect(await storage.exists('runs/reap/snapshots/1500.snap')).toBe(true);
+
+    // Phase 2: a fresh host on the same runId issues newRun. The previous
+    // run's log is deleted (existing behaviour) AND its orphan snap files
+    // are reaped. The fresh run's own tick-0 snap is then written.
+    {
+      const host = makeHost('reap', 500n);
+      host.send({ kind: 'newRun', commandId: 'c1', seed: 99n });
+      await host.flush();
+
+      // Tick-0 snap from the new run is the only snapshot remaining.
+      expect(await storage.exists('runs/reap/snapshots/0.snap')).toBe(true);
+      expect(await storage.exists('runs/reap/snapshots/500.snap')).toBe(false);
+      expect(await storage.exists('runs/reap/snapshots/1000.snap')).toBe(false);
+      expect(await storage.exists('runs/reap/snapshots/1500.snap')).toBe(false);
+    }
+  });
+
+  it('newRun reap is safe on an empty / never-existed slot', async () => {
+    // No prior run, no snapshots directory. newRun must not error.
+    const host = makeHost('virgin');
+    host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+    await host.flush();
+
+    // Newly minted tick-0 snap is present; no errors thrown.
+    expect(await storage.exists('runs/virgin/snapshots/0.snap')).toBe(true);
+  });
 });
