@@ -49,6 +49,12 @@ export function EventsTimelinePanel(): React.JSX.Element {
   const paused = useSimStore((s) => s.paused);
   const rewindToTick = useSimStore((s) => s.rewindToTick);
   const [entries, setEntries] = useState<readonly TimelineEntry[]>([]);
+  // The player clicks an event → we hold the target tick here and
+  // surface a confirm dialog. The actual rewind only fires on
+  // explicit confirmation, so accidental clicks (or click-throughs
+  // from the events list) don't destroy state. Modal-on-action: same
+  // pattern as Save / Load.
+  const [confirmingTick, setConfirmingTick] = useState<bigint | null>(null);
 
   // Subscribe directly to the transport rather than projecting events
   // through the store — the timeline is event-history-focused and the
@@ -154,7 +160,7 @@ export function EventsTimelinePanel(): React.JSX.Element {
                       type="button"
                       className="timeline-rewind"
                       onClick={() => {
-                        rewindToTick(entry.tick);
+                        setConfirmingTick(entry.tick);
                       }}
                       title={`Rewind the sim to tick ${entry.tick.toString()}. Destructive — post-rewind state is forfeit.`}
                     >
@@ -173,6 +179,61 @@ export function EventsTimelinePanel(): React.JSX.Element {
           </>
         )}
       </div>
+      {confirmingTick !== null ? (
+        <RewindConfirmModal
+          tick={confirmingTick}
+          onCancel={() => {
+            setConfirmingTick(null);
+          }}
+          onConfirm={() => {
+            const tick = confirmingTick;
+            setConfirmingTick(null);
+            rewindToTick(tick);
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function RewindConfirmModal({
+  tick,
+  onCancel,
+  onConfirm,
+}: {
+  tick: bigint;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): React.JSX.Element {
+  return (
+    <div
+      className="rewind-confirm-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm rewind"
+      onClick={onCancel}
+    >
+      <div
+        className="rewind-confirm"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <h3 className="rewind-confirm-title">Rewind to tick {tick.toString()}?</h3>
+        <p className="rewind-confirm-body">
+          The sim will load the latest snapshot at-or-before this tick and replay forward to land on
+          it. Everything that happened after this tick will be lost; Save first if it's worth
+          keeping.
+        </p>
+        <div className="rewind-confirm-actions">
+          <button type="button" className="rewind-confirm-cancel" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="rewind-confirm-go" onClick={onConfirm}>
+            Rewind
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -71,6 +71,10 @@ export interface PendingCommand {
   // state while the ack is in flight; on ack the projection is confirmed
   // and the entry is removed.
   readonly projection?: { readonly paused?: boolean; readonly speed?: SimSpeed };
+  // For rewindToTick commands: the target tick. The App-level
+  // rewinding overlay reads this to surface "rewinding to tick N…"
+  // while the work is in flight.
+  readonly targetTick?: bigint;
 }
 
 const RETRY_AFTER_MS = 1_000;
@@ -655,6 +659,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         kind: 'rewindToTick',
         issuedAtMs: Date.now(),
         retryCount: 0,
+        targetTick: tick,
       });
       // Reset projected state to a clean baseline; the post-rewind
       // heartbeat plus rehydrateAfterLoad (called from the ack handler)

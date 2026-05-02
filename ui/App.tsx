@@ -22,6 +22,23 @@ export function App(): React.JSX.Element {
   const startRun = useSimStore((s) => s.startRun);
   const setSpeed = useSimStore((s) => s.setSpeed);
   const seed = useSimStore((s) => s.seed);
+  const pendingCommands = useSimStore((s) => s.pendingCommands);
+
+  // Forensic-replay rewind can take meaningful wall-clock time at fat
+  // population (the host loads the nearest snapshot and replays
+  // forward in 250-tick chunks with event-loop yields). Show a
+  // "rewinding…" backdrop while a rewindToTick command is in flight
+  // so the player isn't staring at a frozen-looking dashboard with
+  // population and lineages projected to zero — they get an
+  // explanation of what's happening and the rest of the UI is greyed
+  // out so they don't try to interact with stale state.
+  let rewindingTick: bigint | null = null;
+  for (const cmd of pendingCommands.values()) {
+    if (cmd.kind === 'rewindToTick') {
+      rewindingTick = cmd.targetTick ?? null;
+      break;
+    }
+  }
 
   const [nuxOpen, setNuxOpen] = useState(false);
 
@@ -81,6 +98,21 @@ export function App(): React.JSX.Element {
           setNuxOpen(false);
         }}
       />
+      {rewindingTick !== null ? <RewindingOverlay tick={rewindingTick} /> : null}
+    </div>
+  );
+}
+
+function RewindingOverlay({ tick }: { tick: bigint }): React.JSX.Element {
+  return (
+    <div className="rewinding-overlay" role="status" aria-live="polite">
+      <div className="rewinding-card">
+        <p className="rewinding-title">Rewinding to tick {tick.toString()}…</p>
+        <p className="rewinding-body">
+          Loading the nearest snapshot and replaying forward. Population and lineages will jump back
+          into shape when the rewind lands.
+        </p>
+      </div>
     </div>
   );
 }

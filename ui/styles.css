@@ -1020,6 +1020,126 @@ body {
   margin: 0 0 0.4rem;
 }
 
+/* Rewind confirmation modal — modal-on-action for a destructive
+   command. The backdrop is click-to-cancel; the dialog stops
+   propagation so clicks inside don't dismiss. */
+.rewind-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(8, 9, 12, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rewind-confirm {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  width: min(440px, 95vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rewind-confirm-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.rewind-confirm-body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.rewind-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.rewind-confirm-cancel,
+.rewind-confirm-go {
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rewind-confirm-cancel {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rewind-confirm-cancel:hover {
+  background: var(--surface-3);
+}
+
+.rewind-confirm-go {
+  background: var(--accent-soft);
+  border-color: var(--warn);
+  color: var(--accent);
+}
+
+.rewind-confirm-go:hover {
+  background: var(--warn);
+  color: var(--bg-deep);
+}
+
+/* Rewinding-in-progress overlay. Greys the dashboard out and surfaces
+   a card explaining why population and lineages briefly look empty
+   (the host is loading the nearest snapshot and replaying forward).
+   pointer-events: auto blocks interactions until the rewind lands. */
+.rewinding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  background: rgba(8, 9, 12, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rewinding-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  width: min(420px, 95vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rewinding-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.rewinding-body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .timeline-tick {
   color: var(--text-3);
   min-width: 6rem;
