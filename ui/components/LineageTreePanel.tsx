@@ -8,10 +8,12 @@
 // full depth without any indent cap. Speciation history of dead
 // branches still lives in the events timeline.
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { lineageColor } from '../lineage-color.js';
 import type { LineageNode, PopulationHistoryPoint } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
+import { useThrottled } from '../use-throttled.js';
+import { PhylogenyView } from './PhylogenyView.js';
 
 // At fat population the tree-build (~O(lineages²) on parent-chain
 // walks) and trend computation (O(living × history-window) BigInt
@@ -39,33 +41,6 @@ const TREE_REBUILD_INTERVAL_MS = 750;
 // dropping it from the tree (rather than collapsing depth or
 // shortening rows) is the right axis to filter on.
 const TREE_LINEAGE_LIMIT = 60;
-
-// Mirror an upstream value into local state, but only update the
-// mirror at most once per intervalMs. The component re-renders when
-// the mirror updates, not when upstream changes.
-function useThrottled<T>(value: T, intervalMs: number): T {
-  const [throttled, setThrottled] = useState<T>(value);
-  const lastUpdateRef = useRef<number>(0);
-  const latestValueRef = useRef<T>(value);
-  latestValueRef.current = value;
-  useEffect(() => {
-    const now = performance.now();
-    const elapsed = now - lastUpdateRef.current;
-    if (elapsed >= intervalMs) {
-      setThrottled(value);
-      lastUpdateRef.current = now;
-      return;
-    }
-    const handle = setTimeout(() => {
-      setThrottled(latestValueRef.current);
-      lastUpdateRef.current = performance.now();
-    }, intervalMs - elapsed);
-    return () => {
-      clearTimeout(handle);
-    };
-  }, [value, intervalMs]);
-  return throttled;
-}
 
 // Per-row trend signal. The player needs to spot fading lineages
 // without watching every population number. Compare the lineage's
@@ -302,6 +277,8 @@ const TreeNodeView = memo(function TreeNodeView({
   );
 });
 
+type LineageView = 'living' | 'phylogeny';
+
 export function LineageTreePanel(): React.JSX.Element {
   const lineages = useSimStore((s) => s.lineages);
   const populationByLineage = useSimStore((s) => s.populationByLineage);
@@ -309,6 +286,19 @@ export function LineageTreePanel(): React.JSX.Element {
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
   const selectLineage = useSimStore((s) => s.selectLineage);
   const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
+  const simTick = useSimStore((s) => s.simTick);
+
+  // Two views over the same lineage data:
+  //   - "living": the present-tense glance — top-N living clades by
+  //     population, hierarchy, trend glyphs.
+  //   - "phylogeny": retrospective — every lineage ever, on a tick
+  //     axis, with branching at speciation moments and lifelines for
+  //     duration.
+  // Living is the default per SPEC.md "primary unit of attention is
+  // the lineage" and the present-tense glance argument; phylogeny
+  // answers "how did we get here?" for players who want it. The
+  // toggle is local to this panel; not persisted across sessions.
+  const [view, setView] = useState<LineageView>('living');
 
   // Throttle the heartbeat-driven inputs so the expensive recomputes
   // (tree build, trend window, render) only run a couple of times a
@@ -318,6 +308,7 @@ export function LineageTreePanel(): React.JSX.Element {
   // rate and saturate the main thread on fat runs.
   const populationByLineageThrottled = useThrottled(populationByLineage, TREE_REBUILD_INTERVAL_MS);
   const populationHistoryThrottled = useThrottled(populationHistory, TREE_REBUILD_INTERVAL_MS);
+  const simTickThrottled = useThrottled(simTick, TREE_REBUILD_INTERVAL_MS);
 
   const { roots, livingCount, hiddenCount } = useMemo(() => {
     const tree = buildLivingTree(lineages, populationByLineageThrottled);
@@ -347,7 +338,16 @@ export function LineageTreePanel(): React.JSX.Element {
         </span>
       </header>
       <div className="panel-body">
-        {roots.length === 0 ? (
+        <LineageViewToggle view={view} onChange={setView} />
+        {view === 'phylogeny' ? (
+          <PhylogenyView
+            lineages={lineages}
+            populationByLineage={populationByLineageThrottled}
+            currentTick={simTickThrottled}
+            selectedLineageId={selectedLineageId}
+            onSelect={selectLineage}
+          />
+        ) : roots.length === 0 ? (
           <p className="panel-empty">no living lineages</p>
         ) : (
           <>
@@ -370,5 +370,40 @@ export function LineageTreePanel(): React.JSX.Element {
         )}
       </div>
     </section>
+  );
+}
+
+function LineageViewToggle({
+  view,
+  onChange,
+}: {
+  view: LineageView;
+  onChange: (next: LineageView) => void;
+}): React.JSX.Element {
+  return (
+    <div className="lineage-view-toggle" role="radiogroup" aria-label="Lineage view">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={view === 'living'}
+        className={`lineage-view-toggle-button${view === 'living' ? ' lineage-view-toggle-button-active' : ''}`}
+        onClick={() => {
+          onChange('living');
+        }}
+      >
+        Living
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={view === 'phylogeny'}
+        className={`lineage-view-toggle-button${view === 'phylogeny' ? ' lineage-view-toggle-button-active' : ''}`}
+        onClick={() => {
+          onChange('phylogeny');
+        }}
+      >
+        Phylogeny
+      </button>
+    </div>
   );
 }

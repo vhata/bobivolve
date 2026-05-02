@@ -35,6 +35,14 @@ export interface LineageNode {
   readonly parentId: string | null;
   readonly foundedAtTick: bigint;
   readonly founderProbeId: string;
+  // Tick at which the lineage's last extant member died, or null if
+  // still alive (or if the extinction predates the current session,
+  // e.g. a Load restored a state where this lineage was already
+  // extinct — the lineageTree query doesn't carry the tick).
+  // Populated locally from ExtinctionEvent in handleEvent; the
+  // phylogeny view uses it to draw the right end of each lineage's
+  // lifeline.
+  readonly extinctionTick: bigint | null;
 }
 
 // Sampled point in the population history. We keep a bounded rolling
@@ -176,6 +184,7 @@ function freshLineages(): Map<string, LineageNode> {
         parentId: null,
         foundedAtTick: 0n,
         founderProbeId: 'P0',
+        extinctionTick: null,
       },
     ],
   ]);
@@ -337,6 +346,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           parentId: event.parentLineageId,
           foundedAtTick: event.simTick,
           founderProbeId: event.founderProbeId,
+          extinctionTick: null,
         });
         set({ simTick: event.simTick, lineages });
         return;
@@ -393,7 +403,21 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         }
         return;
       }
-      case 'extinction':
+      case 'extinction': {
+        // Extinction is rare (once per lineage in the lifetime of a
+        // run), so unlike replication/death this does warrant a
+        // store update — the phylogeny view reads extinctionTick to
+        // draw the right end of the lineage's lifeline. If the lineage
+        // is unknown (post-Load with extinctions that predate the
+        // session), drop it: the rehydrate query doesn't carry tick.
+        const existing = get().lineages.get(event.lineageId);
+        if (existing === undefined) return;
+        if (existing.extinctionTick !== null) return;
+        const lineages = new Map(get().lineages);
+        lineages.set(event.lineageId, { ...existing, extinctionTick: event.simTick });
+        set({ lineages });
+        return;
+      }
       case 'death':
         // Same reasoning as the replication branch: deaths arrive in
         // proportion to population at scale, so a per-event store
@@ -707,6 +731,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             parentId: entry.parentLineageId === '' ? null : entry.parentLineageId,
             foundedAtTick: entry.foundedAtTick,
             founderProbeId: entry.founderProbeId,
+            // The lineageTree query doesn't carry historical
+            // extinctionTick, so any lineage extinct at restore-time
+            // shows in the phylogeny as a dot at its founding tick.
+            // Future polish: extend LineageTreeEntry with the field.
+            extinctionTick: null,
           });
           if (entry.quarantined) quarantined.add(entry.id);
         }
