@@ -20,14 +20,17 @@
 //                  lineage was already gone — the lineageTree query
 //                  doesn't carry historical extinctionTick).
 //
-// SVG, not canvas: the data only changes on speciation and extinction
-// events (rare relative to heartbeats), so the per-update cost is
-// proportional to lineage count, not heartbeat rate. If long runs
-// outgrow what the SVG reconciler can chew, a canvas variant has
-// the same shape — both store-driven, no per-element interactions
-// other than click-to-select.
+// Renders to a `<canvas>`, not SVG. The first cut shipped as SVG and
+// proved that at fat lineage counts (~1800 ever) the per-throttle
+// rebuild reconciles thousands of nested SVG elements and saturates
+// the main thread — the same DOM-churn pattern we eliminated from
+// the living lineage tree. Canvas is one element and one draw pass
+// per update; click-to-select maps the pointer-Y onto a row index
+// instead of using DOM listeners. Trade-off: no `<title>` hover
+// tooltips; if those become load-bearing, mousemove → row-lookup →
+// custom tooltip is the path back.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { lineageColor } from '../lineage-color.js';
 import type { LineageNode } from '../sim-store.js';
 
@@ -35,7 +38,6 @@ const ROW_HEIGHT = 14;
 const ROW_PADDING = 8; // top/bottom gutter
 const LEFT_PADDING = 4;
 const RIGHT_PADDING = 4;
-const DEFAULT_PIXEL_WIDTH = 540;
 
 interface LayoutEntry {
   readonly lineage: LineageNode;
@@ -49,6 +51,9 @@ interface Layout {
   readonly minTick: bigint;
   readonly maxTick: bigint;
   readonly rowsTotal: number;
+  // row index → lineage id, for click-to-select.
+  readonly idByRow: readonly string[];
+  readonly rowById: ReadonlyMap<string, number>;
 }
 
 function buildLayout(
@@ -77,6 +82,8 @@ function buildLayout(
   // Pre-order DFS from the root (founder). Row index increments as we
   // visit each lineage; children come immediately after their parent.
   const entries: LayoutEntry[] = [];
+  const idByRow: string[] = [];
+  const rowById = new Map<string, number>();
   let minTick = 0n;
   let maxTick = currentTick;
   let row = 0;
@@ -100,13 +107,22 @@ function buildLayout(
       if (endTick > maxTick) maxTick = endTick;
       if (lineage.foundedAtTick < minTick) minTick = lineage.foundedAtTick;
       entries.push({ lineage, row, endTick, alive });
+      idByRow.push(lineage.id);
+      rowById.set(lineage.id, row);
       row += 1;
       visit(lineage.id);
     }
   }
   visit(null);
 
-  return { entries, minTick, maxTick, rowsTotal: entries.length };
+  return {
+    entries,
+    minTick,
+    maxTick,
+    rowsTotal: entries.length,
+    idByRow,
+    rowById,
+  };
 }
 
 interface PhylogenyViewProps {
@@ -124,127 +140,147 @@ export function PhylogenyView({
   selectedLineageId,
   onSelect,
 }: PhylogenyViewProps): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // The phylogeny scales horizontally to its container. We measure on
-  // mount and on the next throttled rebuild; the SVG itself uses a
-  // viewBox so an exact width isn't critical — sizes the rendering
-  // resolution, not the layout.
-  const [pixelWidth, setPixelWidth] = useState<number>(DEFAULT_PIXEL_WIDTH);
 
   const layout = useMemo(
     () => buildLayout(lineages, populationByLineage, currentTick),
     [lineages, populationByLineage, currentTick],
   );
 
-  const tickRange = layout.maxTick > layout.minTick ? layout.maxTick - layout.minTick : 1n;
-
-  const xOf = (tick: bigint): number => {
-    if (tickRange === 0n) return LEFT_PADDING;
-    const drawableWidth = pixelWidth - LEFT_PADDING - RIGHT_PADDING;
-    const num = (tick - layout.minTick) * BigInt(Math.round(drawableWidth * 1000));
-    return LEFT_PADDING + Number(num / tickRange) / 1000;
-  };
-  const yOf = (row: number): number => ROW_PADDING + row * ROW_HEIGHT + ROW_HEIGHT / 2;
-
   const svgHeight = layout.rowsTotal * ROW_HEIGHT + ROW_PADDING * 2;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (canvas === null || container === null) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+    const width = container.clientWidth > 0 ? container.clientWidth : 540;
+    const dpr = window.devicePixelRatio > 1 ? window.devicePixelRatio : 1;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(svgHeight * dpr);
+    canvas.style.width = `${width.toString()}px`;
+    canvas.style.height = `${svgHeight.toString()}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Background
+    ctx.fillStyle = 'oklch(0.24 0.008 60)';
+    ctx.fillRect(0, 0, width, svgHeight);
+
+    if (layout.entries.length === 0) return;
+
+    const tickRange = layout.maxTick > layout.minTick ? layout.maxTick - layout.minTick : 1n;
+    const drawableWidth = width - LEFT_PADDING - RIGHT_PADDING;
+    const xOf = (tick: bigint): number => {
+      if (tickRange === 0n) return LEFT_PADDING;
+      const num = (tick - layout.minTick) * BigInt(Math.round(drawableWidth * 1000));
+      return LEFT_PADDING + Number(num / tickRange) / 1000;
+    };
+    const yOf = (row: number): number => ROW_PADDING + row * ROW_HEIGHT + ROW_HEIGHT / 2;
+
+    // Highlight the selected row's hit-rect first so the lineage
+    // lines draw on top.
+    const selectedRow = layout.rowById.get(selectedLineageId);
+    if (selectedRow !== undefined) {
+      ctx.fillStyle = 'oklch(0.78 0.09 220 / 0.18)';
+      ctx.fillRect(0, yOf(selectedRow) - ROW_HEIGHT / 2, width, ROW_HEIGHT);
+    }
+
+    // "Now" marker — faint dashed line at currentTick.
+    const nowX = xOf(currentTick);
+    ctx.strokeStyle = 'oklch(0.82 0.11 75 / 0.55)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(nowX, 0);
+    ctx.lineTo(nowX, svgHeight);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Per-lineage: branch + lifeline.
+    for (const entry of layout.entries) {
+      const colour = lineageColor(entry.lineage.id);
+      const x0 = xOf(entry.lineage.foundedAtTick);
+      const x1 = xOf(entry.endTick);
+      const y = yOf(entry.row);
+      const parentRow =
+        entry.lineage.parentId === null
+          ? null
+          : (layout.rowById.get(entry.lineage.parentId) ?? null);
+
+      // Speciation branch from parent's row to own row at foundedAtTick.
+      if (parentRow !== null) {
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(x0, yOf(parentRow));
+        ctx.lineTo(x0, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      // Lifeline.
+      if (x1 > x0) {
+        ctx.strokeStyle = colour;
+        ctx.lineCap = 'round';
+        if (entry.alive) {
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x1, y);
+          ctx.stroke();
+        } else {
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.55;
+          ctx.setLineDash([3, 2]);
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x1, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        // Dot at the founding tick for lineages we don't have a
+        // lifeline-end for.
+        ctx.fillStyle = colour;
+        ctx.beginPath();
+        ctx.arc(x0, y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }, [layout, currentTick, selectedLineageId, svgHeight]);
+
+  // Click-to-select. Map pointer-Y → row index; null if outside any
+  // row's vertical band.
+  const onClickCanvas = (event: React.MouseEvent<HTMLCanvasElement>): void => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const rect = canvas.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    const rowFloat = (y - ROW_PADDING) / ROW_HEIGHT;
+    const row = Math.floor(rowFloat);
+    if (row < 0 || row >= layout.idByRow.length) return;
+    const id = layout.idByRow[row];
+    if (id !== undefined) onSelect(id);
+  };
 
   if (layout.entries.length === 0) {
     return <p className="panel-empty">no lineages yet</p>;
   }
 
-  const lineageRowById = new Map<string, number>();
-  for (const entry of layout.entries) lineageRowById.set(entry.lineage.id, entry.row);
-
   return (
-    <div
-      className="phylogeny"
-      ref={(el) => {
-        containerRef.current = el;
-        if (el !== null && el.clientWidth > 0 && el.clientWidth !== pixelWidth) {
-          setPixelWidth(el.clientWidth);
-        }
-      }}
-    >
-      <svg
-        className="phylogeny-svg"
-        viewBox={`0 0 ${pixelWidth.toString()} ${svgHeight.toString()}`}
-        preserveAspectRatio="none"
+    <div className="phylogeny" ref={containerRef}>
+      <canvas
+        ref={canvasRef}
+        className="phylogeny-canvas"
         role="img"
         aria-label="Phylogeny — every lineage on a tick axis"
-        style={{ height: `${svgHeight.toString()}px` }}
-      >
-        {/* Faint grid line at the right edge (currentTick) so the
-            player can see the present moment relative to the lifelines. */}
-        <line
-          x1={xOf(currentTick)}
-          x2={xOf(currentTick)}
-          y1={0}
-          y2={svgHeight}
-          className="phylogeny-now"
-        />
-        {layout.entries.map((entry) => {
-          const parentId = entry.lineage.parentId;
-          const parentRow = parentId === null ? null : (lineageRowById.get(parentId) ?? null);
-          const x0 = xOf(entry.lineage.foundedAtTick);
-          const x1 = xOf(entry.endTick);
-          const y = yOf(entry.row);
-          const colour = lineageColor(entry.lineage.id);
-          const selected = entry.lineage.id === selectedLineageId;
-          const lifelineClass = entry.alive ? 'phylogeny-lifeline' : 'phylogeny-lifeline-dead';
-          return (
-            <g
-              key={entry.lineage.id}
-              className={selected ? 'phylogeny-row phylogeny-row-selected' : 'phylogeny-row'}
-              onClick={() => {
-                onSelect(entry.lineage.id);
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(entry.lineage.id);
-                }
-              }}
-            >
-              {/* A wide invisible row-rect is the click/hover target so
-                  thin lifelines aren't fiddly to hit. */}
-              <rect
-                x={0}
-                y={y - ROW_HEIGHT / 2}
-                width={pixelWidth}
-                height={ROW_HEIGHT}
-                className="phylogeny-hit"
-              />
-              {parentRow !== null ? (
-                <line
-                  x1={x0}
-                  x2={x0}
-                  y1={yOf(parentRow)}
-                  y2={y}
-                  className="phylogeny-branch"
-                  stroke={colour}
-                />
-              ) : null}
-              {x1 > x0 ? (
-                <line x1={x0} x2={x1} y1={y} y2={y} className={lifelineClass} stroke={colour} />
-              ) : (
-                <circle cx={x0} cy={y} r={2.5} className="phylogeny-dot" fill={colour} />
-              )}
-              <title>
-                {entry.lineage.name}
-                {entry.lineage.name !== entry.lineage.id ? ` (${entry.lineage.id})` : ''}
-                {' · forked at tick '}
-                {entry.lineage.foundedAtTick.toString()}
-                {entry.alive ? ' · alive' : ''}
-                {!entry.alive && entry.lineage.extinctionTick !== null
-                  ? ` · extinct at tick ${entry.lineage.extinctionTick.toString()}`
-                  : ''}
-              </title>
-            </g>
-          );
-        })}
-      </svg>
+        onClick={onClickCanvas}
+      />
     </div>
   );
 }
