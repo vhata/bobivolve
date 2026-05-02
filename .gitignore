@@ -39,6 +39,15 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Disposable e2e profile output (e2e/profile.spec.ts writes here)
+/e2e/profile-report.txt
+/e2e/profile-raw.json
+
+# Disposable e2e visual snapshot (e2e/screenshot.spec.ts writes here).
+# Useful for the assistant to eyeball the dashboard locally; not a
+# regression artefact and not worth the binary churn in git.
+/e2e/dashboard-snapshot.png
+
 # Editors / OS
 .DS_Store
 Thumbs.db
