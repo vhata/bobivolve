@@ -43,6 +43,12 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
 
   await rewindButton.click({ force: true });
 
+  // The destructive nature of rewind warrants a confirm modal —
+  // click through it to commit.
+  const rewindButtonInModal = page.locator('.rewind-confirm button.rewind-confirm-go');
+  await expect(rewindButtonInModal).toBeVisible({ timeout: 5_000 });
+  await rewindButtonInModal.click({ force: true });
+
   // The Population panel meta carries simTick; after rewind it lands
   // on the target tick. The post-rewind heartbeat replaces simTick on
   // the next rAF; the rehydrate then repopulates the lineage tree.
