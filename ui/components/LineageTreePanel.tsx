@@ -306,42 +306,68 @@ export function LineageTreePanel(): React.JSX.Element {
   // arrives on every heartbeat even when the contents barely changed,
   // so without this throttle the useMemos invalidate at heartbeat
   // rate and saturate the main thread on fat runs.
+  //
+  // Lineages map identity also changes frequently — every speciation
+  // event copies the map (`new Map(get().lineages); lineages.set(...)`
+  // in the store), and at 64× speed speciations run at ~10/sec. With
+  // raw `lineages` as a useMemo dep, the tree-build invalidates per
+  // speciation and forces all 60 memo'd TreeNodeView subtrees to fail
+  // their referential prop check (the `node` reference changes on
+  // every rebuild). Throttle the lineages identity too so the tree
+  // only reshapes at the same cadence as the rest.
+  const lineagesThrottled = useThrottled(lineages, TREE_REBUILD_INTERVAL_MS);
   const populationByLineageThrottled = useThrottled(populationByLineage, TREE_REBUILD_INTERVAL_MS);
   const populationHistoryThrottled = useThrottled(populationHistory, TREE_REBUILD_INTERVAL_MS);
   const simTickThrottled = useThrottled(simTick, TREE_REBUILD_INTERVAL_MS);
 
-  const { roots, livingCount, hiddenCount } = useMemo(() => {
-    const tree = buildLivingTree(lineages, populationByLineageThrottled);
+  const { roots, livingCount, hiddenCount, keptIds } = useMemo(() => {
+    const tree = buildLivingTree(lineagesThrottled, populationByLineageThrottled);
     let count = 0;
-    for (const id of lineages.keys()) {
+    for (const id of lineagesThrottled.keys()) {
       if ((populationByLineageThrottled.get(id) ?? 0n) > 0n) count += 1;
     }
-    return { roots: tree.roots, livingCount: count, hiddenCount: tree.hiddenCount };
-  }, [lineages, populationByLineageThrottled]);
+    // Flatten the kept set (top-60 plus any re-parenting ancestors)
+    // so the trends loop below only computes for what's actually on
+    // screen. Without this the loop walks all living lineages — at
+    // ~1300 living, that's 1300 × 40 BigInt ops per recompute, mostly
+    // wasted because only the displayed rows show a trend glyph.
+    const kept = new Set<string>();
+    function collect(node: TreeNode): void {
+      kept.add(node.lineage.id);
+      for (const child of node.children) collect(child);
+    }
+    for (const root of tree.roots) collect(root);
+    return {
+      roots: tree.roots,
+      livingCount: count,
+      hiddenCount: tree.hiddenCount,
+      keptIds: kept,
+    };
+  }, [lineagesThrottled, populationByLineageThrottled]);
 
   const trendByLineage = useMemo(() => {
     const trends = new Map<string, Trend>();
-    for (const id of lineages.keys()) {
+    for (const id of keptIds) {
       const current = populationByLineageThrottled.get(id) ?? 0n;
       if (current === 0n) continue;
       trends.set(id, computeTrend(id, populationHistoryThrottled, current));
     }
     return trends;
-  }, [lineages, populationByLineageThrottled, populationHistoryThrottled]);
+  }, [keptIds, populationByLineageThrottled, populationHistoryThrottled]);
 
   return (
     <section className="panel lineage-tree-panel">
       <header className="panel-header">
         <h2>Lineages</h2>
         <span className="panel-meta">
-          {livingCount.toString()} living · {lineages.size.toString()} ever
+          {livingCount.toString()} living · {lineagesThrottled.size.toString()} ever
         </span>
       </header>
       <div className="panel-body">
         <LineageViewToggle view={view} onChange={setView} />
         {view === 'phylogeny' ? (
           <PhylogenyView
-            lineages={lineages}
+            lineages={lineagesThrottled}
             populationByLineage={populationByLineageThrottled}
             currentTick={simTickThrottled}
             selectedLineageId={selectedLineageId}
