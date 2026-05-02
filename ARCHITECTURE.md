@@ -97,7 +97,7 @@ SimTransport {
 Three implementations:
 
 - **WorkerTransport.** `postMessage` to a Web Worker. Day-one default for the desktop and web builds.
-- **NodeTransport.** Runs the same TypeScript sim under Node, NDJSON over stdio. For headless runs, CI, and golden-file testing.
+- **NodeTransport.** Two shapes, one interface. **In-process:** sim runs as a TypeScript module in the calling process, used for headless CLI runs, CI, and golden-file testing. **Cross-process (`NodeStdioTransport`):** sim runs in a child Node process; commands, queries, events, and query results cross the pipe as NDJSON over stdio. The cross-process shape is the symmetric counterpart of the future Rust binary — same line protocol, different child executable.
 - **TauriTransport.** `invoke` for commands and queries, event listener for the event stream. Reserved for the future Rust port.
 
 The UI imports `SimTransport`; the host process wires the implementation at startup.
