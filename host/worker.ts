@@ -175,6 +175,13 @@ ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
       // replays. The player resumes manually after inspecting.
       stopPulsing();
       break;
+    case 'load':
+      // Load resets state and pauses on the host; same race shape as
+      // rewindToTick. Stop pulsing pre-emptively so a heartbeat from
+      // the pre-Load timeline can't land at the dashboard after the
+      // post-Load heartbeat and overwrite the restored state.
+      stopPulsing();
+      break;
     default:
       break;
   }
