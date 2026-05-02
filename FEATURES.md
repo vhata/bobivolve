@@ -13,6 +13,7 @@ Updated in the same commit as any feature whose status changes.
 - ✓ Intervention-versioned lineage tree — each lineage's patches list is exposed via the drift telemetry query and rendered in the inspector; child lineages inherit their parent's patches at speciation so the history follows the clade
 - ✓ PatchSaturated auto-pause — fires once when a player-authored patch's carriers exceed 50% of the population; lineages inherit patches at speciation so the saturation count tracks descendant clades automatically
 - ✓ New-visitor tour — a guided overlay walks first-time players through the dashboard in the order they need to learn it (run → population → lineage tree → drift → intervention surface → Origin compute → pacing); auto-fires once and sleeps, with a "?" affordance in the header to reopen on demand
+- ✓ Forensic replay — clicking a row in the events timeline rewinds the run to that event's tick; the host loads the latest in-run snapshot at-or-before the target, replays any logged commands, and pauses on the rewound state. Destructive: post-rewind state is forfeit (Save first if it's worth keeping)
 
 ## Release 1 — Scarcity
 

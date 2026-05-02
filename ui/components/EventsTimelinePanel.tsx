@@ -2,11 +2,12 @@
 // speciations to start; extinctions, first contact, treaty violations
 // will join here as their mechanics land.
 //
-// SPEC.md "Forensic replay: scrubable timeline of past events". This is
-// the lighter shape — an event list with markers on a horizontal axis.
-// Full state-rewind scrubbing (load snapshot + advance to tick) is a
-// future enhancement; the data model that supports it is already in
-// place via the host's Load command.
+// SPEC.md "Forensic replay: scrubable timeline of past events". Each
+// row in the list is a button that rewinds the sim to that event's
+// tick — a destructive scrub: the host loads the latest in-run
+// snapshot at-or-before the target and advances to land exactly on
+// the event tick. The non-destructive "preview-then-commit" variant
+// is tracked under #r2-stretch in TODO.md.
 
 import { useEffect, useState } from 'react';
 import type { SimEvent } from '../../protocol/types.js';
@@ -26,6 +27,7 @@ const TIMELINE_HEIGHT = 36;
 export function EventsTimelinePanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
   const simTick = useSimStore((s) => s.simTick);
+  const rewindToTick = useSimStore((s) => s.rewindToTick);
   const [entries, setEntries] = useState<readonly TimelineEntry[]>([]);
 
   // Subscribe directly to the transport rather than projecting events
@@ -108,8 +110,17 @@ export function EventsTimelinePanel(): React.JSX.Element {
               .slice(0, 8)
               .map((entry) => (
                 <li key={entry.id}>
-                  <span className="timeline-tick">tick {entry.tick.toString()}</span>
-                  <span className="timeline-description">{entry.description}</span>
+                  <button
+                    type="button"
+                    className="timeline-rewind"
+                    onClick={() => {
+                      rewindToTick(entry.tick);
+                    }}
+                    title={`Rewind the sim to tick ${entry.tick.toString()}. Destructive — post-rewind state is forfeit.`}
+                  >
+                    <span className="timeline-tick">tick {entry.tick.toString()}</span>
+                    <span className="timeline-description">{entry.description}</span>
+                  </button>
                 </li>
               ))}
           </ul>

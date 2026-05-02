@@ -56,7 +56,7 @@ const HISTORY_CAPACITY = 240;
 // commands automatically; the player never has to handle the failure.
 export interface PendingCommand {
   readonly commandId: string;
-  readonly kind: 'pause' | 'resume' | 'setSpeed' | 'newRun' | 'save' | 'load';
+  readonly kind: 'pause' | 'resume' | 'setSpeed' | 'newRun' | 'save' | 'load' | 'rewindToTick';
   readonly issuedAtMs: number;
   readonly retryCount: number;
   // Optimistic effect summary. The UI reads it to render the projected
@@ -88,6 +88,9 @@ export interface SimStoreState {
   readonly setSpeed: (speed: SimSpeed) => void;
   readonly save: (slot?: string) => void;
   readonly load: (slot?: string) => void;
+  // Forensic-replay rewind. Destructive: post-tick state is forfeit.
+  // Save first if the live state is worth keeping. Pauses on ack.
+  readonly rewindToTick: (tick: bigint) => void;
   readonly autoPauseTriggers: ReadonlySet<string>;
   readonly lastAutoPauseTrigger: string | null;
   readonly setAutoPauseTriggers: (triggers: ReadonlySet<string>) => void;
@@ -358,15 +361,14 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             // Refresh the saves list so the new entry appears in the UI
             // without the player needing to hit a Refresh button.
             void get().refreshSaves();
-          } else if (ackedEntry.kind === 'load') {
+          } else if (ackedEntry.kind === 'load' || ackedEntry.kind === 'rewindToTick') {
             set({ pendingCommands: pending });
-            // Rehydrate intervention state from the loaded snapshot.
-            // The host's load handler resets the run, restores state
-            // from the snap, and emits a single heartbeat — but no
-            // events fire for the lineages, patches, or quarantines
-            // that already existed pre-save. Pulling lineageTree gives
-            // us all of that in one shot. Decrees come back via the
-            // DecreesPanel's regular poll.
+            // Rehydrate intervention state from the post-load /
+            // post-rewind sim state. The host emits a single heartbeat
+            // at end of restore but no events fire for the lineages,
+            // patches, or quarantines that already existed; pulling
+            // lineageTree gives us all of that in one shot. Decrees
+            // come back via the DecreesPanel's regular poll.
             void get().rehydrateAfterLoad();
           } else {
             set({ pendingCommands: pending });
@@ -604,6 +606,38 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         originComputeMax: null,
       });
       transport.send({ kind: 'load', commandId, slot });
+    },
+    rewindToTick: (tick) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-rewindToTick');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'rewindToTick',
+        issuedAtMs: Date.now(),
+        retryCount: 0,
+      });
+      // Reset projected state to a clean baseline; the post-rewind
+      // heartbeat plus rehydrateAfterLoad (called from the ack handler)
+      // will repopulate from the host's authoritative state. Without
+      // the reset, the dashboard would briefly render lineages and
+      // populations that hadn't existed yet at the target tick.
+      set({
+        pendingCommands: pending,
+        simTick: 0n,
+        populationTotal: 0n,
+        populationByLineage: new Map(),
+        populationHistory: [],
+        lineages: freshLineages(),
+        paused: true,
+        actualSpeed: 0,
+        selectedLineageId: 'L0',
+        quarantinedLineages: new Set(),
+        originCompute: null,
+        originComputeMax: null,
+      });
+      transport.send({ kind: 'rewindToTick', commandId, tick });
     },
     selectLineage: (id) => {
       set({ selectedLineageId: id });

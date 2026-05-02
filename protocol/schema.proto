@@ -44,6 +44,7 @@ message Command {
     // Quarantine, or an audit reason on ReleaseQuarantine, etc.).
     ReleaseQuarantine release_quarantine = 13;
     RevokeDecree revoke_decree = 14;
+    RewindToTick rewind_to_tick = 15;
   }
 }
 
@@ -71,6 +72,16 @@ message Save {
 
 message Load {
   string slot = 1;
+}
+
+// RewindToTick — destructive scrub. The host loads the latest in-run
+// snapshot at-or-before `tick`, replays any logged commands between the
+// snapshot and the target, then advances the sim to land on `tick`.
+// State past `tick` is forfeit; pauses on completion. The active log on
+// disk is left intact (any post-`tick` entries become a stale fork) so
+// future Save commands can checkpoint the rewound branch.
+message RewindToTick {
+  uint64 tick = 1;
 }
 
 message ConfigureAutoPause {

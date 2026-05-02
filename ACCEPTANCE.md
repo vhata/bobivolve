@@ -134,10 +134,6 @@ If they can do that, the design question — does the player's role as meta-prog
 
 ### Verdict
 
-R2 mechanic surface complete: every intervention shape ships end-to-end through the dashboard. Origin compute gates all three (one-shot for patches and decrees; per-tick maintenance while a quarantine is held). The lineage inspector exposes the lineage's patches list so a clade's intervention history follows it through speciation. PatchSaturated is wired both as a sim event and an auto-pause trigger. The new-visitor tour delivers the first-time-visitor onboarding the acceptance test depends on: it auto-fires once on first load, walks the player through run → lineages → drift → interventions → pacing in the same order the acceptance test exercises them, and a header "?" reopens it on demand.
-
-Open before tag (deferred items, all tracked in `TODO.md`):
-
-- Forensic replay scrub UI — the data path (snapshots + log replay) supports it; the affordance is gated on layout pacing, not technical readiness.
+R2 mechanic surface complete: every intervention shape ships end-to-end through the dashboard. Origin compute gates all three (one-shot for patches and decrees; per-tick maintenance while a quarantine is held). The lineage inspector exposes the lineage's patches list so a clade's intervention history follows it through speciation. PatchSaturated is wired both as a sim event and an auto-pause trigger. The new-visitor tour delivers the first-time-visitor onboarding the acceptance test depends on: it auto-fires once on first load, walks the player through run → lineages → drift → interventions → pacing in the same order the acceptance test exercises them, and a header "?" reopens it on demand. Forensic replay is in: each row in the events timeline is a button that rewinds the sim to that event's tick, loading the latest in-run snapshot and replaying any logged commands to land exactly on the target. Destructive — post-rewind state is forfeit; Save before scrubbing if the live state is worth keeping.
 
 Sign-off awaited before `r2-engineers-console` is tagged.
