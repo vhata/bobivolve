@@ -222,4 +222,112 @@ describe('NodeHost persistence', () => {
     // Newly minted tick-0 snap is present; no errors thrown.
     expect(await storage.exists('runs/virgin/snapshots/0.snap')).toBe(true);
   });
+
+  describe('per-run slots', () => {
+    it('switchRun snap-saves the outgoing slot, switches, and writes the active marker', async () => {
+      const host = makeHost('alpha', 1_000_000n); // disable cadence
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(150n);
+      await host.flush();
+
+      // Switch to a fresh slot 'beta'. The host should snap-save alpha
+      // at its current tick (so a switch-back later restores cleanly),
+      // then point at beta which has no snapshot — host enters its
+      // empty post-construct state.
+      host.send({ kind: 'switchRun', commandId: 'c1', runId: 'beta' });
+      await host.flush();
+
+      // alpha gained an explicit snap on switch-out (in addition to
+      // any cadence snaps).
+      expect(await storage.exists('runs/alpha/snapshots/150.snap')).toBe(true);
+      // beta is fresh — no snapshot directory, no log writes yet.
+      expect(await storage.exists('runs/beta/snapshots/0.snap')).toBe(false);
+      // Active marker now names beta.
+      const marker = await storage.read('runs/.active');
+      expect(marker).not.toBeNull();
+      expect(new TextDecoder().decode(marker!)).toBe('beta');
+
+      // Issue newRun on beta to seed it, then switch back to alpha.
+      host.send({ kind: 'newRun', commandId: 'c2', seed: 99n });
+      host.runUntil(50n);
+      await host.flush();
+      expect(await storage.exists('runs/beta/snapshots/0.snap')).toBe(true);
+
+      host.send({ kind: 'switchRun', commandId: 'c3', runId: 'alpha' });
+      await host.flush();
+      // Marker restored to alpha.
+      expect(new TextDecoder().decode((await storage.read('runs/.active'))!)).toBe('alpha');
+      // The host's currentTick is now alpha's snap-saved tick (150).
+      // We verify by sending a probe-inspector query against the
+      // founder probe — present in alpha, absent in beta's fresh
+      // post-newRun state. Cheap proxy for "alpha state restored".
+      const result = await host.executeQuery({
+        kind: 'lineageTree',
+        queryId: 'q-after-switch-back',
+      });
+      if (result.kind !== 'lineageTree') throw new Error('unreachable');
+      expect(result.lineages.length).toBeGreaterThan(0);
+    });
+
+    it('deleteRun is refused on the active slot but removes inactive ones', async () => {
+      const host = makeHost('keeper', 1_000_000n);
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(50n);
+      await host.flush();
+
+      // Switch to a sibling and write some state.
+      host.send({ kind: 'switchRun', commandId: 'c1', runId: 'doomed' });
+      await host.flush();
+      host.send({ kind: 'newRun', commandId: 'c2', seed: 42n });
+      host.runUntil(50n);
+      await host.flush();
+      // Switch back to keeper, leaving doomed inactive.
+      host.send({ kind: 'switchRun', commandId: 'c3', runId: 'keeper' });
+      await host.flush();
+
+      expect(await storage.exists('runs/doomed/snapshots/0.snap')).toBe(true);
+
+      // Refused: active slot.
+      const errors: SimEvent[] = [];
+      const unsub = host.subscribe((e) => {
+        if (e.kind === 'commandError') errors.push(e);
+      });
+      host.send({ kind: 'deleteRun', commandId: 'c4', runId: 'keeper' });
+      await host.flush();
+      expect(errors.some((e) => e.kind === 'commandError' && e.commandId === 'c4')).toBe(true);
+      // The active slot still on disk.
+      expect(await storage.exists('runs/keeper/log.ndjson')).toBe(true);
+
+      // Permitted: inactive slot — recursively removed.
+      host.send({ kind: 'deleteRun', commandId: 'c5', runId: 'doomed' });
+      await host.flush();
+      expect(await storage.exists('runs/doomed/snapshots/0.snap')).toBe(false);
+      expect(await storage.exists('runs/doomed/log.ndjson')).toBe(false);
+      unsub();
+    });
+
+    it('listRuns enumerates persisted slots and marks the active one', async () => {
+      const host = makeHost('first', 1_000_000n);
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(50n);
+      await host.flush();
+
+      host.send({ kind: 'switchRun', commandId: 'c1', runId: 'second' });
+      await host.flush();
+      host.send({ kind: 'newRun', commandId: 'c2', seed: 99n });
+      host.runUntil(50n);
+      await host.flush();
+
+      const result = await host.executeQuery({ kind: 'listRuns', queryId: 'q' });
+      if (result.kind !== 'listRuns') throw new Error('unreachable');
+      const byId = new Map(result.runs.map((r) => [r.runId, r]));
+      expect(byId.has('first')).toBe(true);
+      expect(byId.has('second')).toBe(true);
+      expect(result.activeRunId).toBe('second');
+      // first's latestTick is the snap-saved 50 (snap-on-switch-out).
+      expect(byId.get('first')!.latestTick).toBe('50');
+      // second's latestTick is its newRun's tick-0 snap.
+      expect(byId.get('second')!.latestTick).toBe('0');
+    });
+  });
 });

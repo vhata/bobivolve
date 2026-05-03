@@ -147,4 +147,64 @@ describe('NodeStorage', () => {
       expect(await storage.reapDirectory('runs/r/snapshots')).toBe(0);
     });
   });
+
+  describe('listEntries', () => {
+    it('returns [] on a missing directory', async () => {
+      expect(await storage.listEntries('runs')).toEqual([]);
+    });
+
+    it('lists immediate children with kind discrimination', async () => {
+      await storage.write('runs/alpha/log.ndjson', new TextEncoder().encode('a'));
+      await storage.write('runs/alpha/snapshots/0.snap', new TextEncoder().encode('s'));
+      await storage.write('runs/beta/log.ndjson', new TextEncoder().encode('b'));
+
+      const entries = await storage.listEntries('runs');
+      const byName = new Map(entries.map((e) => [e.name, e.kind]));
+      expect(byName.get('alpha')).toBe('directory');
+      expect(byName.get('beta')).toBe('directory');
+      // The runs directory itself contains only sub-directories at this
+      // layout level — no stray files should appear.
+      for (const e of entries) {
+        expect(e.kind).toBe('directory');
+      }
+    });
+  });
+
+  describe('getMtimeMs', () => {
+    it('returns null on a missing key', async () => {
+      expect(await storage.getMtimeMs('runs/no-such/log.ndjson')).toBe(null);
+    });
+
+    it('returns the file mtime in millis since epoch', async () => {
+      const before = Date.now();
+      await storage.write('runs/r/log.ndjson', new TextEncoder().encode('hello'));
+      const after = Date.now();
+      const mtime = await storage.getMtimeMs('runs/r/log.ndjson');
+      expect(mtime).not.toBe(null);
+      // Allow a 1s slack on either side to avoid CI clock-skew flake.
+      expect(mtime!).toBeGreaterThanOrEqual(before - 1000);
+      expect(mtime!).toBeLessThanOrEqual(after + 1000);
+    });
+  });
+
+  describe('removeDirectory', () => {
+    it('is idempotent on a missing directory', async () => {
+      await expect(storage.removeDirectory('runs/no-such-run')).resolves.toBeUndefined();
+    });
+
+    it('recursively removes the directory and everything in it', async () => {
+      await storage.write('runs/r/log.ndjson', new TextEncoder().encode('log'));
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('s0'));
+      await storage.write('runs/r/snapshots/500.snap', new TextEncoder().encode('s5'));
+      await storage.write('runs/other/log.ndjson', new TextEncoder().encode('keep'));
+
+      await storage.removeDirectory('runs/r');
+
+      expect(await storage.exists('runs/r/log.ndjson')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/0.snap')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/500.snap')).toBe(false);
+      // Sibling slot must remain.
+      expect(await storage.exists('runs/other/log.ndjson')).toBe(true);
+    });
+  });
 });

@@ -121,6 +121,66 @@ function isReapable(storage: object): storage is ReapableStorage {
   );
 }
 
+// Per-run-slot management: enumeration + recursive deletion + mtime
+// lookup. Both NodeStorage and OPFSStorage opt in. Same duck-typing
+// shape as ReapableStorage: kept off the Storage port to preserve the
+// minimal sim/host seam.
+interface RunsCapableStorage {
+  listEntries(
+    parentKey: string,
+  ): Promise<readonly { readonly name: string; readonly kind: 'file' | 'directory' }[]>;
+  getMtimeMs(key: string): Promise<number | null>;
+  removeDirectory(dirKey: string): Promise<void>;
+}
+
+function isRunsCapable(storage: object): storage is RunsCapableStorage {
+  return (
+    'listEntries' in storage &&
+    typeof (storage as { listEntries: unknown }).listEntries === 'function' &&
+    'getMtimeMs' in storage &&
+    typeof (storage as { getMtimeMs: unknown }).getMtimeMs === 'function' &&
+    'removeDirectory' in storage &&
+    typeof (storage as { removeDirectory: unknown }).removeDirectory === 'function'
+  );
+}
+
+// Active run-slot marker. Plain UTF-8 file at the storage namespace
+// root whose contents are the runId of the current active slot. The
+// host writes it on every successful switchRun; the worker / CLI read
+// it at startup to reopen the same slot the player was last on.
+// Absence is fine — callers fall back to PersistenceOptions.runId.
+const ACTIVE_RUN_KEY = 'runs/.active';
+
+async function writeActiveRunMarker(storage: Storage, runId: string): Promise<void> {
+  await storage.write(ACTIVE_RUN_KEY, new TextEncoder().encode(runId));
+}
+
+// Build the per-slot info the UI's switch-run modal renders. Latest
+// tick comes from the highest-numbered file in `runs/<id>/snapshots/`;
+// lastModifiedMs comes from the slot's log mtime (0 when no log yet,
+// e.g. a freshly-created slot whose owner hasn't issued newRun).
+async function inspectRunSlot(
+  storage: RunsCapableStorage,
+  runId: string,
+): Promise<{ runId: string; latestTick: string; lastModifiedMs: number }> {
+  const snapEntries = await storage.listEntries(`runs/${runId}/snapshots`);
+  let latestTick = 0n;
+  for (const entry of snapEntries) {
+    if (entry.kind !== 'file') continue;
+    if (!entry.name.endsWith('.snap')) continue;
+    const tickStr = entry.name.slice(0, -'.snap'.length);
+    let tick: bigint;
+    try {
+      tick = BigInt(tickStr);
+    } catch {
+      continue;
+    }
+    if (tick > latestTick) latestTick = tick;
+  }
+  const lastModifiedMs = (await storage.getMtimeMs(`runs/${runId}/log.ndjson`)) ?? 0;
+  return { runId, latestTick: latestTick.toString(), lastModifiedMs };
+}
+
 // Sweep snapshot files left over from a previous run under the same runId.
 // newRun deletes the active log; once the snap log entries are gone, the
 // snapshot files in `runs/<runId>/snapshots/` are unreachable — they
@@ -251,7 +311,12 @@ export class NodeHost {
   // Persistence. When configured, every cmd and ev is logged; periodic
   // snapshots land at snapshotCadenceTicks. None of this fires when
   // persistence is undefined.
-  private readonly persistence: PersistenceOptions | undefined;
+  // Persistence config. Mutable in one specific dimension: switchRun
+  // replaces the runId in flight (storage adapter and snapshot cadence
+  // are preserved). The replacement is atomic — a fresh PersistenceOptions
+  // object so no half-state is observable. All reads of runId go through
+  // this.persistence.runId so they pick up the post-switch value.
+  private persistence: PersistenceOptions | undefined;
   // Re-created on each newRun so the previous run's seq counter doesn't
   // bleed into the new log.
   private logWriter: EventLogWriter | null;
@@ -308,6 +373,8 @@ export class NodeHost {
         return this.queryDecreeQueue(query.queryId);
       case 'lineageTree':
         return this.queryLineageTree(query.queryId);
+      case 'listRuns':
+        return this.queryListRuns(query.queryId);
       case 'logSlice':
       case 'populationSummary':
         // Result bodies for these are still placeholders in the schema;
@@ -604,6 +671,12 @@ export class NodeHost {
         return;
       case 'rewindToTick':
         this.handleRewindToTick(cmd.commandId, cmd.tick);
+        return;
+      case 'switchRun':
+        this.handleSwitchRun(cmd.commandId, cmd.runId);
+        return;
+      case 'deleteRun':
+        this.handleDeleteRun(cmd.commandId, cmd.runId);
         return;
     }
   }
@@ -1258,6 +1331,162 @@ export class NodeHost {
   //    we accept for the simpler implementation.
   //  - The non-destructive variant ("preview, then commit") is tracked
   //    in TODO.md as a future stretch under #r2-stretch.
+  // SwitchRun — make `runId` the active run-slot. Per the design at
+  // BRAINSTORM/opfs-slot-ui.md (commit-time): pause first, snapshot the
+  // outgoing slot at its current tick (so a return-to-this-slot later
+  // restores exactly), then point at the new slot. If the new slot has
+  // a snapshot on disk we restore from its highest-tick snapshot;
+  // otherwise the host enters its post-construction state and waits
+  // for newRun. Either way we update the active marker file so the
+  // next host startup reopens the same slot.
+  //
+  // What this does NOT do (yet, deferred follow-up): replay any log
+  // entries past the latest snap when restoring. If snapshots cadence
+  // is 30k ticks, the player can lose up to 30k ticks of state on a
+  // round-trip when the outgoing-slot snap-on-switch fails to fire
+  // (e.g. host crash between switchRun's snap and writeActiveRunMarker).
+  // The snap-on-switch path covers the common case where the player
+  // explicitly switches between healthy runs.
+  private handleSwitchRun(commandId: string, runId: string): void {
+    if (this.persistence === undefined) {
+      this.error(commandId, 'cannot switchRun: no persistence configured');
+      return;
+    }
+    if (runId === '' || runId.includes('/') || runId.includes('\0')) {
+      this.error(commandId, `invalid runId: ${JSON.stringify(runId)}`);
+      return;
+    }
+    const persistence = this.persistence;
+    if (runId === persistence.runId) {
+      // No-op switch is benign. Acknowledge so the UI's correlation
+      // doesn't hang.
+      this.ack(commandId);
+      return;
+    }
+
+    // Pause synchronously so subsequent ticks can't race with the
+    // enqueued switch work.
+    this.paused = true;
+
+    this.enqueue(async () => {
+      // (1) Snap-out the outgoing slot at its current tick if the
+      //     state is live, so a future switch-back restores cleanly.
+      if (this.state !== null) {
+        const tickAt = this.state.simTick;
+        const key = snapshotKey(persistence.runId, tickAt);
+        const bytes = serializeSnapshot(snapshot(this.state));
+        await persistence.storage.write(key, bytes);
+        await persistence.storage.append(
+          logKey(persistence.runId),
+          new TextEncoder().encode(
+            JSON.stringify({ kind: 'snap', tick: tickAt.toString() }) + '\n',
+          ),
+        );
+      }
+
+      // (2) Repoint persistence at the incoming slot. The storage
+      //     adapter is unchanged; only the runId changes.
+      this.persistence = { ...persistence, runId };
+      // The active log writer must follow.
+      this.logWriter = new EventLogWriter(persistence.storage, logKey(runId));
+
+      // (3) Try to restore from the incoming slot's latest snapshot.
+      //     If there isn't one, the host enters its empty state — the
+      //     player can issue newRun against the new slot.
+      let restoredFromSnap = false;
+      const snapEntries = isRunsCapable(persistence.storage)
+        ? await persistence.storage.listEntries(snapshotsDirKey(runId))
+        : [];
+      let bestTick = -1n;
+      for (const entry of snapEntries) {
+        if (entry.kind !== 'file' || !entry.name.endsWith('.snap')) continue;
+        const tickStr = entry.name.slice(0, -'.snap'.length);
+        let tick: bigint;
+        try {
+          tick = BigInt(tickStr);
+        } catch {
+          continue;
+        }
+        if (tick > bestTick) bestTick = tick;
+      }
+      if (bestTick >= 0n) {
+        const snapBytes = await persistence.storage.read(snapshotKey(runId, bestTick));
+        if (snapBytes !== null) {
+          this.state = restore(deserializeSnapshot(snapBytes));
+          this.lastSnapAtTick = this.state.simTick;
+          restoredFromSnap = true;
+        }
+      }
+      if (!restoredFromSnap) {
+        this.state = null;
+        this.lastSnapAtTick = SimTick(0n);
+      }
+
+      // (4) Persist the active marker so the next host startup picks
+      //     up this slot.
+      await writeActiveRunMarker(persistence.storage, runId);
+
+      this.resetHeartbeatBaseline();
+      if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+        this.emitHeartbeat();
+      }
+      this.ack(commandId);
+    });
+  }
+
+  // DeleteRun — recursively remove a slot's directory tree. Refused on
+  // the active slot (player must switchRun away first); the modal UX
+  // surfaces this by greying the active row's Delete affordance.
+  private handleDeleteRun(commandId: string, runId: string): void {
+    if (this.persistence === undefined) {
+      this.error(commandId, 'cannot deleteRun: no persistence configured');
+      return;
+    }
+    if (runId === '' || runId.includes('/') || runId.includes('\0')) {
+      this.error(commandId, `invalid runId: ${JSON.stringify(runId)}`);
+      return;
+    }
+    if (runId === this.persistence.runId) {
+      this.error(commandId, `cannot delete the active run-slot (${runId}); switch away first`);
+      return;
+    }
+    const persistence = this.persistence;
+    if (!isRunsCapable(persistence.storage)) {
+      this.error(commandId, 'storage adapter does not support deleteRun');
+      return;
+    }
+    const storage = persistence.storage;
+    this.enqueue(async () => {
+      await storage.removeDirectory(`runs/${runId}`);
+      this.ack(commandId);
+    });
+  }
+
+  private async queryListRuns(queryId: string): Promise<QueryResult> {
+    if (this.persistence === undefined || !isRunsCapable(this.persistence.storage)) {
+      // No persistence (or adapter doesn't support enumeration) — the
+      // dashboard renders an empty list, which is the honest answer.
+      return { queryId, kind: 'listRuns', runs: [], activeRunId: '' };
+    }
+    const storage = this.persistence.storage;
+    const activeRunId = this.persistence.runId;
+    const entries = await storage.listEntries('runs');
+    const runs = [];
+    for (const entry of entries) {
+      if (entry.kind !== 'directory') continue;
+      // Skip the active marker dotfile if it ever gets confused as a dir.
+      if (entry.name.startsWith('.')) continue;
+      runs.push(await inspectRunSlot(storage, entry.name));
+    }
+    // Active slot may not have a snapshot directory yet (fresh slot).
+    // Make sure it appears in the list either way.
+    if (!runs.some((r) => r.runId === activeRunId)) {
+      runs.push(await inspectRunSlot(storage, activeRunId));
+    }
+    runs.sort((a, b) => b.lastModifiedMs - a.lastModifiedMs);
+    return { queryId, kind: 'listRuns', runs, activeRunId };
+  }
+
   private handleRewindToTick(commandId: string, targetTick: bigint): void {
     if (this.persistence === undefined) {
       this.error(commandId, 'cannot rewind: no persistence configured');

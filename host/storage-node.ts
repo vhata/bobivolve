@@ -131,12 +131,78 @@ export class NodeStorage implements Storage {
     return reaped;
   }
 
+  // Enumerate the immediate children of `parentKey`, returning each
+  // entry's name and whether it is a file or sub-directory. Idempotent
+  // and safe on a missing directory: returns an empty array. Not part
+  // of the Storage interface; the run-slots host code uses this to
+  // discover persisted run-IDs and inspect their snapshot directories.
+  async listEntries(parentKey: string): Promise<readonly StorageDirEntry[]> {
+    const path = this.resolveKey(parentKey);
+    let names: string[];
+    try {
+      names = await readdir(path);
+    } catch (e) {
+      if (isNotFound(e)) return [];
+      throw e;
+    }
+    const entries: StorageDirEntry[] = [];
+    for (const name of names) {
+      let info;
+      try {
+        info = await stat(join(path, name));
+      } catch (e) {
+        if (isNotFound(e)) continue;
+        throw e;
+      }
+      entries.push({
+        name,
+        kind: info.isDirectory() ? 'directory' : 'file',
+      });
+    }
+    return entries;
+  }
+
+  // mtime of `key` in milliseconds since epoch, or null if missing.
+  // Host-level helper for the run-slots UI ("when did this slot last
+  // change?"). Not part of the Storage interface.
+  async getMtimeMs(key: string): Promise<number | null> {
+    const path = this.resolveKey(key);
+    try {
+      const info = await stat(path);
+      return info.mtimeMs;
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  }
+
+  // Recursively remove the directory at `dirKey` and everything under
+  // it. Idempotent: missing directory yields no error. Not part of the
+  // Storage interface — host-level helper for run-slot deletion.
+  async removeDirectory(dirKey: string): Promise<void> {
+    const path = this.resolveKey(dirKey);
+    try {
+      await rm(path, { recursive: true, force: true });
+    } catch (e) {
+      if (isNotFound(e)) return;
+      throw e;
+    }
+  }
+
   // Helper for hosts that compose keys for slots and event-log files.
   // Joins under the storage root semantics — pure string manipulation, no
   // filesystem hit.
   static joinKey(...parts: readonly string[]): string {
     return join(...parts);
   }
+}
+
+// Shape returned by the host-level listEntries helper. File / directory
+// kind is the only discriminant the host needs; size and mtime are
+// fetched separately via getMtimeMs when wanted.
+export interface StorageDirEntry {
+  readonly name: string;
+  readonly kind: 'file' | 'directory';
 }
 
 function isNotFound(e: unknown): boolean {

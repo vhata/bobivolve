@@ -42,10 +42,12 @@ type IncomingMessage = CommandMessage | QueryMessage;
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
-// Persistence: OPFS-backed runs at a fixed runId='default'. Each newRun
-// command resets the slot (deletes the old log, fresh writer), so
-// successive runs in the same browser tab don't accumulate. Save / Load
-// buttons in the UI act on the current slot.
+// Persistence: OPFS-backed runs. The host opens 'default' first and then
+// asynchronously honours the runs/.active marker file the SwitchRun UI
+// writes — if the player was last on a different slot, an automatic
+// switchRun command lands shortly after startup. Each newRun command
+// resets the active slot (deletes its log, fresh writer); Save / Load
+// buttons act on named save snapshots, distinct from per-run slots.
 // Heartbeat at 4Hz. The dashboard's panels subscribe to slices that
 // the heartbeat updates and rerender on every Tick — at fat
 // population the cumulative VDOM allocation outpaces GC and the main
@@ -57,13 +59,32 @@ const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobal
 // 4Hz still feels live: population, t/s readout, and Origin compute
 // all update every 250ms. The store's rAF coalescer caps further
 // downstream, so this is the upstream throttle.
+const opfsStorage = new OPFSStorage({ root: 'bobivolve' });
 const host = new NodeHost({
   heartbeatHz: 4,
   persistence: {
-    storage: new OPFSStorage({ root: 'bobivolve' }),
+    storage: opfsStorage,
     runId: 'default',
   },
 });
+
+// Honour the runs/.active marker if the player was on a non-default slot
+// last session. Done as an async post-construct step so the constructor
+// stays synchronous; the auto-switch lands as a normal switchRun command,
+// queued through the host's worker like any other.
+const ACTIVE_MARKER_KEY = 'runs/.active';
+void (async (): Promise<void> => {
+  try {
+    const bytes = await opfsStorage.read(ACTIVE_MARKER_KEY);
+    if (bytes === null) return;
+    const runId = new TextDecoder().decode(bytes).trim();
+    if (runId === '' || runId === 'default') return;
+    host.send({ kind: 'switchRun', commandId: 'startup-restore-active-slot', runId });
+  } catch {
+    // Best-effort; if the marker is unreadable the host stays on
+    // 'default' and the player can switch manually.
+  }
+})();
 
 // High-frequency, no-UI-consumer event filter. At fat population the
 // host emits hundreds of `replication` and `death` events per second.
@@ -180,6 +201,13 @@ ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
       // rewindToTick. Stop pulsing pre-emptively so a heartbeat from
       // the pre-Load timeline can't land at the dashboard after the
       // post-Load heartbeat and overwrite the restored state.
+      stopPulsing();
+      break;
+    case 'switchRun':
+      // Same race shape as load: switching to another slot resets state
+      // (snap-saves outgoing, then loads incoming snap or empty), and
+      // the host pauses. Stop pulsing so a stale pre-switch heartbeat
+      // can't overwrite the post-switch projection.
       stopPulsing();
       break;
     default:

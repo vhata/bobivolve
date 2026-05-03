@@ -58,6 +58,10 @@ interface OPFSFileHandle {
 interface OPFSFile {
   arrayBuffer(): Promise<ArrayBuffer>;
   readonly size: number;
+  // The DOM File interface carries lastModified (ms since epoch); we
+  // expose it structurally so the run-slots UI can show "this slot was
+  // last touched at..." without a separate stat API.
+  readonly lastModified: number;
 }
 
 interface OPFSWritable {
@@ -185,6 +189,65 @@ export class OPFSStorage implements Storage {
       }
     }
     return reaped;
+  }
+
+  // Enumerate the immediate children of `parentKey`, returning each
+  // entry's name and whether it is a file or sub-directory. Idempotent
+  // and safe on a missing directory: returns an empty array. Symmetric
+  // with NodeStorage.listEntries — host-level helper for the run-slots
+  // UI, not part of the Storage interface.
+  async listEntries(parentKey: string): Promise<readonly OPFSStorageDirEntry[]> {
+    const path = this.parseKey(parentKey);
+    const allDirs = [...path.dirs, path.file];
+    const dir = await this.resolveDirReadOnly(allDirs);
+    if (dir === null) return [];
+    const entries: OPFSStorageDirEntry[] = [];
+    for await (const [name, handle] of dir.entries()) {
+      entries.push({ name, kind: handle.kind });
+    }
+    return entries;
+  }
+
+  // mtime in milliseconds since epoch, or null if missing. The OPFS
+  // File handle exposes lastModified directly; we read it without
+  // touching the file content.
+  async getMtimeMs(key: string): Promise<number | null> {
+    const path = this.parseKey(key);
+    const dir = await this.resolveDirReadOnly(path.dirs);
+    if (dir === null) return null;
+    let fileHandle: OPFSFileHandle;
+    try {
+      fileHandle = await dir.getFileHandle(path.file, { create: false });
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+    const file = await fileHandle.getFile();
+    return file.lastModified;
+  }
+
+  // Recursively remove the directory at `dirKey` and everything under
+  // it. Uses OPFS removeEntry with { recursive: true }. Idempotent:
+  // missing directory yields no error.
+  async removeDirectory(dirKey: string): Promise<void> {
+    const path = this.parseKey(dirKey);
+    // Walk to the parent directory; the terminal segment is the entry
+    // we ask the parent to remove recursively.
+    const allDirs = [...path.dirs, path.file];
+    const parentDirs = allDirs.slice(0, -1);
+    const target = allDirs[allDirs.length - 1];
+    if (target === undefined || target === '') {
+      // Empty key — nothing to remove.
+      return;
+    }
+    const parent = await this.resolveDirReadOnly(parentDirs);
+    if (parent === null) return;
+    try {
+      await parent.removeEntry(target, { recursive: true });
+    } catch (e) {
+      if (isNotFound(e)) return;
+      throw e;
+    }
   }
 
   // Helper for tests / hosts that want a printable locator for a key.
@@ -331,4 +394,11 @@ function isNotFound(e: unknown): boolean {
     if (code === 'ENOENT' || code === 'NotFoundError') return true;
   }
   return false;
+}
+
+// Mirrors host/storage-node.ts StorageDirEntry. Exported so the host
+// can type its run-slot enumeration uniformly across both adapters.
+export interface OPFSStorageDirEntry {
+  readonly name: string;
+  readonly kind: 'file' | 'directory';
 }

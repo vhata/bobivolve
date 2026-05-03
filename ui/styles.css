@@ -1842,3 +1842,205 @@ body {
   margin-bottom: 1.5rem;
   border-bottom: none;
 }
+
+/* SwitchRunModal — modal-on-action picker for the active run-slot.
+   Models the patch-editor overlay shape; lays out as a vertical list
+   of slots with create / delete affordances. */
+.switch-run-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.switch-run-modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  min-width: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.switch-run-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.switch-run-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.switch-run-cancel {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  color: var(--text-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.switch-run-helper {
+  color: var(--text-3);
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.switch-run-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.switch-run-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+}
+
+.switch-run-row-active {
+  background: rgba(255, 255, 255, 0.03);
+  cursor: default;
+}
+
+.switch-run-pick {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.switch-run-pick:hover {
+  color: var(--accent, var(--text));
+}
+
+.switch-run-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.switch-run-active-tag {
+  color: var(--text-3);
+  font-weight: 400;
+  margin-left: 0.4rem;
+}
+
+.switch-run-meta {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.switch-run-empty {
+  color: var(--text-3);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+.switch-run-delete,
+.switch-run-delete-confirm,
+.switch-run-delete-cancel {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.switch-run-delete:hover,
+.switch-run-delete-confirm:hover {
+  color: var(--warn, var(--text));
+  border-color: var(--warn, var(--line));
+}
+
+.switch-run-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.switch-run-create {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 1rem;
+}
+
+.switch-run-create-trigger {
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  color: var(--text-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+.switch-run-create-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.switch-run-create-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.switch-run-create-input {
+  flex: 1;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  color: var(--text);
+  font: inherit;
+  min-width: 0;
+}
+
+.switch-run-create-submit,
+.switch-run-create-cancel {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.25rem 0.6rem;
+  color: var(--text-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.switch-run-create-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

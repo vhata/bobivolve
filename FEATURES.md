@@ -38,4 +38,5 @@ Updated in the same commit as any feature whose status changes.
 - ✓ Dashboard — population trajectory, named lineage tree, lineage inspector with drift envelope and sparkline, events timeline, run controls, auto-pause toggles
 - ✓ Auto-pause triggers — pause when a clade speciates (other triggers wait for their mechanics to land at later releases)
 - ✓ Persistence — runs save and load to the browser's Origin Private File System; the headless CLI saves and resumes runs to the local filesystem (`pnpm sim --save-dir … --run-id … --resume`)
+- ✓ Multi-run slots — keep multiple ongoing simulations on disk and switch between them from the dashboard. The Run panel's "Switch run…" button opens a modal listing every persisted slot (with its latest tick and last-touched time) plus a "new run…" affordance for minting a fresh one and a per-row delete (refused on the active slot). Switching snap-saves the outgoing slot first so a return restores cleanly; the active slot is remembered across browser reloads via a marker file
 - ✓ Lay-person lineage names — Pioneers, Vagabonds, Drifters and friends (deterministic, hashed from ordinal)

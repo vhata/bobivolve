@@ -42,7 +42,13 @@ class TypeMismatchError extends Error {
 }
 
 class FakeFile {
-  constructor(public data: Uint8Array) {}
+  constructor(
+    public data: Uint8Array,
+    // Mirrors the DOM File.lastModified the OPFSStorage helper reads for
+    // its getMtimeMs API. The shim threads it through from the
+    // FakeFileHandle's last-write timestamp.
+    public readonly lastModified: number = 0,
+  ) {}
   get size(): number {
     return this.data.byteLength;
   }
@@ -92,13 +98,17 @@ class FakeWritable {
     if (this.closed) return;
     this.closed = true;
     this.fileHandle.contents = this.buffer;
+    this.fileHandle.lastModifiedMs = Date.now();
   }
 }
 
 class FakeFileHandle {
   contents: Uint8Array = new Uint8Array(0);
+  // Tracks the last-write wall-clock so OPFSStorage.getMtimeMs has a
+  // sensible value to read. Updated when the writable closes.
+  lastModifiedMs: number = 0;
   async getFile(): Promise<FakeFile> {
-    return new FakeFile(this.contents);
+    return new FakeFile(this.contents, this.lastModifiedMs);
   }
   async createWritable(options?: { keepExistingData?: boolean }): Promise<FakeWritable> {
     return new FakeWritable(this, options?.keepExistingData ?? false);
@@ -393,6 +403,57 @@ describe('OPFSStorage', () => {
       // But it should see the sub-root's directory entry.
       expect(await storage.exists('bobivolve/a')).toBe(true);
       expect(new TextDecoder().decode((await scoped.read('a'))!)).toBe('inside');
+    });
+  });
+
+  describe('listEntries', () => {
+    it('returns [] on a missing directory', async () => {
+      expect(await storage.listEntries('runs')).toEqual([]);
+    });
+
+    it('lists immediate children with file/directory discrimination', async () => {
+      await storage.write('runs/alpha/log.ndjson', new TextEncoder().encode('a'));
+      await storage.write('runs/beta/log.ndjson', new TextEncoder().encode('b'));
+      const entries = await storage.listEntries('runs');
+      const byName = new Map(entries.map((e) => [e.name, e.kind]));
+      expect(byName.get('alpha')).toBe('directory');
+      expect(byName.get('beta')).toBe('directory');
+    });
+  });
+
+  describe('getMtimeMs', () => {
+    it('returns null on a missing key', async () => {
+      expect(await storage.getMtimeMs('runs/no-such/log.ndjson')).toBe(null);
+    });
+
+    it('returns the file lastModified value the OPFS handle exposes', async () => {
+      const before = Date.now();
+      await storage.write('runs/r/log.ndjson', new TextEncoder().encode('hello'));
+      const after = Date.now();
+      const mtime = await storage.getMtimeMs('runs/r/log.ndjson');
+      expect(mtime).not.toBe(null);
+      expect(mtime!).toBeGreaterThanOrEqual(before);
+      expect(mtime!).toBeLessThanOrEqual(after);
+    });
+  });
+
+  describe('removeDirectory', () => {
+    it('is idempotent on a missing directory', async () => {
+      await expect(storage.removeDirectory('runs/no-such-run')).resolves.toBeUndefined();
+    });
+
+    it('recursively removes a directory and everything in it', async () => {
+      await storage.write('runs/r/log.ndjson', new TextEncoder().encode('log'));
+      await storage.write('runs/r/snapshots/0.snap', new TextEncoder().encode('s0'));
+      await storage.write('runs/r/snapshots/500.snap', new TextEncoder().encode('s5'));
+      await storage.write('runs/other/log.ndjson', new TextEncoder().encode('keep'));
+
+      await storage.removeDirectory('runs/r');
+
+      expect(await storage.exists('runs/r/log.ndjson')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/0.snap')).toBe(false);
+      expect(await storage.exists('runs/r/snapshots/500.snap')).toBe(false);
+      expect(await storage.exists('runs/other/log.ndjson')).toBe(true);
     });
   });
 });

@@ -132,6 +132,26 @@ export interface RewindToTickCommand {
   readonly tick: bigint;
 }
 
+// Per-run slots — a player can keep multiple in-flight simulations on
+// disk (each with its own log + snapshot history) and switch between
+// them. Distinct from save slots, which are point-in-time snapshots of
+// any run. SwitchRunCommand makes a slot the active run, restoring its
+// latest snapshot and replaying any post-snapshot log entries; if the
+// slot is fresh (no log yet), the host pauses with no state and waits
+// for newRun to seed it.
+export interface SwitchRunCommand {
+  readonly kind: 'switchRun';
+  readonly runId: string;
+}
+
+// Removes a run slot from disk (log + snapshots + any per-slot
+// metadata). Refused with commandError when the runId names the active
+// slot — switch away first. Idempotent on a missing slot.
+export interface DeleteRunCommand {
+  readonly kind: 'deleteRun';
+  readonly runId: string;
+}
+
 export type CommandBody =
   | NewRunCommand
   | SetSpeedCommand
@@ -146,7 +166,9 @@ export type CommandBody =
   | RevokeDecreeCommand
   | SaveCommand
   | LoadCommand
-  | RewindToTickCommand;
+  | RewindToTickCommand
+  | SwitchRunCommand
+  | DeleteRunCommand;
 
 export type Command = CommandBody & {
   // Caller-supplied id. The sim echoes it on CommandAck / CommandError so the
@@ -337,6 +359,13 @@ export interface DecreeQueueQueryBody {
   readonly kind: 'decreeQueue';
 }
 
+// Enumerate every persisted run slot (each slot is a separate active
+// simulation on disk). Returns metadata sufficient to render the
+// switch-run modal; see ListRunsResult below.
+export interface ListRunsQueryBody {
+  readonly kind: 'listRuns';
+}
+
 export type QueryBody =
   | LineageTreeQueryBody
   | ProbeInspectorQueryBody
@@ -345,7 +374,8 @@ export type QueryBody =
   | PopulationSummaryQueryBody
   | ListSavesQueryBody
   | SubstrateQueryBody
-  | DecreeQueueQueryBody;
+  | DecreeQueueQueryBody
+  | ListRunsQueryBody;
 
 export type Query = QueryBody & {
   readonly queryId: string;
@@ -504,6 +534,25 @@ export interface DecreeQueueEntry {
   readonly patchFirmware: readonly DirectiveSpec[];
 }
 
+export interface ListRunsResult {
+  readonly kind: 'listRuns';
+  readonly runs: readonly RunSlotInfo[];
+  // The runId of the slot the host is currently writing to. Empty
+  // string when no slot is active (host running without persistence).
+  readonly activeRunId: string;
+}
+
+export interface RunSlotInfo {
+  readonly runId: string;
+  // Tick of the highest-numbered snapshot file under the slot, or
+  // "0" if the slot has no snapshots yet (a fresh slot, or one whose
+  // snap files were reaped). Decimal string for u64 safety.
+  readonly latestTick: string;
+  // mtime of the slot's log file in millis-since-epoch. 0 when the
+  // slot has no log file (fresh, never run).
+  readonly lastModifiedMs: number;
+}
+
 export type QueryResultBody =
   | LineageTreeResult
   | ProbeInspectorResult
@@ -512,7 +561,8 @@ export type QueryResultBody =
   | PopulationSummaryResult
   | ListSavesResult
   | SubstrateResult
-  | DecreeQueueResult;
+  | DecreeQueueResult
+  | ListRunsResult;
 
 export type QueryResult = QueryResultBody & {
   readonly queryId: string;

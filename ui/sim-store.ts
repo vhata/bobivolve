@@ -13,7 +13,9 @@ import type {
   DecreeTriggerSpec,
   DirectiveSpec,
   LineageTreeResult,
+  ListRunsResult,
   ListSavesResult,
+  RunSlotInfo,
   SaveSummary,
   SimEvent,
   TickEvent,
@@ -64,7 +66,16 @@ const HISTORY_CAPACITY = 240;
 // commands automatically; the player never has to handle the failure.
 export interface PendingCommand {
   readonly commandId: string;
-  readonly kind: 'pause' | 'resume' | 'setSpeed' | 'newRun' | 'save' | 'load' | 'rewindToTick';
+  readonly kind:
+    | 'pause'
+    | 'resume'
+    | 'setSpeed'
+    | 'newRun'
+    | 'save'
+    | 'load'
+    | 'rewindToTick'
+    | 'switchRun'
+    | 'deleteRun';
   readonly issuedAtMs: number;
   readonly retryCount: number;
   // Optimistic effect summary. The UI reads it to render the projected
@@ -113,6 +124,14 @@ export interface SimStoreState {
   // List of save slots written to OPFS. Refreshed via refreshSaves().
   readonly saves: readonly SaveSummary[];
   readonly refreshSaves: () => Promise<void>;
+  // Persisted run-slots and the currently active one. Distinct from
+  // `saves` (point-in-time snapshots) — these are full simulations on
+  // disk. Refreshed lazily when the SwitchRunModal opens.
+  readonly runs: readonly RunSlotInfo[];
+  readonly activeRunId: string;
+  readonly refreshRuns: () => Promise<void>;
+  readonly switchRun: (runId: string) => void;
+  readonly deleteRun: (runId: string) => void;
   // The Lineage Inspector reads this; clicking a lineage in the tree
   // updates it. Defaults to L0 once the founder lineage is seeded.
   readonly selectedLineageId: string;
@@ -490,6 +509,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     selectedLineageId: 'L0',
     lastSaveAtTick: null,
     saves: [],
+    runs: [],
+    activeRunId: '',
     quarantinedLineages: new Set(),
     originCompute: null,
     originComputeMax: null,
@@ -787,6 +808,69 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // Swallow — saves remain at the previous value. The RunPanel
         // can show stale data without a panic.
       }
+    },
+    refreshRuns: async () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      try {
+        const result = (await transport.query({
+          kind: 'listRuns',
+          queryId: '',
+        })) as ListRunsResult & { queryId: string };
+        set({ runs: result.runs, activeRunId: result.activeRunId });
+      } catch {
+        // Swallow — same rationale as refreshSaves.
+      }
+    },
+    switchRun: (runId) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-switchRun');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'switchRun',
+        issuedAtMs: Date.now(),
+        retryCount: 0,
+      });
+      // Reset projected state — switchRun on the host loads from the
+      // new slot's snapshot (or starts empty if the slot is fresh).
+      // Either way the dashboard's pre-switch projection no longer
+      // reflects the live run, and the post-switch heartbeat will
+      // repopulate. Mirrors the load-action reset below.
+      set({
+        pendingCommands: pending,
+        simTick: 0n,
+        populationTotal: 0n,
+        populationByLineage: new Map(),
+        populationHistory: [],
+        lineages: freshLineages(),
+        paused: true,
+        actualSpeed: 0,
+        selectedLineageId: 'L0',
+        quarantinedLineages: new Set(),
+        originCompute: null,
+        originComputeMax: null,
+        activeRunId: runId,
+      });
+      transport.send({ kind: 'switchRun', commandId, runId });
+    },
+    deleteRun: (runId) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-deleteRun');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'deleteRun',
+        issuedAtMs: Date.now(),
+        retryCount: 0,
+      });
+      // Optimistically drop the slot from the local list; the host
+      // will ack and the next refreshRuns will catch any divergence.
+      const runs = get().runs.filter((r) => r.runId !== runId);
+      set({ pendingCommands: pending, runs });
+      transport.send({ kind: 'deleteRun', commandId, runId });
     },
     setAutoPauseTriggers: (triggers) => {
       const transport = get().transport;

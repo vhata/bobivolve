@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { useSimStore } from '../sim-store.js';
+import { SwitchRunModal } from './SwitchRunModal.js';
 
 function parseSeed(input: string): bigint | null {
   if (input.trim() === '') return null;
@@ -43,6 +44,13 @@ export function RunPanel(): React.JSX.Element {
   const [seedDraft, setSeedDraft] = useState<string>(seed === null ? '42' : seed.toString());
   const parsedSeed = parseSeed(seedDraft);
   const [loadMode, setLoadMode] = useState(false);
+  const [switchRunMode, setSwitchRunMode] = useState(false);
+  const activeRunId = useSimStore((s) => s.activeRunId);
+
+  function handleSwitchRunClick(): void {
+    if (!paused) pause();
+    setSwitchRunMode(true);
+  }
 
   function handleSaveClick(): void {
     if (!paused) pause();
@@ -103,6 +111,14 @@ export function RunPanel(): React.JSX.Element {
           <button type="button" className="control-button" onClick={handleLoadClick}>
             Load
           </button>
+          <button
+            type="button"
+            className="control-button"
+            onClick={handleSwitchRunClick}
+            title={activeRunId === '' ? 'Switch active run' : `Active: ${activeRunId}`}
+          >
+            Switch run…
+          </button>
         </div>
         {lastSaveAtTick !== null ? (
           <p className="run-status" role="status">
@@ -145,6 +161,7 @@ export function RunPanel(): React.JSX.Element {
           </div>
         ) : null}
       </div>
+      {switchRunMode ? <SwitchRunModal onClose={() => setSwitchRunMode(false)} /> : null}
     </section>
   );
 }
