@@ -44,7 +44,7 @@ import type {
   SubstrateProbe,
   TickEvent,
 } from '../protocol/types.js';
-import { EventLogReader, EventLogWriter, type SnapLogEntry } from './event-log.js';
+import { EventLogReader, EventLogWriter, type LogEntry, type SnapLogEntry } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
@@ -1306,50 +1306,85 @@ export class NodeHost {
       if (bestSnap === null || entry.tick > bestSnap.tick) bestSnap = entry;
     }
 
+    // Pick the starting state. Preferred path: restore from the
+    // best-snap-at-or-before-target. Fallback: rebuild from the log
+    // (createInitialState with the seed from the first newRun
+    // command in the log, then replay the command stream forward).
+    //
+    // The fallback is the realisation of ARCHITECTURE.md "the seed
+    // plus the command log is the canonical universe; snapshots are
+    // an implementation-defined performance cache." It fires when:
+    //   - no snap entry exists at-or-before the target tick (fresh
+    //     run with no cadence snapshot yet), OR
+    //   - the snap entry exists in the log but the snapshot file is
+    //     missing on disk (e.g. user nuked the snapshots/ dir, or a
+    //     future Rust port can't read TS-format snaps).
+    // The cost is a full replay from tick 0; for long runs at fat
+    // population that's measurable, but the alternative is the rewind
+    // failing silently.
+    let usedRebuild = false;
+    let startTick = 0n;
+    if (bestSnap !== null) {
+      const snapBytes = await persistence.storage.read(bestSnap.snapshotKey);
+      if (snapBytes !== null) {
+        const restored = restore(deserializeSnapshot(snapBytes));
+        this.state = restored;
+        this.lastSnapAtTick = restored.simTick;
+        startTick = restored.simTick;
+      } else {
+        // Snap entry pointed at a missing file — fall through to
+        // rebuild.
+        bestSnap = null;
+      }
+    }
     if (bestSnap === null) {
-      this.error(commandId, `no snapshot available at-or-before tick ${targetTick.toString()}`);
-      return;
+      const rebuilt = this.rebuildStateFromLog(entries);
+      if (rebuilt === null) {
+        this.error(
+          commandId,
+          `cannot rewind: no snapshot at-or-before tick ${targetTick.toString()} and log lacks a newRun command to seed a rebuild`,
+        );
+        return;
+      }
+      this.state = rebuilt;
+      this.lastSnapAtTick = rebuilt.simTick;
+      startTick = rebuilt.simTick;
+      usedRebuild = true;
     }
 
-    const snapBytes = await persistence.storage.read(bestSnap.snapshotKey);
-    if (snapBytes === null) {
-      this.error(commandId, `snapshot file missing for tick ${bestSnap.tick.toString()}`);
-      return;
-    }
-
-    const restored = restore(deserializeSnapshot(snapBytes));
-    this.state = restored;
-    this.lastSnapAtTick = restored.simTick;
-
-    // Replay logged commands strictly between the snap and the target
-    // (inclusive of `entry.tick === targetTick`). Set `replaying` so
-    // emit() / ack() / log writes don't fire — replay is silent. The
-    // command handlers still update in-memory state (lineages,
-    // quarantines, etc.) which is what we want to recover.
+    // Replay logged commands strictly after the starting tick up to
+    // the target. Set `replaying` so emit() / ack() / log writes
+    // don't fire — replay is silent. The command handlers still
+    // update in-memory state (lineages, quarantines, etc.) which is
+    // what we want to recover.
     //
     // Yield to the event loop every REPLAY_YIELD_TICKS so the worker
     // can drain pending postMessage events (pause clicks etc.) while
-    // the replay walks forward. Without this, a rewind from snap
-    // tick 0 to target 30k would block the worker thread for the
-    // entire replay duration — observed as 20+ seconds of unacked
-    // commands at fat population. The yield is `setTimeout(0)`, not a
-    // microtask, so macrotasks (incoming postMessages) get a window.
+    // the replay walks forward.
     this.replaying = true;
     try {
+      // Narrowing escapes the closure across the await; this.state has
+      // been set to a non-null SimState above, and the only thing that
+      // could clear it inside this try block is reentry (which the
+      // replaying flag suppresses). Hoist the assertion via a local
+      // alias so the loop body type-checks. The non-null assertion is
+      // safe because both branches of the snap-vs-rebuild fork above
+      // assign this.state before reaching here.
+      const state = this.state as SimState;
       for (const entry of entries) {
         if (entry.type !== 'cmd') continue;
-        if (entry.tick <= bestSnap.tick) continue;
+        if (entry.tick <= startTick) continue;
         if (entry.tick > targetTick) break;
-        // Advance ticks until we reach this command's tick.
-        while (this.state.simTick < entry.tick) {
+        // Skip the newRun on a rebuild path: rebuildStateFromLog
+        // already consumed the seed and seeded createInitialState, so
+        // re-issuing it here would clobber the freshly-built state.
+        if (usedRebuild && entry.command.kind === 'newRun') continue;
+        while (state.simTick < entry.tick) {
           await this.advanceWithYield(entry.tick);
         }
-        // Re-execute. The send() switch dispatches to the handlers;
-        // the replaying flag suppresses emit/ack/log side-effects.
         this.send(entry.command);
       }
-      // Advance any remaining ticks to land exactly on the target.
-      while (this.state.simTick < targetTick) {
+      while (state.simTick < targetTick) {
         await this.advanceWithYield(targetTick);
       }
     } finally {
@@ -1365,6 +1400,29 @@ export class NodeHost {
     }
 
     this.ack(commandId);
+  }
+
+  // Rebuild a fresh sim state from the command log alone — no
+  // snapshot involved. Used as the fallback in doRewindToTick when no
+  // snapshot is available or its file is missing on disk. Returns
+  // null when the log lacks a newRun entry (rebuild has nothing to
+  // seed createInitialState with); the caller then surfaces an error.
+  //
+  // The rebuild does NOT advance ticks here — it only seeds state at
+  // tick 0. The caller's existing replay loop then walks the log
+  // commands forward to the target tick (skipping the newRun it
+  // already consumed). Splitting it this way keeps the replay loop
+  // single-source for both the snapshot-restore and rebuild paths.
+  private rebuildStateFromLog(entries: readonly LogEntry[]): SimState | null {
+    let seed: bigint | null = null;
+    for (const entry of entries) {
+      if (entry.type !== 'cmd') continue;
+      if (entry.command.kind !== 'newRun') continue;
+      seed = entry.command.seed;
+      break;
+    }
+    if (seed === null) return null;
+    return createInitialState(Seed(seed));
   }
 
   // Replay helper: advance up to REPLAY_YIELD_TICKS at once, then

@@ -8,7 +8,7 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Flesh out R0 `Query` result message bodies as the dashboard UI takes shape #r0 #protocol
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Per-run OPFS slots (currently all runs reuse `runId='default'`; switching slots needs a UI for slot management) #r0 #host
-- Rebuild-from-log fallback when a snapshot is missing or unreadable (ARCHITECTURE.md migration path); currently load fails fast in that case #r0 #host
+- Extend rebuild-from-log to the named-save Load path. The host's `handleRewindToTick` path now falls back to replaying the log from tick 0 when no usable snapshot is available; `handleLoad` (named save slot) still fails fast when the save's `.save` snapshot is missing or unreadable. There's no log to replay from for that case until Save bundles the relevant log range alongside the snapshot — once it does, Load can degrade gracefully too. #r0 #host
 - Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
 
 ## Release 2 — The Engineer's Console
