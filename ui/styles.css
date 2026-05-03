@@ -983,6 +983,45 @@ body {
 .timeline-marker {
   stroke: var(--warn);
   stroke-width: 2;
+  opacity: 0.55;
+}
+
+/* Stratum 1 milestone markers are taller (drawn above), stronger
+   stroke, full opacity. The eye reads them as "the important ones"
+   without having to interpret the label. */
+.timeline-marker-stratum-1 {
+  stroke: var(--accent, var(--data));
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+/* Filter row above the timeline svg. Currently just the
+   show-all-speciations toggle. */
+.timeline-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
+.timeline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.timeline-toggle input {
+  margin: 0;
+}
+
+/* Stratum 1 list rows get a subtle accent on the tick label so
+   they're visually distinct without being shouty. */
+.timeline-rewind-stratum-1 .timeline-tick {
+  color: var(--accent, var(--data));
+  font-weight: 600;
 }
 
 .timeline-list {
