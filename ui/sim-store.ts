@@ -750,11 +750,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             parentId: entry.parentLineageId === '' ? null : entry.parentLineageId,
             foundedAtTick: entry.foundedAtTick,
             founderProbeId: entry.founderProbeId,
-            // The lineageTree query doesn't carry historical
-            // extinctionTick, so any lineage extinct at restore-time
-            // shows in the phylogeny as a dot at its founding tick.
-            // Future polish: extend LineageTreeEntry with the field.
-            extinctionTick: null,
+            // The lineageTree query now carries historical extinctionTick
+            // (Pass 0 of the phylogeny redesign), so a lineage extinct
+            // at restore-time renders with a true lifeline rather than
+            // a dot at its founding tick. Older snapshots / payloads
+            // missing the field have been normalised to null upstream.
+            extinctionTick: entry.extinctionTick,
           });
           if (entry.quarantined) quarantined.add(entry.id);
         }

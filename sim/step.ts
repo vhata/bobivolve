@@ -140,7 +140,7 @@ export function tick(state: SimState, events?: SimEvent[]): void {
   // deaths and skip this phase entirely. The walk is O(survivors) not
   // O(deaths); incremental per-lineage counts could push it down to
   // O(deaths) but the constant is fine at R1 population.
-  if (events !== undefined && lineagesThatLostProbes.size > 0) {
+  if (lineagesThatLostProbes.size > 0) {
     const extantByLineage = new Map<LineageId, number>();
     for (const probe of state.probes.values()) {
       const current = extantByLineage.get(probe.lineageId) ?? 0;
@@ -148,12 +148,26 @@ export function tick(state: SimState, events?: SimEvent[]): void {
     }
     for (const lineageId of lineagesThatLostProbes) {
       if ((extantByLineage.get(lineageId) ?? 0) === 0) {
-        const extinction: SimEvent = {
-          kind: 'extinction',
-          simTick: state.simTick,
-          lineageId,
-        } satisfies ExtinctionEvent & { simTick: bigint };
-        events.push(extinction);
+        // Stamp the extinction tick on the lineage record itself so a
+        // future Load / Rewind / lineageTree query can render the
+        // lineage as a true lifeline (foundedAtTick → extinctionTick)
+        // rather than reconstructing extinction from the live
+        // population (which is null after a Load and yields a single
+        // dot). Set strictly once — re-extinction would be a sim bug
+        // since extinct lineages never re-spawn probes; we still
+        // protect against it because cheap.
+        const lineage = state.lineages.get(lineageId);
+        if (lineage !== undefined && lineage.extinctionTick === null) {
+          lineage.extinctionTick = state.simTick;
+        }
+        if (events !== undefined) {
+          const extinction: SimEvent = {
+            kind: 'extinction',
+            simTick: state.simTick,
+            lineageId,
+          } satisfies ExtinctionEvent & { simTick: bigint };
+          events.push(extinction);
+        }
       }
     }
   }
@@ -330,6 +344,7 @@ function maybeReplicate(
       parentLineageId: parent.lineageId,
       referenceFirmware: childFirmware,
       foundedAtTick: state.simTick,
+      extinctionTick: null,
       // Inherit the parent lineage's patches at the moment of
       // speciation. Patches applied to the parent AFTER this point
       // will not propagate to this child — by design, the child's

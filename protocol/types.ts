@@ -367,6 +367,12 @@ export interface LineageTreeEntry {
   // speciated to produce this one.
   readonly parentLineageId: string;
   readonly foundedAtTick: bigint;
+  // Tick at which this lineage's last probe died, or null while the
+  // lineage still has live members. Populated from the sim's stored
+  // extinctionTick (set strictly once at the death of the last probe),
+  // so the phylogeny renders a true lifeline even after a Load /
+  // Rewind that would otherwise lose live-population context.
+  readonly extinctionTick: bigint | null;
   readonly founderProbeId: string;
   readonly patches: readonly string[];
   readonly quarantined: boolean;

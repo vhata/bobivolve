@@ -28,6 +28,19 @@ export interface Lineage {
   readonly parentLineageId: LineageId | null;
   readonly referenceFirmware: DirectiveStack;
   readonly foundedAtTick: SimTick;
+  // Tick at which this lineage's last probe died, or null while the
+  // lineage is still alive (or has never had any extant probes — an
+  // edge case the sim doesn't currently produce, but possible if a
+  // future mechanic registers a lineage without immediately spawning
+  // into it). Set in sim/step.ts at the same site that emits the
+  // matching ExtinctionEvent. The phylogeny renders lifelines from
+  // foundedAtTick to extinctionTick (or to live-tick if still alive),
+  // so this field is what makes a "true lifeline" possible after
+  // loading an old save / rewinding past the original extinction
+  // emission. Mutable because it's set strictly once (null → tick) and
+  // the alternative — copying the whole Lineage on extinction — is
+  // wasteful at fat lineage counts.
+  extinctionTick: SimTick | null;
   // Patch ids inherited by this lineage. A child lineage inherits its
   // parent's patches at speciation (snapshot of the parent's list at
   // the moment of birth); a patch applied to a lineage is appended to

@@ -327,6 +327,10 @@ export class NodeHost {
       name: l.name,
       parentLineageId: l.parentLineageId ?? '',
       foundedAtTick: l.foundedAtTick,
+      // Strict pass-through. The sim sets this once at extinction and
+      // never resets it; a missing field on an older snapshot has been
+      // normalised to null by `restore()`.
+      extinctionTick: l.extinctionTick,
       founderProbeId: l.founderProbeId,
       patches: l.patches.slice(),
       quarantined: this.state!.quarantinedLineages.has(l.id),

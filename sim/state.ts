@@ -170,6 +170,7 @@ export function createInitialState(
     parentLineageId: null,
     referenceFirmware: founderFirmware,
     foundedAtTick: SimTick(0n),
+    extinctionTick: null,
     patches: [],
   };
   // Each cell starts at its own cap — system centres are bountiful,
@@ -230,7 +231,19 @@ export function restore(snap: SimStateSnapshot): SimState {
     // Shallow-copy probes back: the live state will mutate energy in
     // place, and we don't want to mutate the snapshot we restored from.
     probes: new Map(snap.probes.map((p) => [p.id, { ...p }])),
-    lineages: new Map(snap.lineages.map((l) => [l.id, l])),
+    // Shallow-copy lineages so the live state can mutate extinctionTick
+    // in place without scribbling on the snapshot. Older snapshots
+    // predate the extinctionTick field; default to null so they still
+    // load. Lineages alive at snapshot time correctly come back as
+    // null; lineages already extinct at snapshot time come back as
+    // their original tick if the snapshot was written by this codec
+    // version, or as null if it was written before the field existed.
+    // The latter case is the gap that motivated the field — without
+    // the field, the dashboard re-computes "extinct" from live
+    // population, which a Load nukes.
+    lineages: new Map(
+      snap.lineages.map((l) => [l.id, { ...l, extinctionTick: l.extinctionTick ?? null }]),
+    ),
     nextProbeOrdinal: snap.nextProbeOrdinal,
     nextLineageOrdinal: snap.nextLineageOrdinal,
     resources: snap.resources.slice(),

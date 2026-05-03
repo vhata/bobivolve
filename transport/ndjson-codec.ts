@@ -180,6 +180,10 @@ interface RawLineageEntry {
   readonly name: string;
   readonly parentLineageId: string;
   readonly foundedAtTick: string;
+  // Decimal string when the lineage is extinct, null while alive, or
+  // missing on a payload from a host that predates the field. The
+  // reviver normalises absence to null.
+  readonly extinctionTick?: string | null;
   readonly founderProbeId: string;
   readonly patches: readonly string[];
   readonly quarantined: boolean;
@@ -218,6 +222,12 @@ export function reviveQueryResult(raw: unknown): QueryResult {
       const lineages = (r.lineages ?? []).map((e) => ({
         ...e,
         foundedAtTick: BigInt(e.foundedAtTick),
+        // Older host payloads omit the field; missing → null. Live
+        // lineages also come back as null.
+        extinctionTick:
+          e.extinctionTick === null || e.extinctionTick === undefined
+            ? null
+            : BigInt(e.extinctionTick),
       }));
       return { ...r, lineages } as QueryResult;
     }
