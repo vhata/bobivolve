@@ -13,3 +13,7 @@ PROCESS.md
 
 # Prettier has no parser for .proto.
 *.proto
+
+# Scratch space for overnight / agent design docs the player audits and
+# folds into TODO.md / SPEC.md / ACCEPTANCE.md. Untracked, ephemeral.
+BRAINSTORM/
