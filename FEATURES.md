@@ -26,7 +26,7 @@ Updated in the same commit as any feature whose status changes.
 - ✓ Replicate directive (R1 reinterpretation) — energy-threshold gated, per SPEC
 - ✓ Mutation: priority swap, directive loss/gain — now meaningful with three directive kinds in firmware
 - ✓ Lineage extinction auto-pause — fires when a clade loses its last extant member
-- ✓ Substrate dashboard panel — heatmap with probe overlay; click to expand
+- ✓ Substrate dashboard panel — heatmap with probe overlay; click to expand; hover any cell to see its current resource value, its carrying capacity, and how many probes are standing on it
 
 ## Release 0 — Petri Dish
 

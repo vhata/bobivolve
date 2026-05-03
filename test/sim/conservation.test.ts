@@ -88,6 +88,17 @@ describe('conservation invariants', () => {
       // match the sim's MAX_RESOURCE_PER_CELL constant. A drift here
       // would signal a leak in the UI/sim coupling.
       expect(substrate.maxResourcePerCell).toBe(MAX_RESOURCE_PER_CELL.toString());
+
+      // Per-cell caps must align with cells row-major, fully populated,
+      // and bounded by the global max. The substrate-tooltip hover
+      // surface consumes these to compute per-cell depletion ratio.
+      expect(substrate.caps.length).toBe(substrate.cells.length);
+      expect(substrate.caps.length).toBe(substrate.side * substrate.side);
+      const maxCap = MAX_RESOURCE_PER_CELL;
+      for (const c of substrate.caps) {
+        const cap = BigInt(c);
+        expect(cap >= 0n && cap <= maxCap).toBe(true);
+      }
     } finally {
       transport.close();
     }

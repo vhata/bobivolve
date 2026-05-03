@@ -826,6 +826,43 @@ body {
   border-radius: 4px;
 }
 
+/* Container for canvas + hover tooltip; tooltip is absolutely
+   positioned within this. */
+.substrate-grid-container {
+  position: relative;
+  width: 100%;
+}
+
+.substrate-tooltip {
+  position: absolute;
+  background: var(--bg-deep);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.substrate-tooltip-coord {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-muted, var(--text));
+}
+
+.substrate-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.substrate-tooltip-row > span:first-child {
+  color: var(--text-muted, var(--text));
+}
+
 /* The substrate panel is a button so the whole grid is clickable. */
 .substrate-trigger {
   display: block;

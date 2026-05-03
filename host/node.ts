@@ -375,11 +375,13 @@ export class NodeHost {
         kind: 'substrate',
         side: LATTICE_SIDE,
         cells: [],
+        caps: [],
         maxResourcePerCell: MAX_RESOURCE_PER_CELL.toString(),
         probes: [],
       };
     }
     const cells = this.state.resources.map((r) => r.toString());
+    const caps = this.state.resourceCaps.map((c) => c.toString());
     const probes: SubstrateProbe[] = [];
     for (const probe of this.state.probes.values()) {
       probes.push({
@@ -394,6 +396,7 @@ export class NodeHost {
       kind: 'substrate',
       side: LATTICE_SIDE,
       cells,
+      caps,
       maxResourcePerCell: MAX_RESOURCE_PER_CELL.toString(),
       probes,
     };

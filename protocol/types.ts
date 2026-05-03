@@ -461,9 +461,16 @@ export interface SubstrateResult {
   // Per-cell resource counts; decimal strings for u64-safe transport.
   // Length is `side * side`.
   readonly cells: readonly string[];
-  // Cap regen targets per cell; decimal string. The UI uses this to
-  // normalise the heatmap brightness without having to hardcode the
-  // sim's tuning.
+  // Per-cell carrying capacity; decimal strings, same row-major layout
+  // and length as `cells`. Fixed for the duration of a run (set at
+  // newRun from generateResourceCaps); the UI uses these to compute the
+  // per-cell depletion ratio (current / cap) for hover affordances and
+  // to normalise tooltips even when the panel-level heatmap normalises
+  // to maxResourcePerCell. A void cell's cap is "0".
+  readonly caps: readonly string[];
+  // Global maximum any cell can hold (MAX_RESOURCE_PER_CELL); decimal
+  // string. The UI uses this to normalise the heatmap brightness without
+  // having to hardcode the sim's tuning.
   readonly maxResourcePerCell: string;
   // Position + lineage of every extant probe.
   readonly probes: readonly SubstrateProbe[];

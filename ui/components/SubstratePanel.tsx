@@ -10,9 +10,12 @@
 // — every poll reconciled the entire tree, dominated DevTools' DOM
 // node count, and starved the main thread under load. Canvas is one
 // element and one draw pass per update. Trade-off: native SVG
-// `<title>` hover tooltips are gone; if hover identification of
-// individual probes becomes load-bearing, a mousemove → cell-lookup
-// → custom tooltip is the path back.
+// `<title>` hover tooltips are gone; we ship a custom mousemove →
+// cell-lookup → tooltip overlay below to recover the cell-value /
+// cell-cap affordance the heatmap normalisation otherwise hides
+// (closes the perceptual gap behind "looks fully drawn down" — the
+// steady state sits at ~17–30% of cap; the hover surfaces the actual
+// ratio).
 //
 // Filters: the player can dim the resource heatmap or restrict which
 // probes show — useful on a busy map for picking out where a
@@ -283,6 +286,18 @@ function SubstrateModal({
   );
 }
 
+interface HoverState {
+  readonly x: number;
+  readonly y: number;
+  readonly value: bigint;
+  readonly cap: bigint;
+  readonly probeCount: number;
+  // Pixel offsets within the SubstrateGrid container, used to position
+  // the tooltip. The tooltip sits to the right of the cursor by default;
+  // it flips to the left if it would overflow the container.
+  readonly cursorPx: { readonly x: number; readonly y: number };
+}
+
 function SubstrateGrid({
   view,
   highlightLineageId,
@@ -297,6 +312,49 @@ function SubstrateGrid({
   sizePx: number;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
+
+  // Probe-count-by-cell, computed once per view change so the mousemove
+  // handler is O(1). Map key is the flat index `y * side + x`.
+  const probeCountByCell = useMemo(() => {
+    const counts = new Map<number, number>();
+    const side = view.side;
+    for (const probe of view.probes) {
+      const idx = probe.y * side + probe.x;
+      counts.set(idx, (counts.get(idx) ?? 0) + 1);
+    }
+    return counts;
+  }, [view.probes, view.side]);
+
+  function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    // Use the displayed (CSS) size, not the canvas pixel buffer, since
+    // mouse coordinates are in CSS pixels. The internal buffer is dpr-
+    // scaled; cells map onto CSS pixels uniformly.
+    const cellPxCss = rect.width / view.side;
+    const cellX = Math.floor((e.clientX - rect.left) / cellPxCss);
+    const cellY = Math.floor((e.clientY - rect.top) / cellPxCss);
+    if (cellX < 0 || cellY < 0 || cellX >= view.side || cellY >= view.side) {
+      setHover(null);
+      return;
+    }
+    const idx = cellY * view.side + cellX;
+    const cellStr = view.cells[idx] ?? '0';
+    const capStr = view.caps[idx] ?? '0';
+    setHover({
+      x: cellX,
+      y: cellY,
+      value: BigInt(cellStr),
+      cap: BigInt(capStr),
+      probeCount: probeCountByCell.get(idx) ?? 0,
+      cursorPx: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+    });
+  }
+
+  function handleMouseLeave(): void {
+    setHover(null);
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -366,11 +424,64 @@ function SubstrateGrid({
   }, [view, highlightLineageId, filters, visibleSet, sizePx]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="substrate-canvas"
-      role="img"
-      aria-label="Sub-lattice resource heatmap with probe overlay"
-    />
+    <div className="substrate-grid-container">
+      <canvas
+        ref={canvasRef}
+        className="substrate-canvas"
+        role="img"
+        aria-label="Sub-lattice resource heatmap with probe overlay"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      {hover !== null ? <SubstrateHoverTooltip hover={hover} containerPx={sizePx} /> : null}
+    </div>
+  );
+}
+
+function SubstrateHoverTooltip({
+  hover,
+  containerPx,
+}: {
+  hover: HoverState;
+  containerPx: number;
+}): React.JSX.Element {
+  // Position the tooltip near the cursor, with a small offset so it
+  // doesn't sit directly under the pointer. Flip to the left when it
+  // would overflow the container's right edge — the canvas can be
+  // arbitrarily wide-or-narrow depending on the panel state, so we use
+  // the container size we know.
+  const TOOLTIP_WIDTH = 144;
+  const TOOLTIP_OFFSET = 12;
+  const flipLeft = hover.cursorPx.x + TOOLTIP_OFFSET + TOOLTIP_WIDTH > containerPx;
+  const left = flipLeft
+    ? hover.cursorPx.x - TOOLTIP_OFFSET - TOOLTIP_WIDTH
+    : hover.cursorPx.x + TOOLTIP_OFFSET;
+  const top = hover.cursorPx.y + TOOLTIP_OFFSET;
+
+  // Ratio is the per-cell depletion against this cell's own cap, not
+  // against MAX_RESOURCE_PER_CELL. That's the load-bearing distinction —
+  // a cell at the disc edge with cap=187 reads as "near-empty" against
+  // the global max but as "at cap" against its local cap.
+  const ratioPct = hover.cap === 0n ? 0 : Number((hover.value * 100n) / hover.cap);
+
+  return (
+    <div className="substrate-tooltip" style={{ left, top, width: TOOLTIP_WIDTH }} role="tooltip">
+      <div className="substrate-tooltip-coord">
+        cell ({hover.x}, {hover.y})
+      </div>
+      <div className="substrate-tooltip-row">
+        <span>resources</span>
+        <span>
+          {hover.value.toString()} / {hover.cap.toString()}
+          {hover.cap > 0n ? ` (${ratioPct}%)` : ' (void)'}
+        </span>
+      </div>
+      {hover.probeCount > 0 ? (
+        <div className="substrate-tooltip-row">
+          <span>probes</span>
+          <span>{hover.probeCount}</span>
+        </div>
+      ) : null}
+    </div>
   );
 }
