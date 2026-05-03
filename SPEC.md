@@ -63,6 +63,8 @@ Probes are clustered into lineages based on firmware similarity to a reference g
 
 Probes consume resources from the substrate to maintain energy. Resources diffuse across the sub-lattice. Probes that fail to maintain energy stop functioning. Selection pressure emerges from this scarcity.
 
+The substrate is not consumed to zero. Per-cell regeneration scales with each cell's carrying capacity (system centres regenerate fastest, void cells not at all) and balances against diffusion outflow at a non-zero equilibrium — roughly 17–30% of cap for cells inside a system disc. The substrate panel can therefore look heavily "drawn down" on a heatmap normalised to maximum cap while the sim is in fact at steady state and probes coast on the steady inflow. Conservation is exact: diffusion preserves total resources within the lattice, and replication transfers parent-to-child energy with no leak. The invariants are pinned at `test/sim/conservation.test.ts`.
+
 ### External Entities (R3+)
 
 Two archetypes are introduced at R3:
