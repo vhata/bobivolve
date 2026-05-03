@@ -1,4 +1,7 @@
-# Dependencies
+# Dependencies. The trailing-slash form catches the directory; the
+# bare form catches symlinks (worktrees can symlink ./node_modules to
+# the main checkout's install to skip a redundant pnpm install pass).
+node_modules
 node_modules/
 
 # Build output
