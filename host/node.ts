@@ -1418,18 +1418,18 @@ export class NodeHost {
   // BRAINSTORM/opfs-slot-ui.md (commit-time): pause first, snapshot the
   // outgoing slot at its current tick (so a return-to-this-slot later
   // restores exactly), then point at the new slot. If the new slot has
-  // a snapshot on disk we restore from its highest-tick snapshot;
+  // log entries on disk we restore from its highest-tick snapshot and
+  // replay any logged commands past that snap up to the log head;
   // otherwise the host enters its post-construction state and waits
   // for newRun. Either way we update the active marker file so the
   // next host startup reopens the same slot.
   //
-  // What this does NOT do (yet, deferred follow-up): replay any log
-  // entries past the latest snap when restoring. If snapshots cadence
-  // is 30k ticks, the player can lose up to 30k ticks of state on a
-  // round-trip when the outgoing-slot snap-on-switch fails to fire
-  // (e.g. host crash between switchRun's snap and writeActiveRunMarker).
-  // The snap-on-switch path covers the common case where the player
-  // explicitly switches between healthy runs.
+  // Log replay past the latest snap closes the snapshot-cadence loss
+  // window: if the outgoing slot's snap-on-switch fails to fire (e.g.
+  // host crash between writeSnap and writeActiveRunMarker), the
+  // incoming-slot path here recovers state from (latest snap + log
+  // tail) rather than just the latest snap alone. Same fallback
+  // discipline as handleRewindToTick — both call restoreToTick.
   private handleSwitchRun(commandId: string, runId: string): void {
     if (this.persistence === undefined) {
       this.error(commandId, 'cannot switchRun: no persistence configured');
@@ -1454,17 +1454,20 @@ export class NodeHost {
     this.enqueue(async () => {
       // (1) Snap-out the outgoing slot at its current tick if the
       //     state is live, so a future switch-back restores cleanly.
+      //     Flush the active log writer first so any pending cmd/ev
+      //     entries land on disk before the snap entry, then append a
+      //     well-formed SnapLogEntry referencing the freshly-written
+      //     snapshot file so the future restore picks it up via the
+      //     log (not just the filesystem directory).
       if (this.state !== null) {
         const tickAt = this.state.simTick;
         const key = snapshotKey(persistence.runId, tickAt);
         const bytes = serializeSnapshot(snapshot(this.state));
         await persistence.storage.write(key, bytes);
-        await persistence.storage.append(
-          logKey(persistence.runId),
-          new TextEncoder().encode(
-            JSON.stringify({ kind: 'snap', tick: tickAt.toString() }) + '\n',
-          ),
-        );
+        if (this.logWriter !== null) {
+          this.logWriter.appendSnap(tickAt, key);
+          await this.logWriter.flush();
+        }
       }
 
       // (2) Repoint persistence at the incoming slot. The storage
@@ -1473,36 +1476,35 @@ export class NodeHost {
       // The active log writer must follow.
       this.logWriter = new EventLogWriter(persistence.storage, logKey(runId));
 
-      // (3) Try to restore from the incoming slot's latest snapshot.
-      //     If there isn't one, the host enters its empty state — the
-      //     player can issue newRun against the new slot.
-      let restoredFromSnap = false;
-      const snapEntries = isRunsCapable(persistence.storage)
-        ? await persistence.storage.listEntries(snapshotsDirKey(runId))
-        : [];
-      let bestTick = -1n;
-      for (const entry of snapEntries) {
-        if (entry.kind !== 'file' || !entry.name.endsWith('.snap')) continue;
-        const tickStr = entry.name.slice(0, -'.snap'.length);
-        let tick: bigint;
-        try {
-          tick = BigInt(tickStr);
-        } catch {
-          continue;
-        }
-        if (tick > bestTick) bestTick = tick;
-      }
-      if (bestTick >= 0n) {
-        const snapBytes = await persistence.storage.read(snapshotKey(runId, bestTick));
-        if (snapBytes !== null) {
-          this.state = restore(deserializeSnapshot(snapBytes));
-          this.lastSnapAtTick = this.state.simTick;
-          restoredFromSnap = true;
-        }
-      }
-      if (!restoredFromSnap) {
+      // (3) Try to restore from the incoming slot's log. The shared
+      //     restoreToTick helper picks the highest snap entry at-or-
+      //     before the log head, falls back to rebuild-from-log if
+      //     the snap file is missing, and replays any logged commands
+      //     past the snap up to the log head. The log head is the max
+      //     tick seen across all entries — the upper bound on what
+      //     was observably recorded for this slot.
+      //
+      //     A slot with no log entries (fresh, never had newRun) takes
+      //     the early-return path: state stays null, lastSnapAtTick
+      //     resets to 0, and the player can issue newRun against it.
+      const reader = new EventLogReader(persistence.storage, logKey(runId));
+      const entries = await reader.readAll();
+      if (entries.length === 0) {
         this.state = null;
         this.lastSnapAtTick = SimTick(0n);
+      } else {
+        let maxTick = 0n;
+        for (const entry of entries) {
+          if (entry.tick > maxTick) maxTick = entry.tick;
+        }
+        const result = await this.restoreToTick(maxTick, entries, persistence);
+        if (!result.ok) {
+          // Malformed log (no newRun command and no usable snapshot).
+          // Surface the error rather than silently entering null state;
+          // the UI can prompt the player to delete-and-recreate the slot.
+          this.error(commandId, `cannot switchRun to ${runId}: ${result.reason}`);
+          return;
+        }
       }
       // The outgoing slot's heartbeat samples don't apply to the
       // incoming slot's timeline; the buffer rebuilds from heartbeats
@@ -1513,6 +1515,10 @@ export class NodeHost {
       //     up this slot.
       await writeActiveRunMarker(persistence.storage, runId);
 
+      // SwitchRun always lands paused — the player explicitly asked
+      // to step away from the live run; resuming the new slot is a
+      // separate decision. doRewindToTick has the same discipline.
+      this.paused = true;
       this.resetHeartbeatBaseline();
       if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
         this.emitHeartbeat();
@@ -1607,14 +1613,61 @@ export class NodeHost {
       await this.logWriter.flush();
     }
 
-    // Read the active run's log to find the latest snap entry at or
-    // before the target. Snapshots fire on the SNAPSHOT_CADENCE_TICKS
-    // cadence (plus tick 0 for the initial newRun), so the worst-case
-    // replay distance is the snapshot cadence; in practice often much
-    // less because we land on the most recent snap.
+    // Read the active run's log. Snapshots fire on SNAPSHOT_CADENCE_TICKS
+    // (plus tick 0 for the initial newRun), so the worst-case replay
+    // distance is the snapshot cadence; in practice often much less
+    // because we land on the most recent snap at-or-before target.
     const reader = new EventLogReader(persistence.storage, logKey(persistence.runId));
     const entries = await reader.readAll();
 
+    const result = await this.restoreToTick(targetTick, entries, persistence);
+    if (!result.ok) {
+      this.error(commandId, `cannot rewind: ${result.reason}`);
+      return;
+    }
+
+    this.paused = true;
+    this.resetHeartbeatBaseline();
+    // The pre-rewind samples were taken at later ticks; clearing the
+    // buffer keeps the sparkline monotonic in tick.
+    this.populationHistory = [];
+
+    // Single heartbeat so the UI catches up to the rewound state.
+    if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+      this.emitHeartbeat();
+    }
+
+    this.ack(commandId);
+  }
+
+  // Restore this.state to `targetTick` using `entries` from the active
+  // slot's log. Picks the latest snap at-or-before target, loads it,
+  // and replays logged cmds strictly after the snap up to the target.
+  // Falls back to rebuild-from-log (createInitialState with the seed
+  // from the first newRun command, then replay forward) when no usable
+  // snap is available — the realisation of ARCHITECTURE.md "the seed
+  // plus the command log is the canonical universe; snapshots are an
+  // implementation-defined performance cache."
+  //
+  // The fallback fires when:
+  //   - no snap entry exists at-or-before target (fresh run, no
+  //     cadence snapshot yet), OR
+  //   - a snap entry exists in the log but the snapshot file is
+  //     missing on disk (e.g. user nuked the snapshots/ dir, or a
+  //     future Rust port can't read TS-format snaps).
+  // The cost is a full replay from tick 0; for long runs at fat
+  // population that's measurable, but the alternative is the operation
+  // failing when it could have recovered.
+  //
+  // Shared by handleRewindToTick (target = player-chosen tick) and
+  // handleSwitchRun (target = the slot's log head). Returns ok:false
+  // when the log lacks a usable seed (no newRun command); callers
+  // surface that as a commandError.
+  private async restoreToTick(
+    targetTick: bigint,
+    entries: readonly LogEntry[],
+    persistence: PersistenceOptions,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
     let bestSnap: SnapLogEntry | null = null;
     for (const entry of entries) {
       if (entry.type !== 'snap') continue;
@@ -1622,22 +1675,6 @@ export class NodeHost {
       if (bestSnap === null || entry.tick > bestSnap.tick) bestSnap = entry;
     }
 
-    // Pick the starting state. Preferred path: restore from the
-    // best-snap-at-or-before-target. Fallback: rebuild from the log
-    // (createInitialState with the seed from the first newRun
-    // command in the log, then replay the command stream forward).
-    //
-    // The fallback is the realisation of ARCHITECTURE.md "the seed
-    // plus the command log is the canonical universe; snapshots are
-    // an implementation-defined performance cache." It fires when:
-    //   - no snap entry exists at-or-before the target tick (fresh
-    //     run with no cadence snapshot yet), OR
-    //   - the snap entry exists in the log but the snapshot file is
-    //     missing on disk (e.g. user nuked the snapshots/ dir, or a
-    //     future Rust port can't read TS-format snaps).
-    // The cost is a full replay from tick 0; for long runs at fat
-    // population that's measurable, but the alternative is the rewind
-    // failing silently.
     let usedRebuild = false;
     let startTick = 0n;
     if (bestSnap !== null) {
@@ -1656,11 +1693,10 @@ export class NodeHost {
     if (bestSnap === null) {
       const rebuilt = this.rebuildStateFromLog(entries);
       if (rebuilt === null) {
-        this.error(
-          commandId,
-          `cannot rewind: no snapshot at-or-before tick ${targetTick.toString()} and log lacks a newRun command to seed a rebuild`,
-        );
-        return;
+        return {
+          ok: false,
+          reason: `no snapshot at-or-before tick ${targetTick.toString()} and log lacks a newRun command to seed a rebuild`,
+        };
       }
       this.state = rebuilt;
       this.lastSnapAtTick = rebuilt.simTick;
@@ -1695,6 +1731,19 @@ export class NodeHost {
         // already consumed the seed and seeded createInitialState, so
         // re-issuing it here would clobber the freshly-built state.
         if (usedRebuild && entry.command.kind === 'newRun') continue;
+        // Skip persistence-meta commands during replay: re-firing
+        // switchRun would reroute the host away from the slot we're
+        // restoring; deleteRun would wipe a sibling; save would
+        // overwrite a named save with a mid-replay snapshot. None of
+        // these affect sim state (the thing replay is reconstructing);
+        // all of them have external side effects we don't want.
+        if (
+          entry.command.kind === 'switchRun' ||
+          entry.command.kind === 'deleteRun' ||
+          entry.command.kind === 'save'
+        ) {
+          continue;
+        }
         while (state.simTick < entry.tick) {
           await this.advanceWithYield(entry.tick);
         }
@@ -1707,18 +1756,7 @@ export class NodeHost {
       this.replaying = false;
     }
 
-    this.paused = true;
-    this.resetHeartbeatBaseline();
-    // The pre-rewind samples were taken at later ticks; clearing the
-    // buffer keeps the sparkline monotonic in tick.
-    this.populationHistory = [];
-
-    // Single heartbeat so the UI catches up to the rewound state.
-    if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
-      this.emitHeartbeat();
-    }
-
-    this.ack(commandId);
+    return { ok: true };
   }
 
   // Rebuild a fresh sim state from the command log alone — no

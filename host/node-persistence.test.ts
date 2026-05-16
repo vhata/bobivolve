@@ -306,6 +306,63 @@ describe('NodeHost persistence', () => {
       unsub();
     });
 
+    it('switchRun-in replays log entries past the latest snap (crash-recovery path)', async () => {
+      // Simulates a host that crashed between cadence snapshots on the
+      // 'crashed' slot: a long log tail past the tick-0 snap exists,
+      // but no later cadence snap and no snap-on-switch-out entry.
+      // When a fresh host attaches to a different slot and switches in
+      // to 'crashed', it must reconstruct state up to the log head by
+      // replaying the tail past the latest snap. Today's tick-0-snap-
+      // only restore would lose the quarantine; the new path replays
+      // the quarantine cmd and advances to the log's high water mark.
+
+      // Phase 1: populate 'crashed' from a host that never gets to
+      // switch-out. Cadence high enough that no mid-run cadence snap
+      // fires past tick 0. The host is then discarded, simulating a
+      // crash; no flush-to-disk-on-shutdown happens beyond the explicit
+      // flush() below.
+      const cadence = 1_000_000n;
+      {
+        const host = makeHost('crashed', cadence);
+        host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+        host.runUntil(50n);
+        host.send({ kind: 'quarantine', commandId: 'q1', lineageId: 'L0' });
+        host.runUntil(200n);
+        await host.flush();
+      }
+      // Sanity: only the tick-0 snap is on disk for 'crashed'.
+      expect(await storage.exists('runs/crashed/snapshots/0.snap')).toBe(true);
+      expect(await storage.exists('runs/crashed/snapshots/200.snap')).toBe(false);
+
+      // Find the log's high water mark — that's the tick the recovery
+      // can reach. The sim was at tick 200 in memory but the log only
+      // records ticks at which something happened; the highest logged
+      // event tick is the most we can recover (ARCHITECTURE.md "the
+      // seed plus the command log is the canonical universe").
+      const reader = new EventLogReader(storage, 'runs/crashed/log.ndjson');
+      const entries = await reader.readAll();
+      let maxLogTick = 0n;
+      for (const e of entries) if (e.tick > maxLogTick) maxLogTick = e.tick;
+      // The quarantine landed at tick 50; the log tail must reach past
+      // that for the test to mean anything.
+      expect(maxLogTick).toBeGreaterThan(50n);
+
+      // Phase 2: fresh host attached to a different slot ('observer')
+      // that has no state of its own. SwitchRun in to 'crashed' must
+      // restore by replaying the log tail past the latest snap.
+      const host2 = makeHost('observer', cadence);
+      host2.send({ kind: 'switchRun', commandId: 'sw', runId: 'crashed' });
+      await host2.flush();
+
+      // Recovery lands at the log head; the quarantine — issued well
+      // before the log head — is back in place. Without the log-replay
+      // fix, host2.currentTick would be 0 and the quarantine would be
+      // gone (tick-0 snap loaded, no replay past it).
+      expect(host2.currentTick()).toBe(maxLogTick);
+      expect(host2.quarantinedLineages().has('L0')).toBe(true);
+      expect(host2.isPaused()).toBe(true);
+    });
+
     it('listRuns enumerates persisted slots and marks the active one', async () => {
       const host = makeHost('first', 1_000_000n);
       host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
