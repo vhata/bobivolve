@@ -7,7 +7,19 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Extend rebuild-from-log to the named-save Load path. The host's `handleRewindToTick` path now falls back to replaying the log from tick 0 when no usable snapshot is available; `handleLoad` (named save slot) still fails fast when the save's `.save` snapshot is missing or unreadable. There's no log to replay from for that case until Save bundles the relevant log range alongside the snapshot — once it does, Load can degrade gracefully too. #r0 #host
-- Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md #r0 #host
+- Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md. Bench data collected 2026-05-15; see table below. #r0 #host
+
+  Bench: `test/bench/snapshot-cadence.ts`, seed=42, forward run 100k ticks, in-memory storage.
+
+  | cadence | snap-samples | snap-write-ms (mean) | bytes-per-snap (mean) | replay-ms (worst-case scrub) | snaps per 100k | total snap-write-ms per 100k |
+  | ------: | -----------: | -------------------: | --------------------: | ---------------------------: | -------------: | ---------------------------: |
+  |   5,000 |           20 |                1.417 |            19,871,735 |                       12,369 |             20 |                         28.3 |
+  |  10,000 |           10 |                1.352 |            20,669,634 |                       21,887 |             10 |                         13.5 |
+  |  30,000 |            3 |                1.237 |            22,296,602 |                       66,010 |              3 |                          3.7 |
+  |  60,000 |            1 |                1.138 |            22,365,560 |                      145,100 |              1 |                          1.1 |
+  | 100,000 |            1 |                3.066 |            34,588,884 |                      243,543 |              1 |                          3.1 |
+
+  Interpretation: snap-write is cheap (~1 ms per snap, ~20 MB on disk at fat population) and the total snapshot tax across 100k ticks is negligible at every cadence tested; replay-ms dominates and grows linearly with cadence — the user-perceived scrub cost between snaps. The decision is a single tradeoff between disk-and-CPU cost (favours larger cadences) and worst-case scrub latency (favours smaller cadences); the bench gives the magnitudes, the value pick is the user's.
 
 ## Release 2 — The Engineer's Console
 
