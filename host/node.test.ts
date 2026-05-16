@@ -1,6 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventLogReader } from './event-log.js';
 import { NodeHost } from './node.js';
-import type { Command, ReplicationEvent, SimEvent, TickEvent } from '../protocol/types.js';
+import { NodeStorage } from './storage-node.js';
+import type {
+  Command,
+  PopulationSummaryResult,
+  ReplicationEvent,
+  SimEvent,
+  TickEvent,
+} from '../protocol/types.js';
 
 // Host-level tests. Verify that the run-loop wires the sim/UI seam end-to-end:
 //   - Commands are acknowledged.
@@ -418,6 +429,215 @@ describe('NodeHost patch authoring', () => {
     });
     const err = events.find((e) => e.kind === 'commandError' && e.commandId === 'p-empty');
     expect(err).toBeDefined();
+  });
+});
+
+describe('NodeHost logSlice query', () => {
+  let root: string;
+  let storage: NodeStorage;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'bobivolve-logslice-'));
+    storage = new NodeStorage({ root });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('returns events whose simTick falls in [fromTick, toTick] inclusive', async () => {
+    const host = new NodeHost({
+      heartbeatHz: 0,
+      persistence: { storage, runId: 'slice-run' },
+    });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(500n);
+    await host.flush();
+
+    const result = await host.executeQuery({
+      kind: 'logSlice',
+      queryId: 'q-window',
+      fromTick: 100n,
+      toTick: 200n,
+    });
+    expect(result.kind).toBe('logSlice');
+    if (result.kind !== 'logSlice') return;
+    expect(result.queryId).toBe('q-window');
+    expect(result.events.length).toBeGreaterThan(0);
+    for (const e of result.events) {
+      expect(e.simTick >= 100n && e.simTick <= 200n).toBe(true);
+    }
+  });
+
+  it('returns events in (tick, seq) declaration order', async () => {
+    const host = new NodeHost({
+      heartbeatHz: 0,
+      persistence: { storage, runId: 'slice-order' },
+    });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(300n);
+    await host.flush();
+
+    const result = await host.executeQuery({
+      kind: 'logSlice',
+      queryId: 'q',
+      fromTick: 0n,
+      toTick: 300n,
+    });
+    if (result.kind !== 'logSlice') return;
+    let last = -1n;
+    for (const e of result.events) {
+      expect(e.simTick >= last).toBe(true);
+      last = e.simTick;
+    }
+  });
+
+  it('returns empty when persistence is not configured', async () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(100n);
+
+    const result = await host.executeQuery({
+      kind: 'logSlice',
+      queryId: 'q-no-persist',
+      fromTick: 0n,
+      toTick: 100n,
+    });
+    if (result.kind !== 'logSlice') return;
+    expect(result.events).toEqual([]);
+  });
+
+  it('returns empty when the window contains no events', async () => {
+    const host = new NodeHost({
+      heartbeatHz: 0,
+      persistence: { storage, runId: 'slice-empty' },
+    });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(50n);
+    await host.flush();
+
+    const result = await host.executeQuery({
+      kind: 'logSlice',
+      queryId: 'q-empty',
+      fromTick: 5000n,
+      toTick: 6000n,
+    });
+    if (result.kind !== 'logSlice') return;
+    expect(result.events).toEqual([]);
+  });
+
+  it('returns event count equal to log ev-entries within the window', async () => {
+    const host = new NodeHost({
+      heartbeatHz: 0,
+      persistence: { storage, runId: 'slice-ev-count', snapshotCadenceTicks: 100n },
+    });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(300n);
+    await host.flush();
+
+    const result = await host.executeQuery({
+      kind: 'logSlice',
+      queryId: 'q-count',
+      fromTick: 0n,
+      toTick: 300n,
+    });
+    if (result.kind !== 'logSlice') return;
+    // The log holds cmd, ev, and snap entries; logSlice surfaces only
+    // ev entries. Cross-check against the on-disk log to confirm the
+    // filter — read the log directly and count ev entries in the
+    // window; the query result must match.
+    const reader = new EventLogReader(storage, 'runs/slice-ev-count/log.ndjson');
+    const entries = await reader.readAll();
+    const evCount = entries.filter((e) => e.type === 'ev' && e.tick >= 0n && e.tick <= 300n).length;
+    expect(result.events.length).toBe(evCount);
+  });
+});
+
+describe('NodeHost populationSummary query', () => {
+  it('returns points sampled at heartbeat cadence in tick-ascending order', async () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 60 });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(1500n);
+
+    const result = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-pop',
+    })) as PopulationSummaryResult & { queryId: string };
+    expect(result.kind).toBe('populationSummary');
+    expect(result.queryId).toBe('q-pop');
+    expect(result.points.length).toBeGreaterThan(0);
+    let last = -1n;
+    for (const p of result.points) {
+      expect(typeof p.tick).toBe('bigint');
+      expect(typeof p.totalProbes).toBe('bigint');
+      expect(p.tick >= last).toBe(true);
+      last = p.tick;
+    }
+  });
+
+  it('returns an empty list when heartbeats are suppressed', async () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(500n);
+
+    const result = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-quiet',
+    })) as PopulationSummaryResult & { queryId: string };
+    expect(result.points).toEqual([]);
+  });
+
+  it('returns an empty list before newRun', async () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 60 });
+    const result = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-pre',
+    })) as PopulationSummaryResult & { queryId: string };
+    expect(result.points).toEqual([]);
+  });
+
+  it('clears the buffer on newRun', async () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 60 });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(500n);
+    const before = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-before',
+    })) as PopulationSummaryResult & { queryId: string };
+    expect(before.points.length).toBeGreaterThan(0);
+
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    const after = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-after',
+    })) as PopulationSummaryResult & { queryId: string };
+    // A heartbeat may not have fired yet between newRun and the query,
+    // so the only invariant we can rely on is that none of the
+    // pre-newRun samples survive. The latest tick on any post-newRun
+    // sample is 0n.
+    for (const p of after.points) {
+      expect(p.tick).toBeLessThanOrEqual(0n);
+    }
+  });
+
+  it('bounded buffer decimates rather than growing without limit', async () => {
+    // Heartbeats fire every Math.floor(1000/hz) ms by the fake clock.
+    // With hz=60 the interval is 16ms and the fake clock advances by
+    // 1ms per call, so a heartbeat lands roughly every 16 calls. Run
+    // enough ticks for the buffer to overflow its 240 capacity
+    // multiple times.
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 60 });
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(3000n);
+
+    const result = (await host.executeQuery({
+      kind: 'populationSummary',
+      queryId: 'q-bounded',
+    })) as PopulationSummaryResult & { queryId: string };
+    // POPULATION_SUMMARY_CAPACITY is 240; the decimation step at
+    // overflow halves the buffer, so we expect a length comfortably
+    // below 2x the cap.
+    expect(result.points.length).toBeLessThan(480);
   });
 });
 

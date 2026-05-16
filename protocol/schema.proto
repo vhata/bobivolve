@@ -456,8 +456,37 @@ message ParameterDrift {
   string mean = 4;
 }
 
-message LogSlice {}
-message PopulationSummary {}
+// LogSlice — windowed read of the event log. Returns every SimEvent the
+// sim emitted whose sim_tick falls in [from_tick, to_tick] (inclusive at
+// both ends), in (tick, seq) declaration order. Commands and snapshot
+// markers are not surfaced — the dashboard's forensic-replay panel reads
+// the event stream, not the command log. Bounded by the query window;
+// callers paginate by stepping the window forward. Empty when the host
+// has no persistence (no on-disk log to read), which is the honest
+// answer rather than an error — the surface is best-effort like the
+// heartbeat.
+message LogSlice {
+  repeated SimEvent events = 1;
+}
+
+// PopulationSummary — compact aggregate of population over time, useful
+// for sparkline-style UI surfaces. Returns the host's rolling
+// heartbeat-derived window as a flat list of (tick, total_probes)
+// pairs in tick-ascending order. The window is bounded; older points
+// roll off as new heartbeats fire. Best-effort — heartbeats are
+// best-effort by the same architectural rule, so a host that has
+// suppressed heartbeats (heartbeat_hz = 0) returns an empty list.
+message PopulationSummary {
+  repeated PopulationSummaryPoint points = 1;
+}
+
+message PopulationSummaryPoint {
+  // Sim tick at which the heartbeat sample was taken. Decimal string
+  // (proto3 JSON convention for u64-safe transport).
+  string tick = 1;
+  // Total live probes at that tick. Decimal string for u64 safety.
+  string total_probes = 2;
+}
 
 // ListSaves — index of named save slots written by the host. The
 // dashboard renders this in the Run panel so a player can browse and

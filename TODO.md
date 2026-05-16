@@ -5,7 +5,6 @@ Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted
 ## Foundational
 
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
-- Flesh out R0 `Query` result message bodies as the dashboard UI takes shape #r0 #protocol
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Switch-run state restoration via log replay. `switchRun` currently restores the incoming slot from its highest-tick snapshot; any log entries past that snap are not replayed, so a slot whose owner crashed between snaps can lose up to one snapshot-cadence (default 30k ticks) of state on round-trip. Snap-on-switch-out covers the explicit-switch path; this entry covers the crash-recovery path. #r0 #host
 - Extend rebuild-from-log to the named-save Load path. The host's `handleRewindToTick` path now falls back to replaying the log from tick 0 when no usable snapshot is available; `handleLoad` (named save slot) still fails fast when the save's `.save` snapshot is missing or unreadable. There's no log to replay from for that case until Save bundles the relevant log range alongside the snapshot — once it does, Load can degrade gracefully too. #r0 #host

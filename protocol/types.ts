@@ -467,12 +467,33 @@ export interface ParameterDrift {
   readonly mean: string;
 }
 
+// LogSlice — windowed read of the event log. Every SimEvent whose
+// simTick falls within the queried [fromTick, toTick] window
+// (inclusive at both ends), in (tick, seq) declaration order. Commands
+// and snap markers are not surfaced — the forensic-replay panel reads
+// the event stream, not the command log. Empty when the host has no
+// persistence configured (nothing on disk to read).
 export interface LogSliceResult {
   readonly kind: 'logSlice';
+  readonly events: readonly SimEvent[];
 }
 
+// PopulationSummary — compact aggregate of population over time.
+// Host's rolling heartbeat-derived window, in tick-ascending order.
+// Older points roll off as new heartbeats fire. Best-effort like the
+// heartbeat itself; a host with heartbeats suppressed (heartbeatHz = 0)
+// returns an empty list.
 export interface PopulationSummaryResult {
   readonly kind: 'populationSummary';
+  readonly points: readonly PopulationSummaryPoint[];
+}
+
+export interface PopulationSummaryPoint {
+  // Sim tick at which the heartbeat sample was taken. bigint at the
+  // seam; proto3 JSON wire encoding stringifies it.
+  readonly tick: bigint;
+  // Total live probes at that tick. bigint for u64-safe transport.
+  readonly totalProbes: bigint;
 }
 
 export interface ListSavesResult {

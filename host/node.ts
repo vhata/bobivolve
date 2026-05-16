@@ -35,6 +35,7 @@ import type {
   DirectiveSpec,
   ParameterDrift,
   PatchAppliedEvent,
+  PopulationSummaryPoint,
   ProbeInspectorDirective,
   QuarantineImposedEvent,
   QuarantineLiftedEvent,
@@ -70,6 +71,13 @@ const REPLAY_YIELD_TICKS = 250n;
 // ARCHITECTURE.md flags this as an open question with ~30,000 as the
 // suggested heuristic; tunable per host.
 const DEFAULT_SNAPSHOT_CADENCE_TICKS = 30_000n;
+
+// PopulationSummary rolling-buffer capacity. Mirrors the UI store's
+// HISTORY_CAPACITY (ui/sim-store.ts) — same heartbeat data feeds both,
+// and the query surface exists so a fresh dashboard can rehydrate the
+// sparkline after a reload without waiting for the buffer to refill
+// from live heartbeats.
+const POPULATION_SUMMARY_CAPACITY = 240;
 
 export interface PersistenceOptions {
   readonly storage: Storage;
@@ -342,6 +350,13 @@ export class NodeHost {
   // Sim tick at start of the most recent speed measurement.
   private lastHeartbeatAtTick: SimTick = SimTick(0n);
 
+  // Rolling population-summary buffer, sampled at each heartbeat emit
+  // (so its cadence tracks the wall-clock heartbeat, not the per-tick
+  // sim cadence). Bounded by POPULATION_SUMMARY_CAPACITY; older points
+  // are decimated as new ones arrive. The PopulationSummary query
+  // returns a snapshot of this buffer.
+  private populationHistory: PopulationSummaryPoint[] = [];
+
   constructor(options: NodeHostOptions = {}) {
     this.now = options.now ?? Date.now;
     const hz = options.heartbeatHz ?? DEFAULT_HEARTBEAT_HZ;
@@ -376,13 +391,52 @@ export class NodeHost {
       case 'listRuns':
         return this.queryListRuns(query.queryId);
       case 'logSlice':
+        return this.queryLogSlice(query.queryId, query.fromTick, query.toTick);
       case 'populationSummary':
-        // Result bodies for these are still placeholders in the schema;
-        // their handlers land alongside the matching dashboard panels.
-        // Returning a placeholder rather than throwing keeps the query
-        // surface live for early UI integration.
-        return { queryId: query.queryId, kind: query.kind } as QueryResult;
+        return this.queryPopulationSummary(query.queryId);
     }
+  }
+
+  // LogSlice — return every SimEvent the sim emitted whose simTick falls
+  // in [fromTick, toTick] (inclusive both ends), in (tick, seq)
+  // declaration order. Reads from the persisted log via EventLogReader.
+  // Empty when persistence is not configured (no on-disk log to read);
+  // the surface is best-effort like the heartbeat. Any unflushed buffer
+  // entries are drained first so a query immediately after a runUntil
+  // sees the events those ticks emitted.
+  private async queryLogSlice(
+    queryId: string,
+    fromTick: bigint,
+    toTick: bigint,
+  ): Promise<QueryResult> {
+    if (this.persistence === undefined) {
+      return { queryId, kind: 'logSlice', events: [] };
+    }
+    if (this.logWriter !== null) {
+      await this.logWriter.flush();
+    }
+    const reader = new EventLogReader(this.persistence.storage, logKey(this.persistence.runId));
+    const entries = await reader.readAll();
+    const events: SimEvent[] = [];
+    for (const entry of entries) {
+      if (entry.type !== 'ev') continue;
+      if (entry.tick < fromTick) continue;
+      if (entry.tick > toTick) continue;
+      events.push(entry.event);
+    }
+    return { queryId, kind: 'logSlice', events };
+  }
+
+  // PopulationSummary — snapshot of the rolling heartbeat-sampled
+  // population buffer in tick-ascending order. Best-effort like the
+  // heartbeat itself: a host running with heartbeatHz = 0 has no
+  // samples and returns an empty list.
+  private queryPopulationSummary(queryId: string): QueryResult {
+    return {
+      queryId,
+      kind: 'populationSummary',
+      points: this.populationHistory.slice(),
+    };
   }
 
   private queryLineageTree(queryId: string): QueryResult {
@@ -996,6 +1050,7 @@ export class NodeHost {
     this.speed = 1;
     this.paused = false;
     this.resetHeartbeatBaseline();
+    this.populationHistory = [];
 
     // Log the newRun command into the freshly-reset writer so the
     // canonical (seed, command-log) description survives.
@@ -1149,11 +1204,12 @@ export class NodeHost {
       populationByLineage[key] = (populationByLineage[key] ?? 0n) + 1n;
     }
 
+    const populationTotal = BigInt(state.probes.size);
     const event: TickEvent & { simTick: bigint } = {
       kind: 'tick',
       simTick: state.simTick,
       actualSpeed,
-      populationTotal: BigInt(state.probes.size),
+      populationTotal,
       populationByLineage,
       originCompute: state.originCompute,
       originComputeMax: ORIGIN_COMPUTE_MAX,
@@ -1161,9 +1217,33 @@ export class NodeHost {
       speed: this.speed,
     };
     this.emit(event);
+    this.recordPopulationSample(state.simTick, populationTotal);
 
     this.lastHeartbeatAtMs = now;
     this.lastHeartbeatAtTick = state.simTick;
+  }
+
+  // Append a sample to the rolling population-summary buffer. Mirrors
+  // the decimation pattern in ui/sim-store.ts: when full, drop every
+  // other entry so the curve shape across a longer run is preserved.
+  // Called from emitHeartbeat — sampling cadence is the heartbeat
+  // cadence, not the per-tick cadence.
+  private recordPopulationSample(tick: bigint, totalProbes: bigint): void {
+    this.populationHistory.push({ tick, totalProbes });
+    if (this.populationHistory.length > POPULATION_SUMMARY_CAPACITY) {
+      const decimated: PopulationSummaryPoint[] = [];
+      for (let i = 0; i < this.populationHistory.length; i += 2) {
+        const point = this.populationHistory[i];
+        if (point !== undefined) decimated.push(point);
+      }
+      // Always retain the most recent sample so the sparkline shows the
+      // latest tick the player just saw.
+      const tail = this.populationHistory[this.populationHistory.length - 1];
+      if (tail !== undefined && decimated[decimated.length - 1] !== tail) {
+        decimated.push(tail);
+      }
+      this.populationHistory = decimated;
+    }
   }
 
   private resetHeartbeatBaseline(): void {
@@ -1288,6 +1368,9 @@ export class NodeHost {
     const restored = restore(deserializeSnapshot(snapBytes));
     this.state = restored;
     this.lastSnapAtTick = restored.simTick;
+    // The previous run's heartbeat samples belong to a different
+    // timeline; the rolling buffer rebuilds from post-load heartbeats.
+    this.populationHistory = [];
 
     // Reset the active run's log — the loaded state forks the timeline,
     // and continuing to append to the prior run's log would create a
@@ -1421,6 +1504,10 @@ export class NodeHost {
         this.state = null;
         this.lastSnapAtTick = SimTick(0n);
       }
+      // The outgoing slot's heartbeat samples don't apply to the
+      // incoming slot's timeline; the buffer rebuilds from heartbeats
+      // emitted after the switch.
+      this.populationHistory = [];
 
       // (4) Persist the active marker so the next host startup picks
       //     up this slot.
@@ -1622,6 +1709,9 @@ export class NodeHost {
 
     this.paused = true;
     this.resetHeartbeatBaseline();
+    // The pre-rewind samples were taken at later ticks; clearing the
+    // buffer keeps the sparkline monotonic in tick.
+    this.populationHistory = [];
 
     // Single heartbeat so the UI catches up to the rewound state.
     if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
