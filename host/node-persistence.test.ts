@@ -36,6 +36,14 @@ describe('NodeHost persistence', () => {
     });
   }
 
+  function makeFakeClock(): () => number {
+    let now = 0;
+    return () => {
+      now += 1;
+      return now;
+    };
+  }
+
   it('logs every command and event to disk', async () => {
     const host = makeHost('logged-run');
     host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
@@ -385,6 +393,84 @@ describe('NodeHost persistence', () => {
       expect(byId.get('first')!.latestTick).toBe('50');
       // second's latestTick is its newRun's tick-0 snap.
       expect(byId.get('second')!.latestTick).toBe('0');
+    });
+  });
+
+  // The host's populationHistory rolling buffer feeds the PopulationSummary
+  // query. It must be cleared on every state-transition handler so the
+  // sparkline never fuses two timelines. newRun is covered in
+  // host/node.test.ts; the persistence-bound transitions are covered here.
+  describe('populationSummary buffer invariants', () => {
+    function makeHostWithHeartbeats(runId: string): NodeHost {
+      return new NodeHost({
+        now: makeFakeClock(),
+        heartbeatHz: 60,
+        persistence: { storage, runId },
+      });
+    }
+
+    async function populationTicks(host: NodeHost): Promise<readonly bigint[]> {
+      const result = await host.executeQuery({
+        kind: 'populationSummary',
+        queryId: 'q-inv',
+      });
+      if (result.kind !== 'populationSummary') throw new Error('unreachable');
+      return result.points.map((p) => p.tick);
+    }
+
+    it('clears the buffer on Load', async () => {
+      const host = makeHostWithHeartbeats('load-clear');
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(500n);
+      host.send({ kind: 'save', commandId: 'c1', slot: 'A' });
+      host.runUntil(1500n);
+      await host.flush();
+      const before = await populationTicks(host);
+      expect(before.length).toBeGreaterThan(0);
+      expect(before.some((t) => t > 500n)).toBe(true);
+
+      host.send({ kind: 'load', commandId: 'c2', slot: 'A' });
+      await host.flush();
+
+      // Post-Load state.simTick lands at the saved tick (500); no
+      // pre-Load sample at ticks > 500 may survive the clear.
+      const after = await populationTicks(host);
+      for (const t of after) expect(t).toBeLessThanOrEqual(500n);
+    });
+
+    it('clears the buffer on switchRun', async () => {
+      const host = makeHostWithHeartbeats('switch-clear-a');
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(1500n);
+      await host.flush();
+      const before = await populationTicks(host);
+      expect(before.length).toBeGreaterThan(0);
+
+      host.send({ kind: 'switchRun', commandId: 'c1', runId: 'switch-clear-b' });
+      await host.flush();
+
+      // The destination slot is empty; post-switch landing tick is 0.
+      // No pre-switch sample at ticks > 0 may survive.
+      const after = await populationTicks(host);
+      for (const t of after) expect(t).toBeLessThanOrEqual(0n);
+    });
+
+    it('clears the buffer on rewindToTick', async () => {
+      const host = makeHostWithHeartbeats('rewind-clear');
+      host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+      host.runUntil(1500n);
+      await host.flush();
+      const before = await populationTicks(host);
+      expect(before.length).toBeGreaterThan(0);
+      expect(before.some((t) => t > 500n)).toBe(true);
+
+      host.send({ kind: 'rewindToTick', commandId: 'c1', tick: 500n });
+      await host.flush();
+
+      // Post-rewind state.simTick = 500; pre-rewind samples at > 500
+      // may not survive.
+      const after = await populationTicks(host);
+      for (const t of after) expect(t).toBeLessThanOrEqual(500n);
     });
   });
 });
