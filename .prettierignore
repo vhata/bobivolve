@@ -9,7 +9,6 @@ protocol/generated
 # Author-curated design documents. Prose, not code.
 SPEC.md
 ARCHITECTURE.md
-PROCESS.md
 
 # Prettier has no parser for .proto.
 *.proto

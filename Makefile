@@ -2,7 +2,7 @@
 ##
 ## Stable named entrypoints for the common workflows. The underlying
 ## tool (currently pnpm) may change; the names here do not. See
-## PROCESS.md "Canonical commands".
+## docs/QUALITY.md "Existing gates".
 ##
 ## Run `make` (no target) for the list.
 

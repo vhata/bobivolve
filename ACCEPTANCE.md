@@ -24,7 +24,7 @@ The list for a release is fleshed out when work on that release begins; speculat
 - `✓` Dashboard — always-on UI: run controls, sim controls, auto-pause, population, lineage tree, lineage inspector, events timeline
 - `✓` Forensic replay — events-timeline shape shipped here; full state-rewind scrub landed in R2 once richer events were available to rewind to.
 
-### Implicit (from ARCHITECTURE.md and PROCESS.md)
+### Technical acceptance criteria
 
 - `✓` Variable speed (1× / 4× / 16× / 64×) with pause and resume
 - `✓` Auto-pause triggers — significant drift (lineage extinction waits on R1 death; remote contact triggers wait on R3+)
@@ -67,7 +67,7 @@ Shipped as `r0-petri-dish`. The R0 design question — does firmware-as-data dri
 - `✓` Mutation: priority swap — adjacent directives swap with ~1.5% probability per replication
 - `✓` Mutation: directive loss / gain — ~0.4% each; gain duplicates an existing directive with parameter drift on the copy, capped at MAX_FIRMWARE_LENGTH
 
-### Implicit (from ARCHITECTURE.md and PROCESS.md)
+### Technical acceptance criteria
 
 - `✓` Determinism extends to the new mechanics — same seed produces a byte-for-byte identical event log; goldens at seed=0/1000, seed=42/3000, seed=2026/5000 are checked in and verified in CI
 - `✓` Save / load round-trips the new state — probe positions, energies, and the lattice resource grid all survive a snapshot
@@ -109,7 +109,7 @@ R2 turns the player from a spectator into a participant. The simulation already 
 - `✓` Phylogeny view — alternate tab beside the living-lineages tree. Renders every lineage the run produced on a tick axis, with branching at speciation moments and a lifeline showing each clade's duration.
 - `✓` New-visitor tour — guided overlay walks first-time players through the dashboard in the order the acceptance test exercises it; auto-fires once on first visit, "?" in the header reopens.
 
-### Implicit (from ARCHITECTURE.md and PROCESS.md)
+### Technical acceptance criteria
 
 - `✓` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. Goldens are checked in and verified in CI.
 - `✓` Save / load round-trips intervention state — quarantines, queued decrees, applied-patch metadata, and the Origin compute budget all survive a snapshot.
