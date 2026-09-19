@@ -13,26 +13,43 @@ The setting borrows premises from Dennis E. Taylor's _Bobiverse_ novels: Von Neu
 The dashboard:
 
 ```
-make install
-make dev
+scripts/install.sh
+scripts/dev.sh
 ```
 
-(`make` lists every named workflow; underlying tools may change, names won't.)
+Scripts can be invoked from any directory and accept normal command-line arguments. See the workflow list below.
 
 A run starts at seed 42 by default. The Run panel changes the seed; the Controls panel pauses, resumes, and toggles speed (1×, 4×, 16×, 64×). Save and Load persist the current run to the browser's Origin Private File System.
 
 A headless run that emits NDJSON `SimEvent`s to stdout:
 
 ```
-pnpm sim --seed 42 --ticks 1000 --no-heartbeat
+scripts/sim.sh --seed 42 --ticks 1000 --no-heartbeat
 ```
 
 Headless save and resume:
 
 ```
-pnpm sim --seed 42 --ticks 30001 --save-dir ./saves --run-id demo --no-heartbeat
-pnpm sim --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
+scripts/sim.sh --seed 42 --ticks 30001 --save-dir ./saves --run-id demo --no-heartbeat
+scripts/sim.sh --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
 ```
+
+## Development workflows
+
+Run these executable scripts directly. Dependencies are installed with `scripts/install.sh`; refresh Git hooks after pulling hook changes with `scripts/setup.sh`.
+
+| Script                                       | Purpose                                      |
+| -------------------------------------------- | -------------------------------------------- |
+| `scripts/dev.sh`                             | Start the dashboard dev server               |
+| `scripts/build.sh` / `scripts/preview.sh`    | Build / preview the production dashboard     |
+| `scripts/check.sh`                           | Format check, lint, typecheck, and tests     |
+| `scripts/format.sh` / `scripts/fmt-check.sh` | Apply / check formatting                     |
+| `scripts/lint.sh` / `scripts/typecheck.sh`   | Lint / TypeScript checks                     |
+| `scripts/test.sh` / `scripts/e2e.sh`         | Unit and integration / browser tests         |
+| `scripts/sim.sh`                             | Headless simulation; pass CLI flags directly |
+| `scripts/clean.sh`                           | Remove generated `dist/` output              |
+
+For example, `scripts/test.sh sim/rng.test.ts` runs one test file. Existing pnpm commands remain convenience aliases. See [the quality guide](docs/QUALITY.md) for which checks a change needs.
 
 ## For the technically curious
 

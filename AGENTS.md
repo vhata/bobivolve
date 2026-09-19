@@ -7,7 +7,7 @@ A real-time evolutionary simulation: the player authors inheritable firmware for
 - Use a focused branch and pull request for each unit of work. The user merges unless explicitly delegated. Preserve linear history with squash or rebase; do not merge main into a work branch.
 - Use separate worktrees for concurrent work and check existing branches, worktrees, and open PRs before starting overlapping work. Parallel agents are optional, not a routine review requirement.
 - Keep changes scoped to the requested outcome, including the fixes and validation it requires. Capture unrelated ideas using the guide below and continue the original task.
-- Use the Makefile entrypoints (`make` lists them). Follow the quality guide before presenting a PR; report checks actually run and any limitations.
+- Use the standalone entrypoints in `scripts/` (listed in README.md). Follow the quality guide before presenting a PR; report checks actually run and any limitations.
 - Explain the problem, resulting behaviour, and validation in the PR description. Commit the completed work. Do not merge or create a release tag merely because implementation is finished.
 - Update documentation when the change makes it inaccurate. Each rule has one authoritative home; link to it rather than restating it. Keep plans visibly separate from implemented behaviour.
 
