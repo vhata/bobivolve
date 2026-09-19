@@ -38,7 +38,8 @@ pnpm sim --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
 
 - [`SPEC.md`](SPEC.md) — what the game is.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — how it is built.
-- [`PROCESS.md`](PROCESS.md) — how the work is run.
+- [`AGENTS.md`](AGENTS.md) — workflow and task-specific guides.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — design rationale and UI preferences.
 - [`FEATURES.md`](FEATURES.md) — what has shipped.
 - [`TODO.md`](TODO.md) — what is next.
 - [`ACCEPTANCE.md`](ACCEPTANCE.md) — release-by-release acceptance gates.

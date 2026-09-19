@@ -1,6 +1,6 @@
 name: ci
 
-# PROCESS.md: "always green on main." A red CI is a hair-on-fire signal.
+# Required checks are documented in docs/QUALITY.md.
 
 on:
   push:

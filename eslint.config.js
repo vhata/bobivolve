@@ -1,9 +1,4 @@
-// Flat config. Encodes the mechanizable architectural disciplines from
-// ARCHITECTURE.md (Determinism disciplines, sim/UI seam) and PROCESS.md
-// (Code review, Layer 1).
-//
-// The rule: if a discipline can be expressed in lint, it goes in lint.
-// Lint runs every commit and does not negotiate.
+// Architectural lint rules; see ARCHITECTURE.md and docs/QUALITY.md.
 
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';

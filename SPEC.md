@@ -1,6 +1,6 @@
 # Bobivolve
 
-*Working title.*
+Product intent and release roadmap, including unbuilt features. See [FEATURES.md](FEATURES.md) for shipped capabilities and [ARCHITECTURE.md](ARCHITECTURE.md) for the current implementation.
 
 ## Overview
 
