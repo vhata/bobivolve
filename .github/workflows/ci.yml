@@ -1,6 +1,6 @@
 name: ci
 
-# PROCESS.md: "always green on main." A red CI is a hair-on-fire signal.
+# Required checks are documented in docs/QUALITY.md.
 
 on:
   push:
@@ -28,19 +28,19 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: scripts/install.sh --frozen-lockfile
 
       - name: Format check
-        run: pnpm run format:check
+        run: scripts/fmt-check.sh
 
       - name: Lint
-        run: pnpm run lint
+        run: scripts/lint.sh
 
       - name: Typecheck
-        run: pnpm run typecheck
+        run: scripts/typecheck.sh
 
       - name: Test
-        run: pnpm run test
+        run: scripts/test.sh
 
       - name: Build
-        run: pnpm run build
+        run: scripts/build.sh

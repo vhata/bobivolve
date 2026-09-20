@@ -10,23 +10,24 @@
   },
   "packageManager": "pnpm@9.12.2",
   "scripts": {
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "format": "scripts/format.sh",
+    "format:check": "scripts/fmt-check.sh",
+    "lint": "scripts/lint.sh",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "typecheck": "scripts/typecheck.sh",
+    "test": "scripts/test.sh",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
-    "sim": "tsx host/node-cli.ts",
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "prepare": "simple-git-hooks"
+    "test:e2e": "scripts/e2e.sh",
+    "check": "scripts/check.sh",
+    "sim": "scripts/sim.sh",
+    "dev": "scripts/dev.sh",
+    "build": "scripts/build.sh",
+    "preview": "scripts/preview.sh",
+    "prepare": "scripts/setup.sh"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm exec lint-staged && pnpm run typecheck && pnpm run test"
+    "pre-commit": "pnpm exec lint-staged",
+    "pre-push": "scripts/typecheck.sh && scripts/test.sh"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}": [

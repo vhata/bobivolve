@@ -1,6 +1,6 @@
 # TODO
 
-Flat list. Each entry tagged with `#release` and `#area`. Done items are deleted, not struck through.
+Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md) when capturing, selecting, or completing an entry.
 
 ## Foundational
 
