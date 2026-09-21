@@ -6,7 +6,6 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
-- P2: Enforce heartbeat cadence during worker pulses; `runUntil` currently emits a final heartbeat on every call regardless of configured Hz. #host #performance
 - Validate directive numeric domains and maximum stack length at the host boundary. #protocol #ui
 - Correct snapshot benchmark accounting before choosing a cadence: current timer excludes serialization and real storage. Measure full encode/write/read/replay cost and sustained log/storage growth. #host #performance
 - Reconcile acceptance claims with actual CI and golden coverage; add intervention and history workflow cases, including the currently failing forensic browser test. #test #docs

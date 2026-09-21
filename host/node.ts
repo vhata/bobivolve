@@ -1005,8 +1005,10 @@ export class NodeHost {
         break;
       }
     }
-    // Final heartbeat so the UI sees the terminal state of a finite run.
-    if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+    // An unbudgeted call is a finite run (for example, the headless CLI):
+    // publish its terminal state even if the cadence has not elapsed.
+    // Budgeted worker calls are recurring pulses and must keep the cadence.
+    if (wallClockBudgetMs === undefined && this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
       this.emitHeartbeat();
     }
   }
