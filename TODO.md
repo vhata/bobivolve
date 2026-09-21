@@ -6,7 +6,6 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
-- P1: Make rewind fork/truncate the active history and restore from an exact `(tick, seq)` cursor. Reproductions show discarded-future commands returning and post-snapshot same-tick commands disappearing. #host #replay
 - P1: Anchor the new active log after named-save Load; save at 10 → load → run to 20 → rewind to 15 currently fails. Include corrupt-data error acknowledgements and recovery tests. Distinct from missing named-save recovery below. #host #persistence
 - P1: Coordinate browser bootstrap so reload resumes an existing default run instead of unconditionally replacing it with seed 42; cover non-default startup ordering too. #ui #host #persistence
 - P1: Publish all domain events from a completed tick before auto-pausing. Seed 42/tick 8 currently loses the second speciation and eight replication events. #host #protocol

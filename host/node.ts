@@ -45,7 +45,13 @@ import type {
   SubstrateProbe,
   TickEvent,
 } from '../protocol/types.js';
-import { EventLogReader, EventLogWriter, type LogEntry, type SnapLogEntry } from './event-log.js';
+import {
+  EventLogReader,
+  EventLogWriter,
+  serializeEntry,
+  type LogEntry,
+  type SnapLogEntry,
+} from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
@@ -663,10 +669,8 @@ export class NodeHost {
     //    cause a circular reference on future loads.
     //  - newRun is logged inside handleNewRun, after the writer is reset
     //    for the new run, so the cmd lands in the right slot.
-    //  - RewindToTick rewrites in-memory state to a historical snapshot;
-    //    persisting it would require either truncating the log or
-    //    appending a fork marker, neither of which is in scope for the
-    //    destructive-MVP shape (see handleRewindToTick).
+    //  - RewindToTick truncates the active log after restoration; the
+    //    command itself is a timeline operation, not a replayable command.
     // Save IS logged — it marks a checkpoint in the run history.
     if (
       !this.replaying &&
@@ -1404,14 +1408,9 @@ export class NodeHost {
   //  - Post-rewind state is forfeit. Save before rewinding if the
   //    current state is worth preserving; the existing Save command
   //    captures a snapshot at the live tick.
-  //  - The on-disk log is left intact. Any post-targetTick entries
-  //    become a stale fork; future post-rewind events get appended at
-  //    the new (rewound) tick numbers, so the log is no longer
-  //    monotonic in tick after a rewind. Save / Load on save slots
-  //    continue to work normally because they round-trip through a
-  //    single snapshot, not the log; replay-from-fresh of the active
-  //    log will diverge from the rewound state, which is the price
-  //    we accept for the simpler implementation.
+  //  - The active log is truncated at the target tick. Commands and
+  //    events already committed at that tick remain part of the new
+  //    timeline; later entries are discarded.
   //  - The non-destructive variant ("preview, then commit") is tracked
   //    in TODO.md as a future stretch under #r2-stretch.
   // SwitchRun — make `runId` the active run-slot. Per the design at
@@ -1489,6 +1488,8 @@ export class NodeHost {
       //     resets to 0, and the player can issue newRun against it.
       const reader = new EventLogReader(persistence.storage, logKey(runId));
       const entries = await reader.readAll();
+      const last = entries.at(-1);
+      if (last !== undefined) this.logWriter.resumeAt(last.tick, last.seq + 1);
       if (entries.length === 0) {
         this.state = null;
         this.lastSnapAtTick = SimTick(0n);
@@ -1626,6 +1627,17 @@ export class NodeHost {
       return;
     }
 
+    // Rewind forks the active timeline. Keep every command and event at the
+    // chosen tick, then resume sequence numbers after the retained prefix.
+    const retained = entries.filter((entry) => entry.tick <= targetTick);
+    await persistence.storage.write(
+      logKey(persistence.runId),
+      new TextEncoder().encode(retained.map(serializeEntry).join('')),
+    );
+    const last = retained.at(-1);
+    this.logWriter = new EventLogWriter(persistence.storage, logKey(persistence.runId));
+    this.logWriter.resumeAt(targetTick, last?.tick === targetTick ? last.seq + 1 : 0);
+
     this.paused = true;
     this.resetHeartbeatBaseline();
     // The pre-rewind samples were taken at later ticks; clearing the
@@ -1672,11 +1684,17 @@ export class NodeHost {
     for (const entry of entries) {
       if (entry.type !== 'snap') continue;
       if (entry.tick > targetTick) continue;
-      if (bestSnap === null || entry.tick > bestSnap.tick) bestSnap = entry;
+      if (
+        bestSnap === null ||
+        entry.tick > bestSnap.tick ||
+        (entry.tick === bestSnap.tick && entry.seq > bestSnap.seq)
+      )
+        bestSnap = entry;
     }
 
     let usedRebuild = false;
     let startTick = 0n;
+    let startSeq = -1;
     if (bestSnap !== null) {
       const snapBytes = await persistence.storage.read(bestSnap.snapshotKey);
       if (snapBytes !== null) {
@@ -1684,6 +1702,7 @@ export class NodeHost {
         this.state = restored;
         this.lastSnapAtTick = restored.simTick;
         startTick = restored.simTick;
+        startSeq = bestSnap.seq;
       } else {
         // Snap entry pointed at a missing file — fall through to
         // rebuild.
@@ -1704,7 +1723,7 @@ export class NodeHost {
       usedRebuild = true;
     }
 
-    // Replay logged commands strictly after the starting tick up to
+    // Replay logged commands after the starting cursor up to
     // the target. Set `replaying` so emit() / ack() / log writes
     // don't fire — replay is silent. The command handlers still
     // update in-memory state (lineages, quarantines, etc.) which is
@@ -1725,7 +1744,7 @@ export class NodeHost {
       const state = this.state as SimState;
       for (const entry of entries) {
         if (entry.type !== 'cmd') continue;
-        if (entry.tick <= startTick) continue;
+        if (entry.tick < startTick || (entry.tick === startTick && entry.seq <= startSeq)) continue;
         if (entry.tick > targetTick) break;
         // Skip the newRun on a rebuild path: rebuildStateFromLog
         // already consumed the seed and seeded createInitialState, so

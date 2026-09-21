@@ -38,7 +38,7 @@ The headless CLI supports seeded runs, saving, and resuming. It is also the refe
 
 ## Event log and snapshots
 
-The host stores append-only NDJSON entries ordered by `(tick, seq)`: commands, domain events, and snapshot references. Heartbeats are not logged. Browser storage uses OPFS; Node storage uses files behind the `Storage` interface in `sim/ports.ts`.
+The host stores NDJSON entries ordered by `(tick, seq)`: commands, domain events, and snapshot references. It appends during normal play and truncates the active log when rewind forks history. Heartbeats are not logged. Browser storage uses OPFS; Node storage uses files behind the `Storage` interface in `sim/ports.ts`.
 
 Snapshots serialize simulation state as JSON with tagged bigint values (`host/snapshot-codec.ts`). The default periodic cadence is 30,000 ticks. Run switching and rewind use `restoreToTick` to reconstruct state from available snapshots and logs, with a log-replay fallback when snapshots are unavailable. Replay skips persistence-management commands that would switch, delete, or save runs during reconstruction.
 
