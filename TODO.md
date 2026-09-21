@@ -2,6 +2,22 @@
 
 Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md) when capturing, selecting, or completing an entry.
 
+## Project review follow-ups
+
+Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
+
+- P1: Make rewind fork/truncate the active history and restore from an exact `(tick, seq)` cursor. Reproductions show discarded-future commands returning and post-snapshot same-tick commands disappearing. #host #replay
+- P1: Anchor the new active log after named-save Load; save at 10 → load → run to 20 → rewind to 15 currently fails. Include corrupt-data error acknowledgements and recovery tests. Distinct from missing named-save recovery below. #host #persistence
+- P1: Coordinate browser bootstrap so reload resumes an existing default run instead of unconditionally replacing it with seed 42; cover non-default startup ordering too. #ui #host #persistence
+- P1: Publish all domain events from a completed tick before auto-pausing. Seed 42/tick 8 currently loses the second speciation and eight replication events. #host #protocol
+- P2: Freeze lineage records in captured snapshots; later extinction currently mutates historical snapshots before serialization. #sim #persistence
+- P2: Stabilise the event timeline flush timer, scope/reset buffers by run and timeline, and bound the all-speciations buffer. Live events currently appear only after pausing in the reproduced browser flow. #ui
+- P2: Enforce heartbeat cadence during worker pulses; `runUntil` currently emits a final heartbeat on every call regardless of configured Hz. #host #performance
+- Validate directive numeric domains and maximum stack length at the host boundary; surface command errors and preserve editor drafts until acknowledgement. #protocol #ui
+- Correct snapshot benchmark accounting before choosing a cadence: current timer excludes serialization and real storage. Measure full encode/write/read/replay cost and sustained log/storage growth. #host #performance
+- Reconcile acceptance claims with actual CI and golden coverage; add intervention and history workflow cases, including the currently failing forensic browser test. #test #docs
+- Design and measure an R2 consolidation experiment before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. Review contains three-seed evidence and proposed playtest exit criteria; mechanics remain a player design decision. #r2 #design
+
 ## Foundational
 
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
