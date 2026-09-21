@@ -25,7 +25,6 @@ import { LATTICE_SIDE, MAX_RESOURCE_PER_CELL } from '../sim/substrate.js';
 import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
 import type {
-  AutoPausedEvent,
   Command,
   CommandAckEvent,
   CommandErrorEvent,
@@ -1094,6 +1093,7 @@ export class NodeHost {
         remaining > BigInt(MAX_TICKS_PER_SLICE) ? BigInt(MAX_TICKS_PER_SLICE) : remaining;
       this.advanceUnpaused(slice);
       remaining -= slice;
+      if (this.paused) break;
     }
     this.ack(commandId);
   }
@@ -1102,8 +1102,8 @@ export class NodeHost {
 
   // Advance the sim by `n` ticks, draining the events the sim emits and
   // forwarding each through `emit`. Auto-pause triggers are consulted
-  // after each event; if one fires, the loop bails out so the next tick
-  // does not advance past the trigger point. Ignores `paused`; the
+  // after the whole tick's event batch is delivered, so no committed
+  // domain event is lost. Ignores `paused`; the
   // public runUntil() / step path is responsible for honoring it.
   private advanceUnpaused(n: bigint): void {
     if (this.state === null) return;
@@ -1112,19 +1112,24 @@ export class NodeHost {
     for (let i = 0n; i < n; i++) {
       events.length = 0;
       tick(state, events);
+      let pauseTrigger: string | null = null;
       for (const event of events) {
         this.emit(event);
-        if (this.maybeAutoPause(event)) return;
+        if (pauseTrigger === null) {
+          pauseTrigger = this.autoPauseTrigger(event);
+        }
       }
       this.maybeWriteSnapshot();
+      if (pauseTrigger !== null) {
+        this.paused = true;
+        this.emit({ kind: 'autoPaused', simTick: state.simTick, trigger: pauseTrigger });
+        return;
+      }
     }
   }
 
-  // Returns true if an auto-pause trigger fired for this event. The host
-  // sets this.paused, emits an AutoPaused event, and the caller bails
-  // out of further advancement.
-  private maybeAutoPause(event: SimEvent): boolean {
-    if (this.replaying) return false;
+  private autoPauseTrigger(event: SimEvent): string | null {
+    if (this.replaying) return null;
     let trigger: string | null = null;
     if (event.kind === 'speciation' && this.autoPauseTriggers.has('speciation')) {
       trigger = 'speciation';
@@ -1133,15 +1138,7 @@ export class NodeHost {
     } else if (event.kind === 'patchSaturated' && this.autoPauseTriggers.has('patchSaturated')) {
       trigger = 'patchSaturated';
     }
-    if (trigger === null) return false;
-    this.paused = true;
-    const autoPaused: AutoPausedEvent & { simTick: bigint } = {
-      kind: 'autoPaused',
-      simTick: event.simTick,
-      trigger,
-    };
-    this.emit(autoPaused);
-    return true;
+    return trigger;
   }
 
   // Trigger a snapshot if we've crossed the cadence boundary since the
