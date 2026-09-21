@@ -151,6 +151,44 @@ describe('NodeHost persistence', () => {
     expect(domainEvents(events1)).toEqual(domainEvents(events2));
   });
 
+  it('anchors a loaded save so the continued run can rewind', async () => {
+    const host = makeHost('load-anchor');
+    const events: SimEvent[] = [];
+    host.subscribe((event) => events.push(event));
+    host.send({ kind: 'newRun', commandId: 'new', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'save', commandId: 'save', slot: 'checkpoint' });
+    await host.flush();
+
+    host.runUntil(30n);
+    host.send({ kind: 'load', commandId: 'load', slot: 'checkpoint' });
+    await host.flush();
+    expect(host.currentTick()).toBe(10n);
+
+    host.send({ kind: 'resume', commandId: 'resume' });
+    host.runUntil(20n);
+    host.send({ kind: 'save', commandId: 'overwrite', slot: 'checkpoint' });
+    await host.flush();
+    host.send({ kind: 'rewindToTick', commandId: 'rewind', tick: 15n });
+    await host.flush();
+
+    expect(host.currentTick()).toBe(15n);
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: 'commandAck', commandId: 'rewind' }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ kind: 'commandError', commandId: 'rewind' }),
+    );
+    const entries = await new EventLogReader(storage, 'runs/load-anchor/log.ndjson').readAll();
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        type: 'snap',
+        tick: 10n,
+        snapshotKey: 'runs/load-anchor/snapshots/10.snap',
+      }),
+    );
+  });
+
   it('Load fails when the named slot does not exist', async () => {
     const host = makeHost('never-existed');
     const errors: string[] = [];
@@ -163,6 +201,27 @@ describe('NodeHost persistence', () => {
 
     expect(errors.length).toBe(1);
     expect(errors[0]).toMatch(/save slot not found: no-such-slot/);
+  });
+
+  it('reports corrupt named saves and leaves the current run intact', async () => {
+    const host = makeHost('corrupt-save');
+    const events: SimEvent[] = [];
+    host.subscribe((event) => events.push(event));
+    host.send({ kind: 'newRun', commandId: 'new', seed: 42n });
+    host.runUntil(20n);
+    await storage.write('saves/broken.save', new TextEncoder().encode('{broken'));
+
+    host.send({ kind: 'load', commandId: 'load', slot: 'broken' });
+    await host.flush();
+
+    expect(host.currentTick()).toBe(20n);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'commandError',
+        commandId: 'load',
+        message: expect.stringMatching(/cannot load save slot broken/),
+      }),
+    );
   });
 
   it('listSaves query returns slots written by Save', async () => {
