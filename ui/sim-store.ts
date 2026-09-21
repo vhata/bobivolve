@@ -102,6 +102,8 @@ export interface SimStoreState {
   readonly paused: boolean;
   readonly actualSpeed: number;
   readonly pendingCommands: ReadonlyMap<string, PendingCommand>;
+  readonly commandError: string | null;
+  readonly dismissCommandError: () => void;
   readonly transport: SimTransport | null;
   readonly attach: (transport: SimTransport) => void;
   readonly detach: () => void;
@@ -150,18 +152,18 @@ export interface SimStoreState {
   // gap as "value unchanged", not "value zero".
   readonly originCompute: bigint | null;
   readonly originComputeMax: bigint | null;
-  // Submit a patch. Fire-and-forget at the store level; success or
-  // failure surfaces via PatchApplied or CommandError events on the
-  // transport. The host is responsible for charging compute and
-  // validating; the store does not pre-check.
-  readonly applyPatch: (lineageId: string, firmware: readonly DirectiveSpec[]) => void;
-  // Queue a decree (conditional patch). Fire-and-forget; success and
-  // failure surface via DecreeQueued and CommandError events.
+  // Submit a patch and resolve after the host acknowledges or rejects it.
+  // The host charges compute and validates the firmware.
+  readonly applyPatch: (
+    lineageId: string,
+    firmware: readonly DirectiveSpec[],
+  ) => Promise<string | null>;
+  // Queue a decree (conditional patch) and await host acknowledgement.
   readonly queueDecree: (
     trigger: DecreeTriggerSpec,
     patchTargetLineageId: string,
     patchFirmware: readonly DirectiveSpec[],
-  ) => void;
+  ) => Promise<string | null>;
   // Cancel a queued decree by id. Idempotent at the host (no-op ack
   // for an unknown id).
   readonly revokeDecree: (decreeId: string) => void;
@@ -218,6 +220,11 @@ function freshLineages(): Map<string, LineageNode> {
 export const useSimStore = create<SimStoreState>((set, get) => {
   let unsubscribe: (() => void) | null = null;
   let retryHandle: ReturnType<typeof setInterval> | null = null;
+  const interventionReplies = new Map<string, (error: string | null) => void>();
+  const settleInterventions = (error: string): void => {
+    for (const reply of interventionReplies.values()) reply(error);
+    interventionReplies.clear();
+  };
 
   function retryStalePending(): void {
     const state = get();
@@ -398,6 +405,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         });
         return;
       case 'commandAck': {
+        interventionReplies.get(event.commandId)?.(null);
+        interventionReplies.delete(event.commandId);
         // Confirm a pending command by removing it from the map. The
         // optimistic state set when the command was sent stays — the
         // ack just promotes it from "projected" to "confirmed".
@@ -426,8 +435,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         return;
       }
       case 'commandError': {
-        // Roll back the optimistic projection for this command. Future
-        // polish: surface the error message to the user.
+        interventionReplies.get(event.commandId)?.(event.message);
+        interventionReplies.delete(event.commandId);
+        set({ commandError: event.message });
+        // Roll back the optimistic projection for this command.
         const pending = new Map(get().pendingCommands);
         const entry = pending.get(event.commandId);
         if (entry !== undefined) {
@@ -518,11 +529,14 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     originCompute: null,
     originComputeMax: null,
     transport: null,
+    commandError: null,
+    dismissCommandError: () => set({ commandError: null }),
     attach: (transport) => {
       const previous = get().transport;
       if (previous !== null) {
         unsubscribe?.();
         previous.close();
+        settleInterventions('Connection changed before the command was acknowledged.');
       }
       unsubscribe = transport.onEvent(handleEvent);
       if (retryHandle === null) {
@@ -541,6 +555,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       }
       cancelPendingTick();
       transport.close();
+      settleInterventions('Connection closed before the command was acknowledged.');
       // Pending commands sent to the now-closed transport will never see
       // their ack — drop them so the retry loop doesn't try to re-send
       // them through some future transport. (React StrictMode exercises
@@ -753,20 +768,26 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     },
     applyPatch: (lineageId, firmware) => {
       const transport = get().transport;
-      if (transport === null) return;
+      if (transport === null) return Promise.resolve('No simulation connection.');
       const commandId = mintCommandId('ui-applyPatch');
-      transport.send({ kind: 'applyPatch', commandId, lineageId, firmware });
+      return new Promise<string | null>((resolve) => {
+        interventionReplies.set(commandId, resolve);
+        transport.send({ kind: 'applyPatch', commandId, lineageId, firmware });
+      });
     },
     queueDecree: (trigger, patchTargetLineageId, patchFirmware) => {
       const transport = get().transport;
-      if (transport === null) return;
+      if (transport === null) return Promise.resolve('No simulation connection.');
       const commandId = mintCommandId('ui-queueDecree');
-      transport.send({
-        kind: 'queueDecree',
-        commandId,
-        trigger,
-        patchTargetLineageId,
-        patchFirmware,
+      return new Promise<string | null>((resolve) => {
+        interventionReplies.set(commandId, resolve);
+        transport.send({
+          kind: 'queueDecree',
+          commandId,
+          trigger,
+          patchTargetLineageId,
+          patchFirmware,
+        });
       });
     },
     revokeDecree: (decreeId) => {

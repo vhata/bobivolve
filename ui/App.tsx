@@ -23,6 +23,8 @@ export function App(): React.JSX.Element {
   const seed = useSimStore((s) => s.seed);
   const activeRunId = useSimStore((s) => s.activeRunId);
   const pendingCommands = useSimStore((s) => s.pendingCommands);
+  const commandError = useSimStore((s) => s.commandError);
+  const dismissCommandError = useSimStore((s) => s.dismissCommandError);
 
   // Forensic-replay rewind can take meaningful wall-clock time at fat
   // population (the host loads the nearest snapshot and replays
@@ -80,6 +82,14 @@ export function App(): React.JSX.Element {
           ?
         </button>
       </header>
+      {commandError !== null ? (
+        <div className="command-error" role="alert">
+          <span>Command rejected: {commandError}</span>
+          <button type="button" onClick={dismissCommandError} aria-label="Dismiss command error">
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <main className="dashboard">
         <RunPanel />
         <ControlsPanel />

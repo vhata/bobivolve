@@ -522,3 +522,17 @@ test('quarantine toggle flips the inspector and the tree pip', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Quarantine' })).toBeVisible();
   await expect(page.locator('.lineage-tree .lineage-quarantine-pip')).toHaveCount(0);
 });
+
+test('patch editor closes after the host accepts the patch', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  const openPatch = page.getByRole('button', { name: /^Apply patch$/ });
+  await expect(openPatch).toBeEnabled();
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await openPatch.click();
+  const dialog = page.getByRole('dialog', { name: /Apply patch to/ });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+});

@@ -8,7 +8,7 @@ Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Finding
 
 - P2: Freeze lineage records in captured snapshots; later extinction currently mutates historical snapshots before serialization. #sim #persistence
 - P2: Enforce heartbeat cadence during worker pulses; `runUntil` currently emits a final heartbeat on every call regardless of configured Hz. #host #performance
-- Validate directive numeric domains and maximum stack length at the host boundary; surface command errors and preserve editor drafts until acknowledgement. #protocol #ui
+- Validate directive numeric domains and maximum stack length at the host boundary. #protocol #ui
 - Correct snapshot benchmark accounting before choosing a cadence: current timer excludes serialization and real storage. Measure full encode/write/read/replay cost and sustained log/storage growth. #host #performance
 - Reconcile acceptance claims with actual CI and golden coverage; add intervention and history workflow cases, including the currently failing forensic browser test. #test #docs
 - Design and measure an R2 consolidation experiment before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. Review contains three-seed evidence and proposed playtest exit criteria; mechanics remain a player design decision. #r2 #design

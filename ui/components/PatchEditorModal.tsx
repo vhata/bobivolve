@@ -74,6 +74,8 @@ export function PatchEditorModal({
   const originCompute = useSimStore((s) => s.originCompute);
 
   const [draft, setDraft] = useState<DraftRow[]>(() => toDraft(initialFirmware));
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Modal-on-action: pause on open, resume on close — but only if WE
   // paused. If the player had paused the sim before opening the modal,
@@ -119,9 +121,14 @@ export function PatchEditorModal({
   };
 
   const onApply = (): void => {
-    if (!canSubmit) return;
-    applyPatch(lineageId, fromDraft(draft));
-    onClose();
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    void applyPatch(lineageId, fromDraft(draft)).then((error) => {
+      setSubmitting(false);
+      if (error === null) onClose();
+      else setSubmitError(error);
+    });
   };
 
   return (
@@ -175,6 +182,11 @@ export function PatchEditorModal({
             </div>
           ))}
         </div>
+        {submitError !== null ? (
+          <p className="patch-editor-error" role="alert">
+            {submitError}
+          </p>
+        ) : null}
         <footer className="patch-editor-footer">
           <button type="button" className="patch-editor-button" onClick={onClose}>
             Cancel
@@ -183,7 +195,7 @@ export function PatchEditorModal({
             type="button"
             className="patch-editor-button patch-editor-button-primary"
             onClick={onApply}
-            disabled={!canSubmit}
+            disabled={!canSubmit || submitting}
           >
             Apply
           </button>
