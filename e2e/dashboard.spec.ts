@@ -23,6 +23,9 @@ async function startFreshRun(page: import('@playwright/test').Page): Promise<voi
   // OPFS survives page and browser-context reloads. A prior test can
   // leave the default run paused, so live-run tests must start explicitly.
   await page.getByRole('button', { name: 'Start', exact: true }).click();
+  // Start dispatches asynchronously. Wait until its founder is visible
+  // before tests can pause or inspect the new run.
+  await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
 }
 
 function readNumeric(text: string): number {
