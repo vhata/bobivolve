@@ -1360,13 +1360,31 @@ export class NodeHost {
       return;
     }
 
-    const snapBytes = await persistence.storage.read(key);
+    let snapBytes: Uint8Array | null;
+    try {
+      snapBytes = await persistence.storage.read(key);
+    } catch (e) {
+      this.error(
+        commandId,
+        `cannot read save slot ${slot}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
     if (snapBytes === null) {
       this.error(commandId, `save slot not found: ${slot}`);
       return;
     }
 
-    const restored = restore(deserializeSnapshot(snapBytes));
+    let restored: SimState;
+    try {
+      restored = restore(deserializeSnapshot(snapBytes));
+    } catch (e) {
+      this.error(
+        commandId,
+        `cannot load save slot ${slot}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
     this.state = restored;
     this.lastSnapAtTick = restored.simTick;
     // The previous run's heartbeat samples belong to a different
@@ -1380,6 +1398,11 @@ export class NodeHost {
     const activeLogKey = logKey(persistence.runId);
     await persistence.storage.delete(activeLogKey);
     this.logWriter = new EventLogWriter(persistence.storage, activeLogKey);
+    // The named slot may be overwritten later. Give this fork its own
+    // snapshot and log anchor so rewind and run switching can rebuild it.
+    const anchorKey = snapshotKey(persistence.runId, restored.simTick);
+    await persistence.storage.write(anchorKey, snapBytes);
+    this.logWriter.appendSnap(restored.simTick, anchorKey);
 
     // Pause post-load; the user is presumed to be inspecting before
     // resuming.

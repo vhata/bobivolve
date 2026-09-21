@@ -42,7 +42,7 @@ The host stores NDJSON entries ordered by `(tick, seq)`: commands, domain events
 
 Snapshots serialize simulation state as JSON with tagged bigint values (`host/snapshot-codec.ts`). The default periodic cadence is 30,000 ticks. Run switching and rewind use `restoreToTick` to reconstruct state from available snapshots and logs, with a log-replay fallback when snapshots are unavailable. Replay skips persistence-management commands that would switch, delete, or save runs during reconstruction.
 
-Named save slots are distinct from run storage: Save captures a fresh snapshot; Load requires that snapshot and forks the active timeline. Missing or unreadable named-save snapshots do not yet have a log-rebuild fallback. Rewind is destructive to the active future; saving first preserves a way back.
+Named save slots are distinct from run storage: Save captures a fresh snapshot; Load requires that snapshot, forks the active timeline, and copies it into the new active run as a replay anchor. Missing or unreadable named-save snapshots do not yet have a log-rebuild fallback. Rewind is destructive to the active future; saving first preserves a way back.
 
 Snapshot cadence tuning, milestone-triggered snapshots, and named-save recovery are tracked in [TODO.md](TODO.md). Do not promise automatic snapshot pruning, pre-auto-pause snapshots, or universal recovery: those are not current guarantees.
 
