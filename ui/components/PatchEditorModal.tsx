@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PATCH_AUTHORING_COST } from '../../sim/compute.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
+import { parseUint64Decimal } from '../../protocol/uint64.js';
 import { useSimStore } from '../sim-store.js';
 
 interface PatchEditorModalProps {
@@ -39,18 +40,10 @@ function fromDraft(draft: readonly DraftRow[]): DirectiveSpec[] {
   });
 }
 
-// A non-negative integer-bearing string, matching what the sim accepts
-// for each numeric param. Empty string is invalid (forces the player to
-// enter something rather than silently sending zero).
+// The wire contract accepts decimal uint64 values. Empty, negative, and
+// out-of-range values cannot be submitted.
 function isValidParam(value: string): boolean {
-  if (value.trim() === '') return false;
-  if (!/^\d+$/.test(value)) return false;
-  try {
-    BigInt(value);
-    return true;
-  } catch {
-    return false;
-  }
+  return parseUint64Decimal(value) !== null;
 }
 
 // Plain-language label for each known parameter so the form reads like

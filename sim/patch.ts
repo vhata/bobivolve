@@ -20,7 +20,7 @@
 // patch contents) produce byte-for-byte identical event streams.
 
 import { firmwareDiverged } from './lineage.js';
-import { MIN_FIRMWARE_LENGTH } from './mutation.js';
+import { MAX_FIRMWARE_LENGTH, MIN_FIRMWARE_LENGTH } from './mutation.js';
 import type { AppliedPatchRecord, SimState } from './state.js';
 import type { DirectiveStack } from './directive.js';
 import { type LineageId, SimTick } from './types.js';
@@ -31,6 +31,9 @@ import { type LineageId, SimTick } from './types.js';
 export function validatePatchFirmware(firmware: DirectiveStack): string | null {
   if (firmware.length < MIN_FIRMWARE_LENGTH) {
     return `patched firmware must contain at least ${MIN_FIRMWARE_LENGTH.toString()} directive(s)`;
+  }
+  if (firmware.length > MAX_FIRMWARE_LENGTH) {
+    return `patched firmware must contain at most ${MAX_FIRMWARE_LENGTH.toString()} directive(s)`;
   }
   return null;
 }

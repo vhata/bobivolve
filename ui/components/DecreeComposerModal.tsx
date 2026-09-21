@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DECREE_AUTHORING_COST } from '../../sim/compute.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
+import { parseUint64Decimal } from '../../protocol/uint64.js';
 import { useSimStore } from '../sim-store.js';
 
 interface DecreeComposerModalProps {
@@ -41,14 +42,7 @@ function fromDraft(draft: readonly DraftRow[]): DirectiveSpec[] {
 }
 
 function isValidParam(value: string): boolean {
-  if (value.trim() === '') return false;
-  if (!/^\d+$/.test(value)) return false;
-  try {
-    BigInt(value);
-    return true;
-  } catch {
-    return false;
-  }
+  return parseUint64Decimal(value) !== null;
 }
 
 function paramLabel(directiveKind: string, paramKey: string): string {
