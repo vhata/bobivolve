@@ -15,6 +15,7 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
   test.setTimeout(60_000);
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
 
   // Crank to 64× so a speciation lands in a reasonable window.
   await page.getByRole('button', { name: '64×', exact: true }).click({ force: true });
