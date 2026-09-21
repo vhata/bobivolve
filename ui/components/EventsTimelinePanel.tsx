@@ -124,6 +124,8 @@ function describe(event: SimEvent): string {
 export function EventsTimelinePanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
   const simTick = useSimStore((s) => s.simTick);
+  const timelineEpoch = useSimStore((s) => s.timelineEpoch);
+  const activeRunId = useSimStore((s) => s.activeRunId);
   const paused = useSimStore((s) => s.paused);
   const rewindToTick = useSimStore((s) => s.rewindToTick);
   const populationTotal = useSimStore((s) => s.populationTotal);
@@ -145,7 +147,20 @@ export function EventsTimelinePanel(): React.JSX.Element {
   const surfacedBufferRef = useRef<TimelineEntry[]>([]);
   const candidatesRef = useRef<Array<TimelineEntry & { readonly foundedAtTick: bigint }>>([]);
   const allSpeciationsBufferRef = useRef<TimelineEntry[]>([]);
+  const allSpeciationsDirtyRef = useRef(false);
   const ordinalRef = useRef<number>(0);
+  const simTickRef = useRef(simTick);
+  simTickRef.current = simTick;
+
+  useEffect(() => {
+    surfacedBufferRef.current = [];
+    candidatesRef.current = [];
+    allSpeciationsBufferRef.current = [];
+    allSpeciationsDirtyRef.current = false;
+    ordinalRef.current = 0;
+    setSurfaced([]);
+    setConfirmingTick(null);
+  }, [timelineEpoch, activeRunId, transport]);
 
   // Refs for the heuristic — read inside the subscriber, which fires
   // outside React's render cycle and would otherwise stale-close on
@@ -196,6 +211,10 @@ export function EventsTimelinePanel(): React.JSX.Element {
         foundedAtTick: event.simTick,
       };
       allSpeciationsBufferRef.current.push(speciationEntry);
+      if (allSpeciationsBufferRef.current.length > MAX_ENTRIES) {
+        allSpeciationsBufferRef.current.shift();
+      }
+      allSpeciationsDirtyRef.current = true;
 
       const parentId = event.parentLineageId;
       const total = populationTotalRef.current;
@@ -250,7 +269,7 @@ export function EventsTimelinePanel(): React.JSX.Element {
         }
         // Drop noisy ones whose new lineage died (or never grew) and
         // are now past the noise window.
-        const aged = simTick - c.foundedAtTick > CANDIDATE_NOISE_WINDOW_TICKS;
+        const aged = simTickRef.current - c.foundedAtTick > CANDIDATE_NOISE_WINDOW_TICKS;
         if (aged && pop === 0n) {
           continue;
         }
@@ -258,9 +277,12 @@ export function EventsTimelinePanel(): React.JSX.Element {
       }
       candidatesRef.current = stillCandidate;
 
-      if (incoming.length === 0 && promoted.length === 0) return;
+      const allSpeciationsChanged = allSpeciationsDirtyRef.current;
+      allSpeciationsDirtyRef.current = false;
+      if (incoming.length === 0 && promoted.length === 0 && !allSpeciationsChanged) return;
       setSurfaced((current) => {
         const next = current.concat(incoming, promoted);
+        if (next.length === current.length && allSpeciationsChanged) return [...current];
         if (next.length <= MAX_ENTRIES) return next;
         return next.slice(next.length - MAX_ENTRIES);
       });
@@ -269,14 +291,17 @@ export function EventsTimelinePanel(): React.JSX.Element {
     return () => {
       clearInterval(handle);
     };
-  }, [simTick]);
+  }, []);
 
   // The visible list. When "show all speciations" is on we splice the
   // backing all-speciations buffer over the surfaced list (sorted by
   // tick). When off we just show surfaced.
   const visibleEntries = useMemo<readonly TimelineEntry[]>(() => {
     if (!showAllSpeciations) return surfaced;
-    const merged = surfaced.concat(allSpeciationsBufferRef.current);
+    const surfacedIds = new Set(surfaced.map((entry) => entry.id));
+    const merged = surfaced.concat(
+      allSpeciationsBufferRef.current.filter((entry) => !surfacedIds.has(entry.id)),
+    );
     merged.sort((a, b) => (a.tick < b.tick ? -1 : a.tick > b.tick ? 1 : 0));
     if (merged.length <= MAX_ENTRIES) return merged;
     return merged.slice(merged.length - MAX_ENTRIES);

@@ -15,24 +15,21 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
   test.setTimeout(60_000);
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
 
   // Crank to 64× so a speciation lands in a reasonable window.
   await page.getByRole('button', { name: '64×', exact: true }).click({ force: true });
 
-  // Wait for the first speciation row to appear in the events panel.
-  // The timeline list only renders entries when there is at least one
-  // speciation; the empty state has the "no speciations yet" copy.
-  const rewindButton = page.locator('.timeline-panel .timeline-rewind').first();
-  await expect(rewindButton).toBeVisible({ timeout: 45_000 });
+  // Wait for a timeline row while the simulation is still running.
+  await expect(page.locator('.timeline-panel .timeline-rewind-disabled').first()).toBeVisible({
+    timeout: 45_000,
+  });
 
-  // Pause the sim before reading the row. The events panel only makes
-  // its rows clickable while paused (modal-on-action) — and the list
-  // is fed by a 250ms-interval flush of buffered speciations, so we
-  // wait long enough after pause for the post-pause flush to land
-  // before reading the visible top row.
+  // Pause before choosing a rewind target; rows are only clickable
+  // while paused (modal-on-action).
   await page.getByRole('button', { name: /^Pause$/ }).click({ force: true });
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(400);
+  const rewindButton = page.locator('.timeline-panel button.timeline-rewind').first();
 
   // Capture the target tick from the (now-stable) latest-speciation row.
   const tickText = await rewindButton.locator('.timeline-tick').textContent();
@@ -63,4 +60,7 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
       { timeout: 10_000, intervals: [500] },
     )
     .toBe(targetTick);
+  await expect(page.locator('.timeline-panel .panel-empty')).toContainText(
+    'no significant events yet',
+  );
 });

@@ -129,6 +129,7 @@ export interface SimStoreState {
   // disk. Refreshed lazily when the SwitchRunModal opens.
   readonly runs: readonly RunSlotInfo[];
   readonly activeRunId: string;
+  readonly timelineEpoch: number;
   readonly refreshRuns: () => Promise<void>;
   readonly switchRun: (runId: string) => void;
   readonly deleteRun: (runId: string) => void;
@@ -511,6 +512,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     saves: [],
     runs: [],
     activeRunId: '',
+    timelineEpoch: 0,
     quarantinedLineages: new Set(),
     originCompute: null,
     originComputeMax: null,
@@ -561,6 +563,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // population/tick state across runs.
       set({
         seed,
+        timelineEpoch: get().timelineEpoch + 1,
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
@@ -648,6 +651,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // the dashboard would show stale data from the pre-Load run.
       set({
         pendingCommands: pending,
+        timelineEpoch: get().timelineEpoch + 1,
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
@@ -689,6 +693,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // populations that hadn't existed yet at the target tick.
       set({
         pendingCommands: pending,
+        timelineEpoch: get().timelineEpoch + 1,
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
@@ -840,6 +845,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // repopulate. Mirrors the load-action reset below.
       set({
         pendingCommands: pending,
+        timelineEpoch: get().timelineEpoch + 1,
         simTick: 0n,
         populationTotal: 0n,
         populationByLineage: new Map(),
