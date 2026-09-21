@@ -47,6 +47,7 @@ Run these executable scripts directly. Dependencies are installed with `scripts/
 | `scripts/lint.sh` / `scripts/typecheck.sh`   | Lint / TypeScript checks                     |
 | `scripts/test.sh` / `scripts/e2e.sh`         | Unit and integration / browser tests         |
 | `scripts/sim.sh`                             | Headless simulation; pass CLI flags directly |
+| `scripts/r2-experiment.sh`                   | Seeded R2 founder-policy comparison          |
 | `scripts/clean.sh`                           | Remove generated `dist/` output              |
 
 For example, `scripts/test.sh sim/rng.test.ts` runs one test file. Existing pnpm commands remain convenience aliases. See [the quality guide](docs/QUALITY.md) for which checks a change needs.
