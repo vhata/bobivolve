@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NodeHost } from './node.js';
 import { NodeStorage } from './storage-node.js';
+import { EventLogReader } from './event-log.js';
 
 // Forensic-replay rewind: load latest in-run snapshot at-or-before
 // targetTick, replay any logged commands strictly between snap.tick and
@@ -62,6 +63,45 @@ describe('NodeHost rewindToTick', () => {
     expect(host.currentTick()).toBe(800n);
     expect(host.quarantinedLineages().has('L0')).toBe(true);
     expect(host.isPaused()).toBe(true);
+  });
+
+  it('replays commands recorded after a snapshot at the same tick', async () => {
+    const host = new NodeHost({
+      heartbeatHz: 0,
+      persistence: { storage, runId: 'same-tick', snapshotCadenceTicks: 10n },
+    });
+    host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'quarantine', commandId: 'q1', lineageId: 'L0' });
+    host.runUntil(12n);
+    host.send({ kind: 'rewindToTick', commandId: 'r1', tick: 10n });
+    await host.flush();
+
+    expect(host.quarantinedLineages().has('L0')).toBe(true);
+  });
+
+  it('discards the old future after rewind and remains ordered across repeated rewinds', async () => {
+    const runId = 'forked';
+    const host = makeHost(runId);
+    host.send({ kind: 'newRun', commandId: 'c0', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'quarantine', commandId: 'q1', lineageId: 'L0' });
+    host.runUntil(20n);
+    host.send({ kind: 'rewindToTick', commandId: 'r1', tick: 5n });
+    await host.flush();
+    expect(host.quarantinedLineages().has('L0')).toBe(false);
+
+    host.send({ kind: 'resume', commandId: 'resume' });
+    host.runUntil(15n);
+    host.send({ kind: 'rewindToTick', commandId: 'r2', tick: 12n });
+    await host.flush();
+    expect(host.quarantinedLineages().has('L0')).toBe(false);
+
+    const entries = await new EventLogReader(storage, `runs/${runId}/log.ndjson`).readAll();
+    expect(entries.every((entry, i) => i === 0 || entries[i - 1]!.tick <= entry.tick)).toBe(true);
+    expect(entries.some((entry) => entry.type === 'cmd' && entry.command.commandId === 'q1')).toBe(
+      false,
+    );
   });
 
   it('errors on rewinding to a future tick', async () => {
