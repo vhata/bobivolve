@@ -206,6 +206,36 @@ describe('NodeHost heartbeat', () => {
 });
 
 describe('NodeHost pause / resume / step', () => {
+  it('publishes the complete committed tick before speciation auto-pause', () => {
+    const baseline = new NodeHost({ heartbeatHz: 0 });
+    const baselineEvents = collectEvents(baseline).events;
+    baseline.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    baseline.runUntil(8n);
+    const tickEvents = baselineEvents.filter((event) => event.simTick === 8n);
+    expect(tickEvents.filter((event) => event.kind === 'speciation')).toHaveLength(2);
+    expect(tickEvents.filter((event) => event.kind === 'replication')).toHaveLength(8);
+
+    const host = new NodeHost({ heartbeatHz: 0 });
+    const events = collectEvents(host).events;
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.send({ kind: 'configureAutoPause', commandId: '', enabledTriggers: ['speciation'] });
+    host.runUntil(100n);
+
+    expect(host.currentTick()).toBe(8n);
+    expect(events.filter((event) => event.simTick === 8n && event.kind !== 'autoPaused')).toEqual(
+      tickEvents,
+    );
+    expect(events.at(-1)).toMatchObject({ kind: 'autoPaused', simTick: 8n, trigger: 'speciation' });
+    host.runUntil(100n);
+    expect(host.currentTick()).toBe(8n);
+
+    const stepped = new NodeHost({ heartbeatHz: 0 });
+    stepped.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    stepped.send({ kind: 'configureAutoPause', commandId: '', enabledTriggers: ['speciation'] });
+    stepped.send({ kind: 'step', commandId: '', ticks: 100n });
+    expect(stepped.currentTick()).toBe(8n);
+  });
+
   it('paused state suppresses runUntil progress', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
     host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });

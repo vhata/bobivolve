@@ -8,7 +8,6 @@ Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Finding
 
 - P1: Anchor the new active log after named-save Load; save at 10 → load → run to 20 → rewind to 15 currently fails. Include corrupt-data error acknowledgements and recovery tests. Distinct from missing named-save recovery below. #host #persistence
 - P1: Coordinate browser bootstrap so reload resumes an existing default run instead of unconditionally replacing it with seed 42; cover non-default startup ordering too. #ui #host #persistence
-- P1: Publish all domain events from a completed tick before auto-pausing. Seed 42/tick 8 currently loses the second speciation and eight replication events. #host #protocol
 - P2: Freeze lineage records in captured snapshots; later extinction currently mutates historical snapshots before serialization. #sim #persistence
 - P2: Stabilise the event timeline flush timer, scope/reset buffers by run and timeline, and bound the all-speciations buffer. Live events currently appear only after pausing in the reproduced browser flow. #ui
 - P2: Enforce heartbeat cadence during worker pulses; `runUntil` currently emits a final heartbeat on every call regardless of configured Hz. #host #performance
