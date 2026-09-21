@@ -4,9 +4,9 @@ import { expect, test } from '@playwright/test';
 // browser, which is the only way to catch worker pacing bugs, OPFS
 // behaviour, and React-runtime issues that the vitest unit suite can't.
 //
-// The first test waits for the founder probe to replicate at least once
-// (population > 1), confirming the sim → worker → transport → store →
-// React pipeline is end-to-end live.
+// The population-growth test waits for the founder probe to replicate at
+// least once (population > 1), confirming the sim → worker → transport →
+// store → React pipeline is end-to-end live.
 
 // Suppress the new-visitor tour for the dashboard suite; its auto-fire
 // would block clicks and screenshots. The NUX has its own dedicated
@@ -18,6 +18,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function startFreshRun(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/');
+  // OPFS survives page and browser-context reloads. A prior test can
+  // leave the default run paused, so live-run tests must start explicitly.
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+}
+
 function readNumeric(text: string): number {
   const match = text.match(/-?\d+(?:[\d_,]*\d)?/);
   if (match === null) return Number.NaN;
@@ -25,7 +32,7 @@ function readNumeric(text: string): number {
 }
 
 test('page loads with the header and tagline', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   await expect(page.locator('h1')).toHaveText('Bobivolve');
   await expect(page.locator('.bobivolve-tagline')).toContainText('seed');
 });
@@ -76,8 +83,8 @@ test('reload restores the active non-default run', async ({ page }) => {
 });
 
 test('the sim runs: population grows past 1', async ({ page }) => {
-  await page.goto('/');
-  // Auto-start fires at seed=42, speed=4×. Founder is one probe; first
+  await startFreshRun(page);
+  // Start fires at seed=42, speed=4×. Founder is one probe; first
   // replication for seed=42 lands around tick 190 → ~3s at 4× (60 t/s × 4
   // = 240 t/s). Allow generous slack for slow machines and CI.
   await expect
@@ -92,7 +99,7 @@ test('the sim runs: population grows past 1', async ({ page }) => {
 });
 
 test('pause stops population growth and resets the speed readout', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
 
   // Wait for some growth so a pause is observable.
   await expect
@@ -132,7 +139,7 @@ test('pause stops population growth and resets the speed readout', async ({ page
 });
 
 test('1× speed advances slower than 16×', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
 
   // Wait for the sim to be live.
   await expect
@@ -174,7 +181,10 @@ test('1× speed advances slower than 16×', async ({ page }) => {
 });
 
 test('pause actually halts growth at 64× with a busy worker', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
+  // Speciation can auto-pause before the click; this test exercises the
+  // player's Pause command under load.
+  await page.getByRole('checkbox', { name: 'Significant drift' }).uncheck();
   // Crank speed up so the worker has substantial in-flight work; this
   // is the scenario where pause has historically failed.
   await page.getByRole('button', { name: '64×' }).click();
@@ -211,7 +221,8 @@ test('pause actually halts growth at 64× with a busy worker', async ({ page }) 
 });
 
 test('pause clears the pending indicator within a reasonable window', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
+  await page.getByRole('checkbox', { name: 'Significant drift' }).uncheck();
   await page.getByRole('button', { name: '64×' }).click();
   await expect
     .poll(
@@ -239,12 +250,12 @@ test('pause clears the pending indicator within a reasonable window', async ({ p
 });
 
 test('lineage tree starts with the founder lineage L0', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   await expect(page.locator('.lineage-tree')).toContainText('L0');
 });
 
 test('lineage tree founder row does not duplicate name and id', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   // The founder lineage's name is currently the same string as its id
   // ("L0"); the row should render it once, not twice. A regression
   // would print "L0 L0" verbatim, so a substring assert is sufficient.
@@ -253,7 +264,7 @@ test('lineage tree founder row does not duplicate name and id', async ({ page })
 });
 
 test('every panel and control is visibly rendered', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
 
   // ── header ────────────────────────────────────────────────────────────
   await expect(page.locator('h1')).toBeVisible();
@@ -331,7 +342,7 @@ test('every panel and control is visibly rendered', async ({ page }) => {
 });
 
 test('lineage inspector renders firmware and identity for the default L0', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   const inspectorPanel = page.locator('.inspector-panel');
   // Identity for the founder lineage.
   await expect(inspectorPanel).toContainText('P0');
@@ -342,7 +353,7 @@ test('lineage inspector renders firmware and identity for the default L0', async
 });
 
 test('lineage inspector surfaces the speciation rule', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   const inspectorPanel = page.locator('.inspector-panel');
   // The rule is exposed by the host on the drift telemetry message and
   // rendered next to the Drift heading. R0 sets the divisor to 100, so
@@ -351,7 +362,7 @@ test('lineage inspector surfaces the speciation rule', async ({ page }) => {
 });
 
 test('substrate panel renders the lattice and at least one probe dot', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   // Substrate now renders to a canvas, so individual cells/probes
   // aren't queryable as DOM elements. Verify the canvas is mounted
   // with a non-zero pixel buffer, then sample its centre to confirm
@@ -390,7 +401,7 @@ test('substrate panel renders the lattice and at least one probe dot', async ({ 
 });
 
 test('Save click pauses the sim and prompts for a slot name', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   // Wait for some growth so the saved tick is meaningfully nonzero.
   await expect
     .poll(
@@ -423,7 +434,7 @@ test('Save click pauses the sim and prompts for a slot name', async ({ page }) =
 });
 
 test('Load click pauses the sim, lists saves, and restores on selection', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   await expect
     .poll(
       async () => {
@@ -465,7 +476,7 @@ test('Load click pauses the sim, lists saves, and restores on selection', async 
 });
 
 test('clicking a lineage in the tree selects it in the inspector', async ({ page }) => {
-  await page.goto('/');
+  await startFreshRun(page);
   // L0 is the only lineage on a fresh run; clicking it should mark it
   // selected (aria-pressed=true) and the inspector should already be
   // showing it. This proves the click → store → both panels wiring.
@@ -481,7 +492,7 @@ test('player-driven pause survives opening and closing the patch editor', async 
   // paused before opening. The fix is to capture pre-existing paused
   // state on mount and only resume if the modal was the one that
   // paused.
-  await page.goto('/');
+  await startFreshRun(page);
 
   // Pause first.
   await page.getByRole('button', { name: /^Pause$/ }).click();
@@ -505,7 +516,7 @@ test('quarantine toggle flips the inspector and the tree pip', async ({ page }) 
   // Player intervention smoke: select L0, hit Quarantine, see the
   // inspector flip its meta and the tree row carry the quarantine pip;
   // hit Release, see both back to normal.
-  await page.goto('/');
+  await startFreshRun(page);
   const l0Row = page.locator('.lineage-tree button[aria-pressed]').first();
   await l0Row.click();
 
