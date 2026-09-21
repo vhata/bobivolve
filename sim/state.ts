@@ -206,7 +206,9 @@ export function snapshot(state: SimState): SimStateSnapshot {
     // Shallow-copy each probe so subsequent in-place energy mutation in
     // the live state does not bleed into the snapshot view.
     probes: [...state.probes.values()].map((p) => ({ ...p })),
-    lineages: [...state.lineages.values()],
+    // Extinction marks a live lineage in place; copy the record so a
+    // snapshot remains at its capture tick until it is serialized.
+    lineages: [...state.lineages.values()].map((lineage) => ({ ...lineage })),
     nextProbeOrdinal: state.nextProbeOrdinal,
     nextLineageOrdinal: state.nextLineageOrdinal,
     // Resources mutate in place each tick; copy the slice so the saved

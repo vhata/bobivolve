@@ -63,6 +63,18 @@ describe('snapshot codec', () => {
     expect(restoredFounder!.extinctionTick).toBe(123n);
   });
 
+  it('serializes the lineage state at capture time after a later extinction', () => {
+    const state = createInitialState(Seed(42n));
+    const captured = snapshot(state);
+    const founder = state.lineages.get(LineageId('L0'));
+    if (founder === undefined) throw new Error('unreachable: L0 missing');
+    founder.extinctionTick = SimTick(123n);
+
+    const saved = deserializeSnapshot(serializeSnapshot(captured));
+    expect(saved.lineages[0]?.extinctionTick).toBeNull();
+    expect(snapshot(state).lineages[0]?.extinctionTick).toBe(123n);
+  });
+
   it('restore normalises a missing extinctionTick on legacy snapshots to null', () => {
     // Simulate an on-disk snapshot from before the field existed: build
     // the JSON with the lineage record stripped of extinctionTick.
