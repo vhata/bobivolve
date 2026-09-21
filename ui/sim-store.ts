@@ -106,6 +106,7 @@ export interface SimStoreState {
   readonly attach: (transport: SimTransport) => void;
   readonly detach: () => void;
   readonly startRun: (seed: bigint) => void;
+  readonly bootstrapRun: () => Promise<void>;
   readonly pause: () => void;
   readonly resume: () => void;
   readonly setSpeed: (speed: SimSpeed) => void;
@@ -578,6 +579,21 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         originComputeMax: null,
       });
       transport.send({ kind: 'newRun', commandId, seed });
+    },
+    bootstrapRun: async () => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const result = (await transport.query({ kind: 'listRuns', queryId: '' })) as ListRunsResult;
+      if (get().transport !== transport) return;
+      const active = result.runs.find((run) => run.runId === result.activeRunId);
+      set({ runs: result.runs, activeRunId: result.activeRunId });
+      if (active === undefined || active.lastModifiedMs === 0) {
+        get().startRun(42n);
+        get().setSpeed(4);
+      } else {
+        set({ paused: true });
+        await get().rehydrateAfterLoad();
+      }
     },
     pause: () => {
       const transport = get().transport;
