@@ -19,9 +19,9 @@ import SimWorker from '../host/worker.ts?worker';
 export function App(): React.JSX.Element {
   const attach = useSimStore((s) => s.attach);
   const detach = useSimStore((s) => s.detach);
-  const startRun = useSimStore((s) => s.startRun);
-  const setSpeed = useSimStore((s) => s.setSpeed);
+  const bootstrapRun = useSimStore((s) => s.bootstrapRun);
   const seed = useSimStore((s) => s.seed);
+  const activeRunId = useSimStore((s) => s.activeRunId);
   const pendingCommands = useSimStore((s) => s.pendingCommands);
 
   // Forensic-replay rewind can take meaningful wall-clock time at fat
@@ -45,15 +45,11 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const transport = new WorkerTransport(new SimWorker());
     attach(transport);
-    // Soft default: kick off a 4× run at seed=42. Visible growth without
-    // immediately overwhelming the layout; the user can speed up via the
-    // Controls panel.
-    startRun(42n);
-    setSpeed(4);
+    void bootstrapRun();
     return () => {
       detach();
     };
-  }, [attach, detach, startRun, setSpeed]);
+  }, [attach, bootstrapRun, detach]);
 
   useEffect(() => {
     if (shouldAutoFireNux()) setNuxOpen(true);
@@ -65,7 +61,11 @@ export function App(): React.JSX.Element {
         <div className="bobivolve-title">
           <h1>Bobivolve</h1>
           <p className="bobivolve-tagline">
-            {seed === null ? 'A real-time evolutionary simulation.' : `seed ${seed.toString()}`}
+            {seed === null
+              ? activeRunId === ''
+                ? 'A real-time evolutionary simulation.'
+                : `run ${activeRunId}`
+              : `seed ${seed.toString()}`}
           </p>
         </div>
         <button

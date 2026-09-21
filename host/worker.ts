@@ -42,12 +42,9 @@ type IncomingMessage = CommandMessage | QueryMessage;
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
-// Persistence: OPFS-backed runs. The host opens 'default' first and then
-// asynchronously honours the runs/.active marker file the SwitchRun UI
-// writes — if the player was last on a different slot, an automatic
-// switchRun command lands shortly after startup. Each newRun command
-// resets the active slot (deletes its log, fresh writer); Save / Load
-// buttons act on named save snapshots, distinct from per-run slots.
+// Persistence: OPFS-backed runs. Startup restores the active run before
+// handling UI messages. Each newRun command resets the active slot;
+// Save / Load buttons act on separate named save snapshots.
 // Heartbeat at 4Hz. The dashboard's panels subscribe to slices that
 // the heartbeat updates and rerender on every Tick — at fat
 // population the cumulative VDOM allocation outpaces GC and the main
@@ -64,26 +61,25 @@ const host = new NodeHost({
   heartbeatHz: 4,
   persistence: {
     storage: opfsStorage,
-    runId: 'default',
+    runId: '__startup__',
   },
 });
 
-// Honour the runs/.active marker if the player was on a non-default slot
-// last session. Done as an async post-construct step so the constructor
-// stays synchronous; the auto-switch lands as a normal switchRun command,
-// queued through the host's worker like any other.
+// Start from an unused slot so switchRun restores even the default slot.
+// Gate incoming messages on this Promise: an early listRuns or newRun must
+// not race the marker read and accidentally replace a saved run.
 const ACTIVE_MARKER_KEY = 'runs/.active';
-void (async (): Promise<void> => {
+const startup = (async (): Promise<void> => {
+  let runId = 'default';
   try {
     const bytes = await opfsStorage.read(ACTIVE_MARKER_KEY);
-    if (bytes === null) return;
-    const runId = new TextDecoder().decode(bytes).trim();
-    if (runId === '' || runId === 'default') return;
-    host.send({ kind: 'switchRun', commandId: 'startup-restore-active-slot', runId });
+    const marked = bytes === null ? '' : new TextDecoder().decode(bytes).trim();
+    if (marked !== '') runId = marked;
   } catch {
-    // Best-effort; if the marker is unreadable the host stays on
-    // 'default' and the player can switch manually.
+    // An unreadable marker falls back to the default slot.
   }
+  host.send({ kind: 'switchRun', commandId: 'startup-restore-active-slot', runId });
+  await host.flush();
 })();
 
 // High-frequency, no-UI-consumer event filter. At fat population the
@@ -158,8 +154,12 @@ function stopPulsing(): void {
 }
 
 ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
-  if (e.data.type === 'query') {
-    void host.executeQuery(e.data.query).then((result) => {
+  void startup.then(() => handleMessage(e.data));
+});
+
+function handleMessage(message: IncomingMessage): void {
+  if (message.type === 'query') {
+    void host.executeQuery(message.query).then((result) => {
       const reply: QueryResultMessage = {
         type: 'queryResult',
         queryId: result.queryId,
@@ -170,8 +170,8 @@ ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
     return;
   }
 
-  if (e.data.type !== 'command') return;
-  const cmd = e.data.cmd;
+  if (message.type !== 'command') return;
+  const cmd = message.cmd;
   // Update pacing state before forwarding the command, so setSpeed takes
   // effect on the same pulse where the command lands.
   switch (cmd.kind) {
@@ -214,4 +214,5 @@ ctx.addEventListener('message', (e: MessageEvent<IncomingMessage>) => {
       break;
   }
   host.send(cmd);
-});
+  if (cmd.kind === 'pause') void host.flush();
+}

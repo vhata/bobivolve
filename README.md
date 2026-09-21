@@ -19,7 +19,7 @@ scripts/dev.sh
 
 Scripts can be invoked from any directory and accept normal command-line arguments. See the workflow list below.
 
-A run starts at seed 42 by default. The Run panel changes the seed; the Controls panel pauses, resumes, and toggles speed (1×, 4×, 16×, 64×). Save and Load persist the current run to the browser's Origin Private File System.
+A fresh browser run starts at seed 42 by default. Reloading restores the active run, paused, from the browser's Origin Private File System. The Run panel changes the seed; the Controls panel pauses, resumes, and toggles speed (1×, 4×, 16×, 64×). Save and Load manage named snapshots in the same storage.
 
 A headless run that emits NDJSON `SimEvent`s to stdout:
 

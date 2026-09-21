@@ -30,6 +30,51 @@ test('page loads with the header and tagline', async ({ page }) => {
   await expect(page.locator('.bobivolve-tagline')).toContainText('seed');
 });
 
+test('reload resumes the existing default run', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  const populationMeta = page.locator('.population-panel .panel-meta');
+  await expect(populationMeta).toContainText(/simTick [1-9]/, { timeout: 10_000 });
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+  const before = await populationMeta.textContent();
+  const tick = before?.match(/simTick (\d+)/)?.[1];
+  expect(tick).toBeDefined();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+  await expect
+    .poll(async () => Number((await populationMeta.textContent())?.match(/simTick (\d+)/)?.[1]))
+    .toBeGreaterThanOrEqual(Number(tick));
+});
+
+test('reload restores the active non-default run', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Switch run…' }).click();
+  await page.getByRole('button', { name: 'new run…' }).click();
+  await page.getByRole('textbox', { name: 'name' }).fill('reload-fixture');
+  await page.getByRole('button', { name: 'create & switch' }).click();
+  await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  const populationMeta = page.locator('.population-panel .panel-meta');
+  await expect(populationMeta).toContainText(/simTick [1-9]/, { timeout: 10_000 });
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+  const tick = (await populationMeta.textContent())?.match(/simTick (\d+)/)?.[1];
+  expect(tick).toBeDefined();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+  await expect
+    .poll(async () => Number((await populationMeta.textContent())?.match(/simTick (\d+)/)?.[1]))
+    .toBeGreaterThanOrEqual(Number(tick));
+  await expect(page.getByRole('button', { name: 'Switch run…' })).toHaveAttribute(
+    'title',
+    'Active: reload-fixture',
+  );
+});
+
 test('the sim runs: population grows past 1', async ({ page }) => {
   await page.goto('/');
   // Auto-start fires at seed=42, speed=4×. Founder is one probe; first

@@ -6,7 +6,6 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
-- P1: Coordinate browser bootstrap so reload resumes an existing default run instead of unconditionally replacing it with seed 42; cover non-default startup ordering too. #ui #host #persistence
 - P2: Freeze lineage records in captured snapshots; later extinction currently mutates historical snapshots before serialization. #sim #persistence
 - P2: Enforce heartbeat cadence during worker pulses; `runUntil` currently emits a final heartbeat on every call regardless of configured Hz. #host #performance
 - Validate directive numeric domains and maximum stack length at the host boundary; surface command errors and preserve editor drafts until acknowledgement. #protocol #ui
