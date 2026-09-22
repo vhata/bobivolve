@@ -394,6 +394,44 @@ describe('NodeHost quarantine', () => {
 });
 
 describe('NodeHost patch authoring', () => {
+  it.each(['-1', (1n << 64n).toString(), '0x10'])(
+    'rejects out-of-domain directive value %s without applying a patch',
+    (value) => {
+      const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+      const { events } = collectEvents(host);
+      host.send({ kind: 'newRun', commandId: 'new', seed: SEED_42 });
+      host.send({
+        kind: 'applyPatch',
+        commandId: 'invalid-patch',
+        lineageId: 'L0',
+        firmware: [{ kind: 'gather', params: { rate: value } }],
+      });
+      expect(
+        events.some(
+          (event) => event.kind === 'commandError' && event.commandId === 'invalid-patch',
+        ),
+      ).toBe(true);
+      expect(events.some((event) => event.kind === 'patchApplied')).toBe(false);
+    },
+  );
+
+  it('rejects an out-of-domain decree trigger threshold', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: 'new', seed: SEED_42 });
+    host.send({
+      kind: 'queueDecree',
+      commandId: 'invalid-decree',
+      trigger: { kind: 'populationBelow', lineageId: 'L0', threshold: (1n << 64n).toString() },
+      patchTargetLineageId: 'L0',
+      patchFirmware: [{ kind: 'gather', params: { rate: '2' } }],
+    });
+    expect(
+      events.some((event) => event.kind === 'commandError' && event.commandId === 'invalid-decree'),
+    ).toBe(true);
+    expect(events.some((event) => event.kind === 'decreeQueued')).toBe(false);
+  });
+
   it('ApplyPatch emits PatchApplied and overwrites probe firmware', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
     const { events } = collectEvents(host);

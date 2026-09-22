@@ -44,6 +44,7 @@ import type {
   SubstrateProbe,
   TickEvent,
 } from '../protocol/types.js';
+import { parseUint64Decimal } from '../protocol/uint64.js';
 import {
   EventLogReader,
   EventLogWriter,
@@ -281,11 +282,7 @@ function inspectorToDirective(spec: DirectiveSpec): Directive | null {
   const decode = (key: string): bigint | null => {
     const raw = spec.params[key];
     if (raw === undefined) return null;
-    try {
-      return BigInt(raw);
-    } catch {
-      return null;
-    }
+    return parseUint64Decimal(raw);
   };
   switch (spec.kind) {
     case 'replicate': {
@@ -834,15 +831,9 @@ export class NodeHost {
           this.error(cmd.commandId, `unknown lineage in trigger: ${cmd.trigger.lineageId}`);
           return;
         }
-        let threshold: bigint;
-        try {
-          threshold = BigInt(cmd.trigger.threshold);
-        } catch {
-          this.error(cmd.commandId, `malformed threshold: ${cmd.trigger.threshold}`);
-          return;
-        }
-        if (threshold < 0n) {
-          this.error(cmd.commandId, `threshold must be non-negative`);
+        const threshold = parseUint64Decimal(cmd.trigger.threshold);
+        if (threshold === null) {
+          this.error(cmd.commandId, `threshold must be a decimal uint64: ${cmd.trigger.threshold}`);
           return;
         }
         trigger = { kind: 'populationBelow', lineageId: monitored, threshold };

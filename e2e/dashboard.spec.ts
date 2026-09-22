@@ -515,6 +515,20 @@ test('player-driven pause survives opening and closing the patch editor', async 
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
 });
 
+test('patch editor rejects values beyond uint64', async ({ page }) => {
+  await startFreshRun(page);
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await page.locator('.lineage-tree button[aria-pressed]').first().click();
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+
+  const gatherRate = page.getByRole('textbox', { name: 'gather rate' });
+  const apply = page.locator('.patch-editor-button-primary');
+  await gatherRate.fill((1n << 64n).toString());
+  await expect(apply).toBeDisabled();
+  await gatherRate.fill(((1n << 64n) - 1n).toString());
+  await expect(apply).toBeEnabled();
+});
+
 test('quarantine toggle flips the inspector and the tree pip', async ({ page }) => {
   // Player intervention smoke: select L0, hit Quarantine, see the
   // inspector flip its meta and the tree row carry the quarantine pip;

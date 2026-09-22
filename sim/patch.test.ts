@@ -26,6 +26,10 @@ describe('validatePatchFirmware', () => {
   it('accepts a multi-directive stack', () => {
     expect(validatePatchFirmware(FIRMWARE_GATHER_REPLICATE)).toBeNull();
   });
+
+  it('rejects a stack beyond the mutation limit', () => {
+    expect(validatePatchFirmware(Array(9).fill({ kind: 'gather', rate: 2n }))).toMatch(/at most 8/);
+  });
 });
 
 describe('applyPatch', () => {
