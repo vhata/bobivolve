@@ -15,6 +15,7 @@ test.beforeEach(async ({ page }) => {
 
 test('phylogeny tab toggles the panel and renders the canvas', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
 
   const livingButton = page.locator('.lineage-tree-panel .lineage-view-toggle-button', {
     hasText: /^Living$/,
@@ -48,6 +49,7 @@ test('phylogeny tab toggles the panel and renders the canvas', async ({ page }) 
 
 test('clicking the founder row selects L0', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.getByRole('radio', { name: 'Phylogeny' }).click();
 
   // The founder lineage L0 sits on row 0 (top of the canvas). Click
@@ -62,6 +64,7 @@ test('clicking the founder row selects L0', async ({ page }) => {
 
 test('switching back to Living restores the tree view', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.getByRole('radio', { name: 'Phylogeny' }).click();
   await expect(page.locator('.phylogeny-canvas')).toBeVisible();
 

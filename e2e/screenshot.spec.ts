@@ -19,6 +19,7 @@ test('snapshot the dashboard visually', async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1400, height: 1100 });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   // Let some growth happen so the panels have content to show.
   await page.waitForTimeout(3_000);
   await page.screenshot({

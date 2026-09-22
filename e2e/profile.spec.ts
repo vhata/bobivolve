@@ -5,8 +5,8 @@ import * as fs from 'node:fs';
 // buttons here — under the load conditions we're investigating, the
 // click handlers are exactly what becomes unresponsive, so attempting
 // to drive the speed change from the test masks the very symptom we
-// want to measure. Instead we measure the dashboard at its default
-// 4× auto-start, and again after warming up to a fatter population.
+// want to measure. Instead we measure the dashboard at 4× after an
+// explicit fresh start, and again after warming up to a fatter population.
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -38,8 +38,9 @@ test('profile: dashboard at default 4× speed across two windows', async ({ page
   test.setTimeout(120_000);
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
 
-  // The auto-start fires 4× at boot. We let it warm up and capture
+  // Start runs at 4×. We let it warm up and capture
   // population at three timepoints alongside CDP metrics deltas.
 
   const cdp = await page.context().newCDPSession(page);
@@ -132,7 +133,7 @@ test('profile: dashboard at default 4× speed across two windows', async ({ page
   };
 
   const report = [
-    'Bobivolve dashboard profile (default 4× auto-start)',
+    'Bobivolve dashboard profile (fresh run at default 4×)',
     `(captured ${new Date().toISOString()})`,
     '',
     samples[0] !== undefined ? summarise(samples[0], 5_000) : '',
