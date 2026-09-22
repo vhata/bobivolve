@@ -161,6 +161,34 @@ describe('NodeHost replication events', () => {
 });
 
 describe('NodeHost heartbeat', () => {
+  it('limits heartbeats across budgeted worker pulses to the configured cadence', () => {
+    let now = 0;
+    const host = new NodeHost({ now: () => now, heartbeatHz: 4 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+
+    for (let tick = 1n; tick <= 100n; tick++) host.runUntil(tick, 12);
+    expect(events.filter((event) => event.kind === 'tick')).toHaveLength(0);
+
+    now = 249;
+    host.runUntil(101n, 12);
+    expect(events.filter((event) => event.kind === 'tick')).toHaveLength(0);
+
+    now = 250;
+    host.runUntil(102n, 12);
+    const heartbeats = events.filter((event) => event.kind === 'tick');
+    expect(heartbeats).toHaveLength(1);
+    expect(heartbeats[0]?.simTick).toBe(102n);
+
+    now = 499;
+    host.runUntil(103n, 12);
+    expect(events.filter((event) => event.kind === 'tick')).toHaveLength(1);
+
+    now = 500;
+    host.runUntil(104n, 12);
+    expect(events.filter((event) => event.kind === 'tick')).toHaveLength(2);
+  });
+
   it('emits a final tick heartbeat after runUntil completes', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 60 });
     const { events } = collectEvents(host);
