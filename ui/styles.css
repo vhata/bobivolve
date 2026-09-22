@@ -2044,3 +2044,16 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.command-error,
+.patch-editor-error {
+  color: #ffb8a8;
+  background: #562b30;
+  border: 1px solid #c86964;
+  padding: 0.5rem 0.75rem;
+}
+.command-error {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
