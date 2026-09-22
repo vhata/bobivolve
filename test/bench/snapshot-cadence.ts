@@ -4,18 +4,18 @@
 // tune once R0 has real behaviour to scrub through. This script measures
 // the four quantities that govern the tradeoff:
 //
-//   1. snap-write-ms       — wall-clock ms per snapshot persistence call
-//                            (serialise + write to storage).
-//   2. bytes-per-snap      — payload size on disk (or in the in-memory
-//                            store backing this bench).
+//   1. snap-write-ms       — wall-clock ms spent copying already-serialized
+//                            snapshot bytes into in-memory storage. Snapshot
+//                            capture and serialization are outside the timer.
+//   2. bytes-per-snap      — serialized payload size in the in-memory store.
 //   3. replay-ms           — wall-clock ms to advance one full cadence's
-//                            worth of ticks from a snapshot forward. This
-//                            is the worst-case scrub cost the cadence
-//                            governs: a rewind that lands between snaps
-//                            replays at most this many ticks.
-//   4. total-ms-per-100k   — derived: (snaps-per-100k * mean snap-write-ms)
-//                            across a 100k-tick run. The snapshot tax
-//                            across a long run.
+//                            worth of ticks after restore. Snapshot read,
+//                            deserialization, and restore are outside the
+//                            timer; this is the simulated replay component
+//                            of a worst-case scrub.
+//   4. total-copy-ms-per-100k — derived: (snaps-per-100k * mean snap-write-ms)
+//                            across a 100k-tick run. This excludes capture,
+//                            serialization, and real storage I/O.
 //
 // Output: a tab-separated table on stdout. NOT auto-collected by vitest —
 // the test runner globs only *.test.ts / *.spec.ts.
@@ -58,7 +58,7 @@ const FORWARD_CADENCE = 5_000n;
 // elapsed wall-clock ms per `write` call where the key is a snapshot
 // file (`runs/<id>/snapshots/<tick>.snap`), and the byte length of the
 // payload. Other writes (log appends) are honoured but not timed —
-// the bench only cares about snap-write cost.
+// this timer covers only the in-memory copy and Map insertion.
 class MeasuringMemoryStorage implements Storage {
   readonly data = new Map<string, Uint8Array>();
   readonly snapWriteMs = new Map<bigint, number>(); // tick → ms
@@ -73,8 +73,8 @@ class MeasuringMemoryStorage implements Storage {
       const tick = snapshotKeyTick(key);
       const start = performance.now();
       // Copy semantics: NodeStorage's writeFile takes a snapshot of bytes
-      // immediately. Mirror that here so we measure serialise + retain
-      // costs, not just the Map.set call.
+      // immediately. Mirror that here to measure retaining the already
+      // serialized bytes, not just the Map.set call.
       const copy = new Uint8Array(data.length);
       copy.set(data);
       this.data.set(key, copy);
@@ -234,11 +234,11 @@ async function main(): Promise<void> {
   const header = [
     'cadence',
     'snap-samples',
-    'snap-write-ms-mean',
+    'in-memory-copy-ms-mean',
     'bytes-per-snap-mean',
     'replay-ms',
     'snaps-per-100k',
-    'total-ms-per-100k',
+    'total-in-memory-copy-ms-per-100k',
   ].join('\t');
   const body = results
     .map((r) =>
