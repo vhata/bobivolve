@@ -34,6 +34,8 @@ scripts/sim.sh --seed 42 --ticks 30001 --save-dir ./saves --run-id demo --no-hea
 scripts/sim.sh --resume --ticks 60000 --save-dir ./saves --run-id demo --no-heartbeat
 ```
 
+`--resume` restores `runs/<run-id>/log.ndjson` and its available snapshot, then advances to the absolute `--ticks` target. It does not require a dashboard named save. Normal CLI completion records the final tick even when that tick emits no simulation event. A missing or unusable run, or a target before its saved endpoint, returns a nonzero exit status. Seed and tick arguments must be decimal uint64 values.
+
 ## Development workflows
 
 Run these executable scripts directly. Dependencies are installed with `scripts/install.sh`; refresh Git hooks after pulling hook changes with `scripts/setup.sh`.

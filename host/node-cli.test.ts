@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -155,4 +155,97 @@ describe('node-cli', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+describe('CLI run recovery', () => {
+  let root: string;
+  let io: CapturedIO;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'bobivolve-cli-resume-'));
+    io = captureProcessIo();
+  });
+  afterEach(() => {
+    io.restore();
+    rmSync(root, { recursive: true, force: true });
+  });
+  function persistentArgs(ticks: string): string[] {
+    return ['--ticks', ticks, '--no-heartbeat', '--save-dir', root, '--run-id', 'default'];
+  }
+  function domainEvents(output: string): string[] {
+    return output
+      .trim()
+      .split('\n')
+      .filter((line) => {
+        const event = JSON.parse(line) as { kind: string };
+        return event.kind !== 'commandAck';
+      });
+  }
+
+  it('continues a logged run without a named save and matches uninterrupted events', async () => {
+    expect(await runCli(['--seed', '42', ...persistentArgs('75')])).toBe(0);
+    expect(existsSync(join(root, 'saves', 'default.save'))).toBe(false);
+    const first = domainEvents(io.stdout);
+    io.stdout = '';
+    expect(await runCli(['--resume', ...persistentArgs('150')])).toBe(0);
+    const resumed = domainEvents(io.stdout);
+    io.stdout = '';
+    expect(await runCli(['--seed', '42', '--ticks', '150', '--no-heartbeat'])).toBe(0);
+    expect([...first, ...resumed]).toEqual(domainEvents(io.stdout));
+    expect(io.stderr).toBe('');
+  });
+
+  it('records quiet endpoints and resumes repeatedly at the exact tick', async () => {
+    expect(await runCli(['--seed', '42', ...persistentArgs('1')])).toBe(0);
+    io.stdout = '';
+    expect(await runCli(['--resume', ...persistentArgs('2')])).toBe(0);
+    expect(io.stdout).toContain('"simTick":"1"');
+    io.stdout = '';
+    expect(await runCli(['--resume', ...persistentArgs('2')])).toBe(0);
+    expect(io.stdout).toContain('"simTick":"2"');
+    expect(io.stderr).toBe('');
+  });
+
+  it('fails for a missing run instead of returning success without advancing', async () => {
+    expect(await runCli(['--resume', ...persistentArgs('10')])).toBe(1);
+    expect(io.stderr).toContain('no persisted run');
+    expect(existsSync(join(root, 'runs'))).toBe(false);
+  });
+
+  it('rejects a resume target before the persisted endpoint', async () => {
+    expect(await runCli(['--seed', '42', ...persistentArgs('10')])).toBe(0);
+    expect(await runCli(['--resume', ...persistentArgs('5')])).toBe(1);
+    expect(io.stderr).toContain('precedes persisted tick 10');
+  });
+
+  it('returns failure when a corrupt run cannot acknowledge restoration', async () => {
+    expect(await runCli(['--seed', '42', ...persistentArgs('10')])).toBe(0);
+    const logPath = join(root, 'runs', 'default', 'log.ndjson');
+    writeFileSync(logPath, '{bad json\n');
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(await runCli(['--resume', ...persistentArgs('20')])).toBe(1);
+      expect(io.stderr).toContain('run restoration failed');
+      expect(readFileSync(logPath, 'utf8')).toBe('{bad json\n');
+    } finally {
+      diagnostic.mockRestore();
+    }
+  });
+
+  it.each(['-1', '0x10', '18446744073709551616', ''])(
+    'rejects non-uint64 tick input %s',
+    async (ticks) => {
+      expect(await runCli(['--seed', '42', `--ticks=${ticks}`])).toBe(2);
+      expect(io.stderr).toContain('decimal uint64');
+    },
+  );
+
+  it.each(['../escape', '', '.', '..', 'nested/run', 'nested\\run'])(
+    'rejects invalid run id %s',
+    async (runId) => {
+      expect(
+        await runCli(['--seed', '42', '--ticks', '1', '--save-dir', root, '--run-id', runId]),
+      ).toBe(2);
+      expect(io.stderr).toContain('--run-id');
+    },
+  );
 });
