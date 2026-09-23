@@ -6,7 +6,7 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
-- Correct snapshot benchmark accounting before choosing a cadence: current timer excludes serialization and real storage. Measure full encode/write/read/replay cost and sustained log/storage growth. #host #performance
+- Measure browser OPFS persistence and player-visible rewind latency, then choose supported session/storage budgets and retention rules. The [filesystem benchmark](docs/SNAPSHOT_BENCHMARK.md) now measures capture/encode/write/read/restore, full host rewind, and cumulative storage growth; Node timings do not establish browser performance. #host #performance
 - Reconcile acceptance claims with actual CI and golden coverage; add intervention and history workflow cases. The forensic browser test now passes when it explicitly starts a fresh run. #test #docs
 - Complete the [R2 engineer-loop experiment](docs/R2_ENGINEER_LOOP_EXPERIMENT.md) with player sessions and a chosen cost model before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. The seeded founder comparison is complete; mechanic selection and human playtest remain player decisions. #r2 #design
 
@@ -15,19 +15,7 @@ Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Finding
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Extend rebuild-from-log to the named-save Load path. `handleSave` already captures a fresh snapshot at save-time (so save_tick is exactly the snap's tick); the gap is on the Load side — `handleLoad` (named save slot) still fails fast when the save's `.save` snapshot is missing or unreadable. Two minimal-cost paths to close it: **(A')** add a `runId` field to the saves-index entry and have Load fall back to `restoreToTick(saveTick, runLogEntries, persistence)` using the save's recorded runId when the `.save` file is missing — requires the run's log to still exist, which usually does. **(B)** Bundle a `<slot>.log` file alongside `<slot>.save` containing event-log entries the loader can replay forward — invents a new on-disk container, legacy saves degrade to today's behaviour. Decision pending. #r0 #host
-- Tune snapshot cadence once R0 has real behaviour to scrub through; 30,000 ticks is a heuristic per ARCHITECTURE.md. Bench data collected 2026-05-15; see table below. #r0 #host
-
-  Bench: `test/bench/snapshot-cadence.ts`, seed=42, forward run 100k ticks, in-memory storage.
-
-  | cadence | snap-samples | in-memory copy-ms (mean) | bytes-per-snap (mean) | tick-replay-ms | snaps per 100k | total in-memory copy-ms per 100k |
-  | ------: | -----------: | -----------------------: | --------------------: | -------------: | -------------: | -------------------------------: |
-  |   5,000 |           20 |                    1.417 |            19,871,735 |         12,369 |             20 |                             28.3 |
-  |  10,000 |           10 |                    1.352 |            20,669,634 |         21,887 |             10 |                             13.5 |
-  |  30,000 |            3 |                    1.237 |            22,296,602 |         66,010 |              3 |                              3.7 |
-  |  60,000 |            1 |                    1.138 |            22,365,560 |        145,100 |              1 |                              1.1 |
-  | 100,000 |            1 |                    3.066 |            34,588,884 |        243,543 |              1 |                              3.1 |
-
-  Interpretation: the measured in-memory copy takes roughly 1 ms per snapshot, with serialized payloads around 20 MB at high population. The timer excludes snapshot capture, serialization, and real storage I/O; the derived total therefore is not the full snapshot cost. Tick-replay time grows with cadence, but excludes snapshot read, decode, and restore, so it is not the full player-visible scrub latency. Measure those missing costs and storage growth before choosing a cadence.
+- Tune snapshot cadence after browser persistence measurements and rewind/storage budgets are available. Keep 30,000 ticks for now; see the [filesystem benchmark and its limits](docs/SNAPSHOT_BENCHMARK.md). The earlier in-memory copy table did not measure total snapshot cost. #r0 #host
 
 ## Release 2 — The Engineer's Console
 

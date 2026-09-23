@@ -1,264 +1,251 @@
-// Snapshot-cadence microbenchmark.
-//
-// ARCHITECTURE.md flags the 30,000-tick snapshot cadence as a heuristic to
-// tune once R0 has real behaviour to scrub through. This script measures
-// the four quantities that govern the tradeoff:
-//
-//   1. snap-write-ms       — wall-clock ms spent copying already-serialized
-//                            snapshot bytes into in-memory storage. Snapshot
-//                            capture and serialization are outside the timer.
-//   2. bytes-per-snap      — serialized payload size in the in-memory store.
-//   3. replay-ms           — wall-clock ms to advance one full cadence's
-//                            worth of ticks after restore. Snapshot read,
-//                            deserialization, and restore are outside the
-//                            timer; this is the simulated replay component
-//                            of a worst-case scrub.
-//   4. total-copy-ms-per-100k — derived: (snaps-per-100k * mean snap-write-ms)
-//                            across a 100k-tick run. This excludes capture,
-//                            serialization, and real storage I/O.
-//
-// Output: a tab-separated table on stdout. NOT auto-collected by vitest —
-// the test runner globs only *.test.ts / *.spec.ts.
-//
-// Run: `tsx test/bench/snapshot-cadence.ts` from the project root.
-//
-// Strategy: do ONE canonical forward sim from seed=42 to FORWARD_TICKS,
-// taking a snapshot at every cadence-boundary tick. Snap-write costs and
-// bytes are recorded per snap. Then for each cadence, derive:
-//   - mean snap-write-ms / bytes-per-snap from snaps that land on that
-//     cadence's boundaries (snaps land at multiples of cadence; the union
-//     of all five cadences' boundaries is just "every 5_000 ticks", so a
-//     single forward run with cadence-5000 captures them all).
-//   - replay-ms: from a fresh NodeHost, restore the snap at tick
-//     (FORWARD_TICKS - cadence), advance `cadence` ticks. This is the
-//     worst-case scrub: a rewind landing one cadence past the latest
-//     snap replays exactly this many ticks.
-//
-// Determinism: a fixed seed across runs keeps the simulation shape
-// identical so snap sizes and replay times are comparable.
-
-import type { Storage } from '../../sim/ports.js';
+// Filesystem persistence benchmark; see docs/SNAPSHOT_BENCHMARK.md.
+// Uses the production simulation, codecs, log writer and storage adapter.
+// Reconstruction is exercised through public NodeHost commands.
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir, cpus } from 'node:os';
+import { join } from 'node:path';
+import { parseArgs } from 'node:util';
+import { EventLogWriter } from '../../host/event-log.js';
 import { NodeHost } from '../../host/node.js';
-import { deserializeSnapshot } from '../../host/snapshot-codec.js';
-import { restore } from '../../sim/state.js';
+import { deserializeSnapshot, serializeSnapshot } from '../../host/snapshot-codec.js';
+import { NodeStorage } from '../../host/storage-node.js';
+import type { SimEvent } from '../../protocol/types.js';
+import { createInitialState, restore, snapshot, type SimState } from '../../sim/state.js';
+import { tick } from '../../sim/step.js';
+import { Seed } from '../../sim/types.js';
 
-const SEED = 42n;
-// Distance the canonical forward sim runs to. The largest cadence we
-// measure (100_000) defines the minimum useful forward distance for a
-// representative replay-ms measurement; we extend that little further
-// so snap-write samples for the larger cadences land at population
-// scales like a real long session, not at tick-0.
-const FORWARD_TICKS = 100_000n;
-// Cadence values to bench. The 5_000-tick floor is also the forward-sim
-// cadence — that captures every snap any of these values would write.
-const CADENCES: readonly bigint[] = [5_000n, 10_000n, 30_000n, 60_000n, 100_000n];
-const FORWARD_CADENCE = 5_000n;
+const { values } = parseArgs({
+  options: {
+    ticks: { type: 'string', default: '30000' },
+    cadences: { type: 'string', default: '5000,10000,30000' },
+    seed: { type: 'string', default: '42' },
+    'sample-every': { type: 'string', default: '5000' },
+    directory: { type: 'string' },
+    keep: { type: 'boolean', default: false },
+  },
+});
 
-// In-memory Storage with per-snapshot-write instrumentation. Captures
-// elapsed wall-clock ms per `write` call where the key is a snapshot
-// file (`runs/<id>/snapshots/<tick>.snap`), and the byte length of the
-// payload. Other writes (log appends) are honoured but not timed —
-// this timer covers only the in-memory copy and Map insertion.
-class MeasuringMemoryStorage implements Storage {
-  readonly data = new Map<string, Uint8Array>();
-  readonly snapWriteMs = new Map<bigint, number>(); // tick → ms
-  readonly snapBytes = new Map<bigint, number>(); // tick → bytes
-
-  async read(key: string): Promise<Uint8Array | null> {
-    return this.data.get(key) ?? null;
+function positive(value: string, name: string): bigint {
+  if (!/^[0-9]+$/.test(value) || BigInt(value) <= 0n) {
+    throw new Error(`${name} must be a positive decimal integer`);
   }
-
-  async write(key: string, data: Uint8Array): Promise<void> {
-    if (isSnapshotKey(key)) {
-      const tick = snapshotKeyTick(key);
-      const start = performance.now();
-      // Copy semantics: NodeStorage's writeFile takes a snapshot of bytes
-      // immediately. Mirror that here to measure retaining the already
-      // serialized bytes, not just the Map.set call.
-      const copy = new Uint8Array(data.length);
-      copy.set(data);
-      this.data.set(key, copy);
-      const elapsed = performance.now() - start;
-      this.snapWriteMs.set(tick, elapsed);
-      this.snapBytes.set(tick, data.length);
-    } else {
-      this.data.set(key, data);
-    }
-  }
-
-  async append(key: string, data: Uint8Array): Promise<void> {
-    const existing = this.data.get(key);
-    if (existing === undefined) {
-      const copy = new Uint8Array(data.length);
-      copy.set(data);
-      this.data.set(key, copy);
-      return;
-    }
-    const merged = new Uint8Array(existing.length + data.length);
-    merged.set(existing, 0);
-    merged.set(data, existing.length);
-    this.data.set(key, merged);
-  }
-
-  async delete(key: string): Promise<void> {
-    this.data.delete(key);
-  }
+  return BigInt(value);
 }
 
-function isSnapshotKey(key: string): boolean {
-  return key.startsWith('runs/') && key.includes('/snapshots/') && key.endsWith('.snap');
+const ticks = positive(values.ticks!, 'ticks');
+if (ticks < 2n) throw new Error('ticks must be at least 2');
+const cadences = [...new Set(values.cadences!.split(',').map((v) => positive(v, 'cadence')))];
+if (cadences.some((v) => v > ticks)) throw new Error('each cadence must be <= ticks');
+const sampleEvery = positive(values['sample-every']!, 'sample-every');
+if (!/^[0-9]+$/.test(values.seed!) || BigInt(values.seed!) > (1n << 64n) - 1n) {
+  throw new Error('seed must be a decimal uint64');
+}
+const seed = BigInt(values.seed!);
+
+function emit(record: object): void {
+  process.stdout.write(
+    JSON.stringify(record, (_, v: unknown) => (typeof v === 'bigint' ? String(v) : v)) + '\n',
+  );
 }
 
-function snapshotKeyTick(key: string): bigint {
-  const file = key.split('/').pop()!;
-  return BigInt(file.slice(0, -'.snap'.length));
+function digest(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
-function mean(xs: readonly number[]): number {
-  if (xs.length === 0) return 0;
-  let sum = 0;
-  for (const x of xs) sum += x;
-  return sum / xs.length;
+interface SnapshotSample {
+  tick: bigint;
+  bytes: number;
+  captureMs: number;
+  encodeMs: number;
+  writeMs: number;
+  captureEncodeWriteMs: number;
+  readMs: number;
+  decodeMs: number;
+  restoreMs: number;
+  readDecodeRestoreMs: number;
 }
 
-interface CadenceResult {
-  readonly cadence: bigint;
-  readonly snapSampleCount: number;
-  readonly snapWriteMeanMs: number;
-  readonly bytesPerSnapMean: number;
-  readonly replayMs: number;
-  readonly snapsPer100k: number;
-  readonly totalPer100kMs: number;
+interface Run {
+  cadence: bigint;
+  id: string;
+  log: EventLogWriter;
+  samples: SnapshotSample[];
+  logFlushMs: number;
+  snapshotBytes: number;
+}
+
+async function measureSnapshot(state: SimState, run: Run, storage: NodeStorage): Promise<void> {
+  const key = `runs/${run.id}/snapshots/${state.simTick}.snap`;
+  const begin = performance.now();
+  const snap = snapshot(state);
+  const captured = performance.now();
+  const bytes = serializeSnapshot(snap);
+  const encoded = performance.now();
+  await storage.write(key, bytes);
+  const written = performance.now();
+  run.log.appendSnap(state.simTick, key);
+
+  const readStart = performance.now();
+  const readBytes = await storage.read(key);
+  const readEnd = performance.now();
+  if (readBytes === null) throw new Error(`Missing snapshot ${key}`);
+  const decoded = deserializeSnapshot(readBytes);
+  const decodeEnd = performance.now();
+  const restored = restore(decoded);
+  const restoreEnd = performance.now();
+  // Verification is outside all timers. Compare all state, including PRNG.
+  if (digest(serializeSnapshot(snapshot(restored))) !== digest(bytes)) {
+    throw new Error(`Snapshot round-trip differs at ${state.simTick}`);
+  }
+  const sample: SnapshotSample = {
+    tick: state.simTick,
+    bytes: bytes.length,
+    captureMs: captured - begin,
+    encodeMs: encoded - captured,
+    writeMs: written - encoded,
+    captureEncodeWriteMs: written - begin,
+    readMs: readEnd - readStart,
+    decodeMs: decodeEnd - readEnd,
+    restoreMs: restoreEnd - decodeEnd,
+    readDecodeRestoreMs: restoreEnd - readStart,
+  };
+  run.samples.push(sample);
+  run.snapshotBytes += bytes.length;
+  emit({ kind: 'snapshot', cadence: run.cadence, ...sample });
+}
+
+async function flushLog(run: Run): Promise<void> {
+  const start = performance.now();
+  await run.log.flush();
+  run.logFlushMs += performance.now() - start;
 }
 
 async function main(): Promise<void> {
-  // ── Warm-up ─────────────────────────────────────────────────────────────
-  // First NodeHost spin-up pays JIT / module-init costs that would
-  // otherwise inflate the canonical-run measurement.
-  {
-    const storage = new MeasuringMemoryStorage();
-    const host = new NodeHost({
-      heartbeatHz: 0,
-      persistence: { storage, runId: 'warmup', snapshotCadenceTicks: 5_000n },
-    });
-    host.send({ kind: 'newRun', commandId: 'newRun-0', seed: SEED });
-    host.runUntil(5_000n);
-    await host.flush();
-  }
-
-  // ── Canonical forward run ───────────────────────────────────────────────
-  // One sim from seed=SEED to FORWARD_TICKS with cadence = FORWARD_CADENCE
-  // (5_000, the smallest cadence we measure — so it captures every snap
-  // that any of the larger cadences would write).
-  console.error(
-    `[bench] canonical forward run: ${FORWARD_TICKS.toString()} ticks @ cadence ${FORWARD_CADENCE.toString()} ...`,
-  );
-  const forwardStart = performance.now();
-  const forwardStorage = new MeasuringMemoryStorage();
-  const forwardHost = new NodeHost({
-    heartbeatHz: 0,
-    persistence: {
-      storage: forwardStorage,
-      runId: 'forward',
-      snapshotCadenceTicks: FORWARD_CADENCE,
-    },
+  // mkdtemp never reuses or deletes a caller-owned directory. --directory
+  // selects the parent filesystem; only this generated child is removed.
+  const root = await mkdtemp(join(values.directory ?? tmpdir(), 'bobivolve-benchmark-'));
+  emit({
+    kind: 'environment',
+    root,
+    seed,
+    ticks,
+    cadences,
+    sampleEvery,
+    node: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    cpu: cpus()[0]?.model,
+    storage: 'NodeStorage; OS cache; no fsync',
   });
-  forwardHost.send({ kind: 'newRun', commandId: 'newRun-0', seed: SEED });
-  forwardHost.runUntil(FORWARD_TICKS);
-  await forwardHost.flush();
-  console.error(`[bench] forward run done in ${(performance.now() - forwardStart).toFixed(0)} ms`);
-
-  // ── Per-cadence measurement ────────────────────────────────────────────
-  const results: CadenceResult[] = [];
-  for (const cadence of CADENCES) {
-    console.error(`[bench] cadence=${cadence.toString()} ...`);
-
-    // Snap-write samples for this cadence: snaps at multiples of cadence
-    // (skipping tick 0 — its size isn't representative of a fat-pop snap,
-    // and ARCHITECTURE.md's heuristic targets the steady-state cost).
-    const snapMsSamples: number[] = [];
-    const snapByteSamples: number[] = [];
-    let tick = cadence;
-    while (tick <= FORWARD_TICKS) {
-      const ms = forwardStorage.snapWriteMs.get(tick);
-      const bytes = forwardStorage.snapBytes.get(tick);
-      if (ms !== undefined && bytes !== undefined) {
-        snapMsSamples.push(ms);
-        snapByteSamples.push(bytes);
-      }
-      tick += cadence;
-    }
-    const snapWriteMeanMs = mean(snapMsSamples);
-    const bytesPerSnapMean = mean(snapByteSamples);
-
-    // Replay-ms: restore the snap at (FORWARD_TICKS - cadence), advance
-    // `cadence` ticks forward, time the advance. This is the worst-case
-    // scrub: a rewind landing one cadence past the latest snap walks
-    // exactly this many ticks. The replay host is a fresh NodeHost with
-    // no persistence — we don't care about log-write costs during the
-    // replay, only the tick-advance cost.
-    const replaySnapTick = FORWARD_TICKS - cadence;
-    const replaySnapKey = `runs/forward/snapshots/${replaySnapTick.toString()}.snap`;
-    const snapBytes = forwardStorage.data.get(replaySnapKey);
-    if (snapBytes === undefined) {
-      throw new Error(`bench setup: no snapshot at tick ${replaySnapTick.toString()}`);
-    }
-    const snap = deserializeSnapshot(snapBytes);
-    const replayHost = new NodeHost({ heartbeatHz: 0 });
-    // Inject restored state directly. NodeHost has no public restore
-    // entrypoint outside the Load path (which is async and goes through
-    // storage); reaching into the private `state` field is the
-    // bench-only shortcut. The alternative would be plumbing a
-    // restoreFromSnapshot() method into the host purely for this
-    // bench, which the user would rightly object to.
-    (replayHost as unknown as { state: ReturnType<typeof restore> }).state = restore(snap);
-    const replayStart = performance.now();
-    replayHost.runUntil(FORWARD_TICKS);
-    const replayMs = performance.now() - replayStart;
-
-    const snapsPer100k = Number(100_000n / cadence);
-    const totalPer100kMs = snapsPer100k * snapWriteMeanMs;
-
-    results.push({
-      cadence,
-      snapSampleCount: snapMsSamples.length,
-      snapWriteMeanMs,
-      bytesPerSnapMean,
-      replayMs,
-      snapsPer100k,
-      totalPer100kMs,
+  try {
+    const storage = new NodeStorage({ root });
+    const state = createInitialState(Seed(seed));
+    const runs: Run[] = cadences.map((cadence) => {
+      const id = `cadence-${cadence}`;
+      const log = new EventLogWriter(storage, `runs/${id}/log.ndjson`);
+      log.appendCommand(0n, { kind: 'newRun', commandId: 'benchmark-new', seed });
+      return { cadence, id, log, samples: [], logFlushMs: 0, snapshotBytes: 0 };
     });
-  }
+    for (const run of runs) await measureSnapshot(state, run, storage);
 
-  // ── Output ──────────────────────────────────────────────────────────────
-  const header = [
-    'cadence',
-    'snap-samples',
-    'in-memory-copy-ms-mean',
-    'bytes-per-snap-mean',
-    'replay-ms',
-    'snaps-per-100k',
-    'total-in-memory-copy-ms-per-100k',
-  ].join('\t');
-  const body = results
-    .map((r) =>
-      [
-        r.cadence.toString(),
-        r.snapSampleCount.toString(),
-        r.snapWriteMeanMs.toFixed(3),
-        r.bytesPerSnapMean.toFixed(0),
-        r.replayMs.toFixed(1),
-        r.snapsPer100k.toString(),
-        r.totalPer100kMs.toFixed(1),
-      ].join('\t'),
-    )
-    .join('\n');
-  // Stdout is the consumable table. Progress notes go to stderr above so
-  // a `> table.tsv` capture stays clean.
-  process.stdout.write(header + '\n' + body + '\n');
+    // One canonical forward simulation supplies identical events/state to
+    // each cadence. Flush in bounded batches; do not retain the full log.
+    let expectedRewindDigest = '';
+    const forwardStart = performance.now();
+    while (state.simTick < ticks) {
+      const events: SimEvent[] = [];
+      tick(state, events);
+      for (const run of runs) {
+        for (const event of events) run.log.appendEvent(state.simTick, event);
+        if (state.simTick % run.cadence === 0n) await measureSnapshot(state, run, storage);
+        if (state.simTick % sampleEvery === 0n || state.simTick === ticks) {
+          await flushLog(run);
+          const logBytes = (await stat(storage.pathFor(`runs/${run.id}/log.ndjson`))).size;
+          emit({
+            kind: 'growth',
+            cadence: run.cadence,
+            tick: state.simTick,
+            population: state.probes.size,
+            lineages: state.lineages.size,
+            logBytes,
+            snapshotBytes: run.snapshotBytes,
+            totalBytes: logBytes + run.snapshotBytes,
+            logFlushMs: run.logFlushMs,
+          });
+        }
+      }
+      if (state.simTick === ticks - 1n) {
+        expectedRewindDigest = digest(serializeSnapshot(snapshot(state)));
+      }
+      if (state.simTick % sampleEvery === 0n)
+        console.error(`[bench] forward tick ${state.simTick}`);
+    }
+    emit({ kind: 'forward', wallMs: performance.now() - forwardStart });
+
+    for (const run of runs) {
+      // Guarantee the log head even if the final tick emitted no events.
+      run.log.appendCommand(ticks, { kind: 'pause', commandId: 'benchmark-end' });
+      await flushLog(run);
+      const host = new NodeHost({ heartbeatHz: 0, persistence: { storage, runId: 'empty' } });
+      const failures: string[] = [];
+      const acknowledged = new Set<string>();
+      host.subscribe((event) => {
+        if (event.kind === 'commandError') failures.push(event.message);
+        if (event.kind === 'commandAck') acknowledged.add(event.commandId);
+      });
+      // Bootstrap is excluded. The timed rewind then reads the entire log,
+      // selects/decodes/restores its anchor, replays, and rewrites the log.
+      host.send({ kind: 'switchRun', commandId: 'open', runId: run.id });
+      await host.flush();
+      if (!acknowledged.has('open') || host.currentTick() !== ticks) {
+        throw new Error(`Bootstrap failed: ${failures.join('; ')}`);
+      }
+      const target = ticks - 1n;
+      const start = performance.now();
+      host.send({ kind: 'rewindToTick', commandId: 'rewind', tick: target });
+      await host.flush();
+      const rewindMs = performance.now() - start;
+      if (!acknowledged.has('rewind') || failures.length || host.currentTick() !== target) {
+        throw new Error(`Rewind failed: ${failures.join('; ')}`);
+      }
+      host.send({ kind: 'save', commandId: 'verify', slot: 'benchmark-verify' });
+      await host.flush();
+      const verification = await storage.read('saves/benchmark-verify.save');
+      if (
+        !acknowledged.has('verify') ||
+        verification === null ||
+        digest(verification) !== expectedRewindDigest
+      ) {
+        throw new Error(`Replayed state differs for cadence ${run.cadence}`);
+      }
+      const periodic = run.samples.filter((s) => s.tick > 0n);
+      const mean = (key: keyof Omit<SnapshotSample, 'tick'>): number =>
+        periodic.reduce((total, s) => total + s[key], 0) / periodic.length;
+      emit({
+        kind: 'summary',
+        cadence: run.cadence,
+        periodicSamples: periodic.length,
+        captureEncodeWriteMeanMs: mean('captureEncodeWriteMs'),
+        readDecodeRestoreMeanMs: mean('readDecodeRestoreMs'),
+        bytesPerSnapshotMean: mean('bytes'),
+        snapshotCaptureEncodeWriteTotalMs: run.samples.reduce(
+          (sum, s) => sum + s.captureEncodeWriteMs,
+          0,
+        ),
+        logFlushMs: run.logFlushMs,
+        rewindTarget: target,
+        replayTicks: target % run.cadence,
+        rewindMs,
+        replayStateVerified: true,
+      });
+    }
+  } finally {
+    if (!values.keep) await rm(root, { recursive: true, force: true });
+  }
 }
 
-main().catch((e: unknown) => {
-  console.error(e);
-  process.exit(1);
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
 });
