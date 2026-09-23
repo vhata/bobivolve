@@ -8,6 +8,8 @@ import { deserializeSnapshot } from './snapshot-codec.js';
 import { INTERVENTION_FIRMWARE } from '../test/determinism/interventions.js';
 import type { Command, SimEvent } from '../protocol/types.js';
 
+// Several filesystem round trips share CI with the simulation suite. This
+// checks state equivalence, not a five-second storage performance budget.
 it('preserves complete intervention state through save, rewind, load and run switching', async () => {
   const root = await mkdtemp(join(tmpdir(), 'bobivolve-history-'));
   try {
@@ -78,4 +80,4 @@ it('preserves complete intervention state through save, rewind, load and run swi
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30_000);
