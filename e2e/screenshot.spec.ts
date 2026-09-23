@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('snapshot the dashboard visually', async ({ page }) => {
+test('@diagnostic snapshot the dashboard visually', async ({ page }) => {
   // Vite cold-start plus a 3s sim soak plus a fullPage capture can
   // brush against the default 30s budget on first run; the test isn't
   // in the regression set, so be generous with the budget.

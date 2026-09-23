@@ -13,7 +13,7 @@ Executable shell scripts in [scripts/](../scripts/) are the shared entrypoints f
 | `scripts/e2e.sh`                                       | Playwright browser tests                                               | When changing the player workflows they exercise                               |
 | `scripts/sim.sh --seed 42 --ticks 1000 --no-heartbeat` | Headless simulation                                                    | When a simulation or host change needs runtime evidence beyond its tests       |
 
-CI runs format, lint, typecheck, tests, and build on PRs and pushes to main. The pre-commit hook only formats staged files and lints staged code. The pre-push hook runs typecheck and the full test suite, so commits stay quick while pushes catch type and test failures. Neither hook runs the build or browser suite. Do not describe a check as enforced unless the tooling enforces it.
+CI runs format, lint, typecheck, tests, and build on PRs and pushes to main. A separate Chromium job runs `scripts/e2e.sh --grep-invert @diagnostic`; `@diagnostic` marks the local performance-profile and screenshot probes. Browser failures upload `test-results/` for inspection. The pre-commit hook only formats staged files and lints staged code. The pre-push hook runs typecheck and the full test suite, so commits stay quick while pushes catch type and test failures. Neither hook runs the build or browser suite. Do not describe a check as enforced unless the tooling enforces it.
 
 Fix failures introduced by the change. Report pre-existing failures or environment limitations explicitly; do not claim a passing baseline or silently bypass a failed gate. Hook bypasses are reserved for genuine tooling/recovery problems, with the reason and equivalent checks recorded.
 

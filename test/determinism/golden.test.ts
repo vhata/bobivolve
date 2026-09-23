@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { runDeterministically, serializeEvents } from './runner.js';
+import { INTERVENTIONS, type ScheduledCommand } from './interventions.js';
 
 // Determinism goldens. ARCHITECTURE.md "Determinism test from week one":
 // (seed, command-log) → event-log, diffed against a checked-in golden. The
@@ -22,6 +23,7 @@ interface GoldenCase {
   readonly name: string;
   readonly seed: bigint;
   readonly ticks: bigint;
+  readonly commands?: readonly ScheduledCommand[];
 }
 
 const CASES: readonly GoldenCase[] = [
@@ -35,6 +37,7 @@ const CASES: readonly GoldenCase[] = [
   // clustering: speciation events appear in the lineageId field of later
   // Replication events.
   { name: 'seed-2026-ticks-5000', seed: 2026n, ticks: 5000n },
+  { name: 'seed-42-interventions-ticks-300', seed: 42n, ticks: 300n, commands: INTERVENTIONS },
 ];
 
 if (REGENERATE && !existsSync(GOLDEN_DIR)) {
@@ -42,9 +45,10 @@ if (REGENERATE && !existsSync(GOLDEN_DIR)) {
 }
 
 describe('determinism goldens', () => {
-  it.each(CASES)('matches golden for $name', ({ name, seed, ticks }) => {
+  it.each(CASES)('matches golden for $name', (spec) => {
+    const { name } = spec;
     const goldenPath = join(GOLDEN_DIR, `${name}.ndjson`);
-    const events = runDeterministically({ seed, ticks });
+    const events = runDeterministically(spec);
     const actual = serializeEvents(events);
 
     if (REGENERATE) {
@@ -58,6 +62,24 @@ describe('determinism goldens', () => {
 
     const expected = readFileSync(goldenPath, 'utf8');
     expect(actual).toBe(expected);
+  });
+
+  it('intervention golden exercises effects, not just command acknowledgements', () => {
+    const events = runDeterministically({ seed: 42n, ticks: 300n, commands: INTERVENTIONS });
+    expect(events.filter((e) => e.kind === 'commandError')).toEqual([]);
+    expect(events.map((e) => e.kind)).toEqual(
+      expect.arrayContaining([
+        'quarantineImposed',
+        'quarantineLifted',
+        'patchApplied',
+        'decreeQueued',
+        'decreeFired',
+        'patchSaturated',
+      ]),
+    );
+    expect(serializeEvents(events)).toBe(
+      serializeEvents(runDeterministically({ seed: 42n, ticks: 300n, commands: INTERVENTIONS })),
+    );
   });
 
   it('two runs of the same case produce identical event streams', () => {

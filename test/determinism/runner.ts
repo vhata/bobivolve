@@ -6,10 +6,12 @@
 
 import { NodeTransport } from '../../transport/node.js';
 import type { Command, SimEvent } from '../../protocol/types.js';
+import type { ScheduledCommand } from './interventions.js';
 
 export interface DeterminismRun {
   readonly seed: bigint;
   readonly ticks: bigint;
+  readonly commands?: readonly ScheduledCommand[];
 }
 
 export function runDeterministically(spec: DeterminismRun): readonly SimEvent[] {
@@ -25,6 +27,15 @@ export function runDeterministically(spec: DeterminismRun): readonly SimEvent[] 
     seed: spec.seed,
   };
   transport.send(newRun);
+  let previousTick = 0n;
+  for (const entry of spec.commands ?? []) {
+    if (entry.tick < previousTick || entry.tick > spec.ticks) {
+      throw new Error('Determinism commands must be ordered and within the run');
+    }
+    transport.getHost().runUntil(entry.tick);
+    transport.send(entry.command);
+    previousTick = entry.tick;
+  }
   transport.getHost().runUntil(spec.ticks);
 
   unsubscribe();

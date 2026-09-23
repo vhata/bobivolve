@@ -34,7 +34,7 @@ async function getMetrics(cdp: import('@playwright/test').CDPSession): Promise<M
   };
 }
 
-test('profile: dashboard at default 4× speed across two windows', async ({ page }) => {
+test('@diagnostic profile: dashboard at default 4× speed across two windows', async ({ page }) => {
   test.setTimeout(120_000);
 
   await page.goto('/');
