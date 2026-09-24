@@ -38,6 +38,20 @@ scripts/sim.sh --resume --ticks 60000 --save-dir ./saves --run-id demo --no-hear
 
 An opt-in browser persistence probe runs with `scripts/browser-persistence-benchmark.sh`; see [measurements and proposed budgets](docs/BROWSER_PERSISTENCE_BUDGET.md) for the scope and limitations.
 
+Schedule interventions with `--commands path/to/script.json`. The JSON array uses decimal uint64 tick strings and protocol command objects:
+
+```json
+[
+  { "tick": "0", "command": { "kind": "quarantine", "commandId": "hold", "lineageId": "L0" } },
+  {
+    "tick": "20",
+    "command": { "kind": "releaseQuarantine", "commandId": "release", "lineageId": "L0" }
+  }
+]
+```
+
+Commands run after advancing to their tick, before the next tick, in array order. Supported kinds are `applyPatch`, `queueDecree`, `revokeDecree`, `quarantine`, and `releaseQuarantine`; their fields follow `protocol/types.ts`. Scripts must be at most 1 MiB, ordered, within `--ticks`, and have unique nonempty command IDs (the `cli-` prefix is reserved). The entire structure is validated before starting; missing lineages or insufficient compute fail at execution with a nonzero exit code. Earlier successful commands are not rolled back. With `--resume`, supply only new commands strictly after the persisted endpoint so same-tick interventions cannot be accidentally applied twice. Heartbeats remain optional; use `--no-heartbeat` for reproducible output.
+
 ## Development workflows
 
 Run these executable scripts directly. Dependencies are installed with `scripts/install.sh`; refresh Git hooks after pulling hook changes with `scripts/setup.sh`.
