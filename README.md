@@ -38,17 +38,18 @@ scripts/sim.sh --resume --ticks 60000 --save-dir ./saves --run-id demo --no-hear
 
 Run these executable scripts directly. Dependencies are installed with `scripts/install.sh`; refresh Git hooks after pulling hook changes with `scripts/setup.sh`.
 
-| Script                                       | Purpose                                      |
-| -------------------------------------------- | -------------------------------------------- |
-| `scripts/dev.sh`                             | Start the dashboard dev server               |
-| `scripts/build.sh` / `scripts/preview.sh`    | Build / preview the production dashboard     |
-| `scripts/check.sh`                           | Format check, lint, typecheck, and tests     |
-| `scripts/format.sh` / `scripts/fmt-check.sh` | Apply / check formatting                     |
-| `scripts/lint.sh` / `scripts/typecheck.sh`   | Lint / TypeScript checks                     |
-| `scripts/test.sh` / `scripts/e2e.sh`         | Unit and integration / browser tests         |
-| `scripts/sim.sh`                             | Headless simulation; pass CLI flags directly |
-| `scripts/r2-experiment.sh`                   | Seeded R2 founder-policy comparison          |
-| `scripts/clean.sh`                           | Remove generated `dist/` output              |
+| Script                                       | Purpose                                              |
+| -------------------------------------------- | ---------------------------------------------------- |
+| `scripts/dev.sh`                             | Start the dashboard dev server                       |
+| `scripts/build.sh` / `scripts/preview.sh`    | Build / preview the production dashboard             |
+| `scripts/check.sh`                           | Format check, lint, typecheck, and tests             |
+| `scripts/format.sh` / `scripts/fmt-check.sh` | Apply / check formatting                             |
+| `scripts/lint.sh` / `scripts/typecheck.sh`   | Lint / TypeScript checks                             |
+| `scripts/test.sh` / `scripts/e2e.sh`         | Unit and integration / browser tests                 |
+| `scripts/sim.sh`                             | Headless simulation; pass CLI flags directly         |
+| `scripts/snapshot-benchmark.sh`              | Filesystem snapshot, log growth and rewind benchmark |
+| `scripts/r2-experiment.sh`                   | Seeded R2 founder-policy comparison                  |
+| `scripts/clean.sh`                           | Remove generated `dist/` output                      |
 
 For example, `scripts/test.sh sim/rng.test.ts` runs one test file. Existing pnpm commands remain convenience aliases. See [the quality guide](docs/QUALITY.md) for which checks a change needs.
 
