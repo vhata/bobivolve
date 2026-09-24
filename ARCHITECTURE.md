@@ -40,7 +40,7 @@ The headless CLI supports seeded runs, saving, and resuming. It is also the refe
 
 The host stores NDJSON entries ordered by `(tick, seq)`: commands, domain events, and snapshot references. It appends during normal play and truncates the active log when rewind forks history. Heartbeats are not logged. Browser storage uses OPFS; Node storage uses files behind the `Storage` interface in `sim/ports.ts`.
 
-Snapshots serialize simulation state as JSON with tagged bigint values (`host/snapshot-codec.ts`). The default periodic cadence is 30,000 ticks. Run switching and rewind use `restoreToTick` to reconstruct state from available snapshots and logs, with a log-replay fallback when snapshots are unavailable. Replay skips persistence-management commands that would switch, delete, or save runs during reconstruction.
+Snapshots serialize simulation state as JSON with tagged bigint values (`host/snapshot-codec.ts`). The default periodic cadence is 30,000 ticks. Run switching and rewind use `restoreToTick` to reconstruct state from available snapshots and logs, trying snapshots newest-first and skipping missing, unreadable or tick-mismatched caches. If none is usable, they rebuild from the seed and command log when available. A loaded timeline with no seed still requires at least one usable anchor. Replay skips persistence-management commands that would switch, delete, or save runs during reconstruction.
 
 Named save slots are distinct from run storage: Save captures a fresh snapshot; Load requires that snapshot, forks the active timeline, and copies it into the new active run as a replay anchor. Missing or unreadable named-save snapshots do not yet have a log-rebuild fallback. Rewind is destructive to the active future; saving first preserves a way back.
 

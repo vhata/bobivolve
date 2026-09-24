@@ -1678,8 +1678,8 @@ export class NodeHost {
   //   - no snap entry exists at-or-before target (fresh run, no
   //     cadence snapshot yet), OR
   //   - a snap entry exists in the log but the snapshot file is
-  //     missing on disk (e.g. user nuked the snapshots/ dir, or a
-  //     future Rust port can't read TS-format snaps).
+  //     missing, unreadable, incompatible, or has a mismatched tick; try
+  //     older eligible snapshots before rebuilding from the seed.
   // The cost is a full replay from tick 0; for long runs at fat
   // population that's measurable, but the alternative is the operation
   // failing when it could have recovered.
@@ -1693,33 +1693,34 @@ export class NodeHost {
     entries: readonly LogEntry[],
     persistence: PersistenceOptions,
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    // Snapshots are replaceable caches. Try eligible anchors newest-first;
+    // a corrupt latest cache must not hide an older usable anchor (notably
+    // after Load, whose fork may have no newRun seed to rebuild from).
+    const candidates = entries
+      .filter((entry): entry is SnapLogEntry => entry.type === 'snap' && entry.tick <= targetTick)
+      .sort((a, b) => (a.tick === b.tick ? b.seq - a.seq : a.tick > b.tick ? -1 : 1));
     let bestSnap: SnapLogEntry | null = null;
-    for (const entry of entries) {
-      if (entry.type !== 'snap') continue;
-      if (entry.tick > targetTick) continue;
-      if (
-        bestSnap === null ||
-        entry.tick > bestSnap.tick ||
-        (entry.tick === bestSnap.tick && entry.seq > bestSnap.seq)
-      )
-        bestSnap = entry;
-    }
-
     let usedRebuild = false;
     let startTick = 0n;
     let startSeq = -1;
-    if (bestSnap !== null) {
-      const snapBytes = await persistence.storage.read(bestSnap.snapshotKey);
-      if (snapBytes !== null) {
-        const restored = restore(deserializeSnapshot(snapBytes));
+    for (const candidate of candidates) {
+      try {
+        const bytes = await persistence.storage.read(candidate.snapshotKey);
+        if (bytes === null) continue;
+        const restored = restore(deserializeSnapshot(bytes));
+        // A syntactically readable file from another capture tick is not
+        // the anchor referenced by this log cursor.
+        if (restored.simTick !== candidate.tick) continue;
         this.state = restored;
         this.lastSnapAtTick = restored.simTick;
         startTick = restored.simTick;
-        startSeq = bestSnap.seq;
-      } else {
-        // Snap entry pointed at a missing file — fall through to
-        // rebuild.
-        bestSnap = null;
+        startSeq = candidate.seq;
+        bestSnap = candidate;
+        break;
+      } catch {
+        // Missing/unreadable/incompatible caches are recoverable from an
+        // older snapshot or the seed and command log. No state is assigned
+        // until decoding and restoration have both succeeded.
       }
     }
     if (bestSnap === null) {
@@ -1727,7 +1728,7 @@ export class NodeHost {
       if (rebuilt === null) {
         return {
           ok: false,
-          reason: `no snapshot at-or-before tick ${targetTick.toString()} and log lacks a newRun command to seed a rebuild`,
+          reason: `no usable snapshot at-or-before tick ${targetTick.toString()} and log lacks a newRun command to seed a rebuild`,
         };
       }
       this.state = rebuilt;
