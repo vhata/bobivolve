@@ -28,4 +28,4 @@ Install or refresh the hooks with `scripts/setup.sh` after changing hook configu
 - Documentation and trivial configuration changes need no new tests. Check links, claims, and relevant formatting. Existing hooks and CI still apply.
 - For tuning, compare representative seeded runs and explain the observed effect. An emergent outcome is not a correctness assertion merely because it occurred in the old version.
 
-Record commands and results in the PR, with enough detail to reproduce any behaviour-specific check. Once appropriate checks pass, repeat them only when another change or unresolved concern justifies it.
+Record commands and results in the PR, with enough detail to reproduce any behaviour-specific check. Once appropriate checks pass, repeat them only when another change or unresolved concern justifies it. Complete the [independent agent review procedure](CODE_REVIEW_GUIDE.md#agent-workflow) before handing a code PR to the user for final review.
