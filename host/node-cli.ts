@@ -19,8 +19,8 @@
 //   --run-id <id>         Required when --save-dir is given. Names the run
 //                         under the save dir.
 //   --resume              Resume a previously-saved run. Requires
-//                         --save-dir and --run-id. Sends a Load command
-//                         instead of newRun, then continues to --ticks.
+//                         --save-dir and --run-id. Restores the run log and
+//                         its latest snapshot, then continues to --ticks.
 //
 // Bigint encoding: proto3 JSON encodes uint64 as a string. We follow that
 // convention here so the NDJSON is round-trippable with a JSON parser that
@@ -30,7 +30,8 @@ import { parseArgs } from 'node:util';
 import { NodeHost } from './node.js';
 import { NodeStorage } from './storage-node.js';
 import { NodeTransport } from '../transport/node.js';
-import type { Command, SimEvent } from '../protocol/types.js';
+import type { SimEvent } from '../protocol/types.js';
+import { parseUint64Decimal } from '../protocol/uint64.js';
 
 interface CliOptions {
   readonly seed: bigint | null;
@@ -66,27 +67,21 @@ function parseCliArgs(argv: readonly string[]): CliOptions {
     throw new Error('--seed and --resume are mutually exclusive');
   }
 
-  let seed: bigint | null = null;
-  if (values.seed !== undefined) {
-    try {
-      seed = BigInt(values.seed);
-    } catch {
-      throw new Error(`--seed must be a decimal integer, got: ${values.seed}`);
-    }
-    if (seed < 0n) throw new Error('--seed must be non-negative');
-  }
-
-  let ticks: bigint;
-  try {
-    ticks = BigInt(values.ticks);
-  } catch {
-    throw new Error(`--ticks must be a decimal integer, got: ${values.ticks}`);
-  }
-  if (ticks < 0n) throw new Error('--ticks must be non-negative');
+  const seed = values.seed === undefined ? null : parseUint64Decimal(values.seed);
+  if (values.seed !== undefined && seed === null)
+    throw new Error('--seed must be a decimal uint64');
+  const ticks = parseUint64Decimal(values.ticks);
+  if (ticks === null) throw new Error('--ticks must be a decimal uint64');
 
   const saveDir = values['save-dir'] ?? null;
   const runId = values['run-id'] ?? null;
 
+  if (
+    runId !== null &&
+    (runId === '' || runId === '.' || runId === '..' || /[/\\\0]/.test(runId))
+  ) {
+    throw new Error('--run-id must be a nonempty directory name without path separators');
+  }
   if (saveDir !== null && runId === null) {
     throw new Error('--save-dir requires --run-id');
   }
@@ -125,50 +120,68 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     return 2;
   }
 
+  const storage = opts.saveDir === null ? null : new NodeStorage({ root: opts.saveDir });
   const persistence =
-    opts.saveDir !== null && opts.runId !== null
-      ? { storage: new NodeStorage({ root: opts.saveDir }), runId: opts.runId }
+    storage !== null && opts.runId !== null
+      ? { storage, runId: opts.resume ? `${opts.runId}-cli-startup` : opts.runId }
       : undefined;
-
   const host = new NodeHost({
     heartbeatHz: opts.heartbeat ? 60 : 0,
     ...(persistence !== undefined ? { persistence } : {}),
   });
   const transport = new NodeTransport({ host });
-  const unsubscribe = transport.onEvent(emitEventLine);
+  const errors: string[] = [];
+  const acknowledged = new Set<string>();
+  const unsubscribe = transport.onEvent((event) => {
+    emitEventLine(event);
+    if (event.kind === 'commandError') errors.push(event.message);
+    if (event.kind === 'commandAck') acknowledged.add(event.commandId);
+  });
 
-  if (opts.resume) {
-    const load: Command = {
-      kind: 'load',
-      commandId: 'cli-load',
-      slot: opts.runId ?? 'default',
-    };
-    transport.send(load);
-    // Wait for the load to complete before resuming. Load is async; flush
-    // drains the work queue.
+  try {
+    if (opts.resume) {
+      if (
+        storage === null ||
+        opts.runId === null ||
+        !(await storage.exists(`runs/${opts.runId}/log.ndjson`))
+      ) {
+        throw new Error(`cannot resume: no persisted run ${opts.runId ?? ''}`);
+      }
+      // Start without live state in a distinct slot so switchRun restores
+      // even when the requested slot is named "default". Nothing is saved
+      // in the bootstrap slot: its buffered switch command is discarded.
+      transport.send({ kind: 'switchRun', commandId: 'cli-restore', runId: opts.runId });
+      await host.flush();
+      const restoredTick = host.currentTick();
+      if (!acknowledged.has('cli-restore') || restoredTick === null || errors.length > 0) {
+        throw new Error(`cannot resume: ${errors.join('; ') || 'run restoration failed'}`);
+      }
+      if (opts.ticks < restoredTick) {
+        throw new Error(
+          `--ticks ${opts.ticks} precedes persisted tick ${restoredTick}; resume cannot rewind`,
+        );
+      }
+      transport.send({ kind: 'resume', commandId: 'cli-resume' });
+    } else if (opts.seed !== null) {
+      transport.send({ kind: 'newRun', commandId: 'cli-newRun', seed: opts.seed });
+    }
+
+    host.runUntil(opts.ticks);
+    // Record the exact endpoint even if the final ticks emitted no domain
+    // events. switchRun reconstructs to the log head on the next invocation.
+    if (persistence !== undefined) transport.send({ kind: 'pause', commandId: 'cli-checkpoint' });
     await host.flush();
-    const resume: Command = { kind: 'resume', commandId: 'cli-resume' };
-    transport.send(resume);
-  } else if (opts.seed !== null) {
-    const newRun: Command = {
-      kind: 'newRun',
-      commandId: 'cli-newRun',
-      seed: opts.seed,
-    };
-    transport.send(newRun);
+    if (errors.length > 0 || host.currentTick() !== opts.ticks) {
+      throw new Error(errors.join('; ') || 'simulation did not reach the requested tick');
+    }
+    return 0;
+  } catch (error) {
+    process.stderr.write(`bobivolve: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  } finally {
+    unsubscribe();
+    transport.close();
   }
-
-  // Drive the run-loop synchronously. The CLI is single-threaded; we do not
-  // need the heartbeat-cadence interleaving the UI host needs.
-  host.runUntil(opts.ticks);
-
-  // Flush persistent state before close so writers durably land their
-  // tail; tests reading the log immediately after expect this.
-  await host.flush();
-
-  unsubscribe();
-  transport.close();
-  return 0;
 }
 
 // Top-level entry. node:util's parseArgs takes argv after process.argv[1],
