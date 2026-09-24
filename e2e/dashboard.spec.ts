@@ -564,3 +564,43 @@ test('patch editor closes after the host accepts the patch', async ({ page }) =>
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
 });
+
+test('queued decrees and patch history survive a named save and load', async ({ page }) => {
+  await startFreshRun(page);
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+  await page.locator('.lineage-tree button[aria-pressed]').first().click();
+
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  const patch = page.getByRole('dialog', { name: /Apply patch to/ });
+  await patch.getByRole('textbox', { name: 'gather rate' }).fill('3');
+  await patch.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(patch).toHaveCount(0);
+  await expect(page.locator('.inspector-panel .patches-list')).toContainText('PT0');
+
+  await page.getByRole('button', { name: 'Queue decree', exact: true }).click();
+  const decree = page.getByRole('dialog', { name: 'Compose decree' });
+  // Zero keeps it queued while we test persistence, irrespective of population.
+  await decree.getByRole('textbox', { name: 'population <' }).fill('0');
+  await decree.getByRole('button', { name: 'Queue', exact: true }).click();
+  await expect(decree).toHaveCount(0);
+  await expect(page.locator('.decrees-panel .decree-row')).toHaveCount(1);
+
+  page.once('dialog', (dialog) => {
+    void dialog.accept('intervention-checkpoint');
+  });
+  await page.locator('.run-panel').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.run-status')).toContainText(/saved at tick \d+/);
+  await page.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await expect(page.locator('.decrees-panel .decree-row')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await page
+    .locator('.load-picker .save-load-button')
+    .filter({ hasText: 'intervention-checkpoint' })
+    .click();
+  await expect(page.locator('.load-picker')).toHaveCount(0);
+  await expect(page.locator('.decrees-panel .decree-row')).toHaveCount(1);
+  await expect(page.locator('.inspector-panel .patches-list')).toContainText('PT0');
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+});

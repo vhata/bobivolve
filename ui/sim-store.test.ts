@@ -15,8 +15,10 @@ class StubTransport implements SimTransport {
       this.listener = null;
     };
   }
+  queryResult: Promise<QueryResult> | null = null;
   query(_query: Query): Promise<QueryResult> {
-    throw new Error('unused');
+    if (this.queryResult === null) throw new Error('unused');
+    return this.queryResult;
   }
   close(): void {}
   emit(event: SimEvent): void {
@@ -62,5 +64,69 @@ describe('intervention command feedback', () => {
     if (command === undefined) throw new Error('missing command');
     transport.emit({ kind: 'commandAck', simTick: 0n, commandId: command.commandId });
     await expect(reply).resolves.toBeNull();
+  });
+});
+
+describe('startup history races', () => {
+  it.each([true, false])(
+    'does not overwrite a player start with delayed bootstrap (existing=%s)',
+    async (existing) => {
+      const transport = new StubTransport();
+      let resolve!: (result: QueryResult) => void;
+      transport.queryResult = new Promise((done) => {
+        resolve = done;
+      });
+      useSimStore.getState().attach(transport);
+      const bootstrap = useSimStore.getState().bootstrapRun();
+      useSimStore.getState().startRun(2026n);
+      resolve({
+        kind: 'listRuns',
+        queryId: '',
+        activeRunId: 'default',
+        runs: existing
+          ? [
+              {
+                runId: 'default',
+                latestTick: '100',
+                lastModifiedMs: 1,
+              },
+            ]
+          : [],
+      });
+      await bootstrap;
+      expect(useSimStore.getState().seed).toBe(2026n);
+      expect(useSimStore.getState().paused).toBe(false);
+      expect(transport.sent.filter((c) => c.kind === 'newRun')).toHaveLength(1);
+    },
+  );
+
+  it('discards lineage rehydration from an earlier timeline', async () => {
+    const transport = new StubTransport();
+    let resolve!: (result: QueryResult) => void;
+    transport.queryResult = new Promise((done) => {
+      resolve = done;
+    });
+    useSimStore.getState().attach(transport);
+    const rehydrate = useSimStore.getState().rehydrateAfterLoad();
+    useSimStore.getState().startRun(2026n);
+    resolve({
+      kind: 'lineageTree',
+      queryId: '',
+      lineages: [
+        {
+          id: 'old-lineage',
+          patches: [],
+          name: 'Old history',
+          parentLineageId: '',
+          founderProbeId: 'P0',
+          foundedAtTick: 0n,
+          extinctionTick: null,
+          quarantined: true,
+        },
+      ],
+    });
+    await rehydrate;
+    expect(useSimStore.getState().lineages.has('old-lineage')).toBe(false);
+    expect(useSimStore.getState().quarantinedLineages.size).toBe(0);
   });
 });

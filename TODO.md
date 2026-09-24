@@ -7,8 +7,9 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
 - Measure browser OPFS persistence and player-visible rewind latency, then choose supported session/storage budgets and retention rules. The [filesystem benchmark](docs/SNAPSHOT_BENCHMARK.md) now measures capture/encode/write/read/restore, full host rewind, and cumulative storage growth; Node timings do not establish browser performance. #host #performance
-- Reconcile acceptance claims with actual CI and golden coverage; add intervention and history workflow cases. The forensic browser test now passes when it explicitly starts a fresh run. #test #docs
 - Complete the [R2 engineer-loop experiment](docs/R2_ENGINEER_LOOP_EXPERIMENT.md) with player sessions and a chosen cost model before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. The seeded founder comparison is complete; mechanic selection and human playtest remain player decisions. #r2 #design
+
+- Add a validated CLI command-script input for patch/decree/quarantine histories, then compare its event stream with the transport-driven intervention fixture. Acceptance previously claimed this capability without a CLI implementation. Source: acceptance coverage audit, 2026-09-23. #r2 #host #test
 
 ## Foundational
 

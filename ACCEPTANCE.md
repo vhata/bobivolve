@@ -10,6 +10,8 @@ Marker:
 
 The list for a release is fleshed out when work on that release begins; speculative criteria for far-off releases just rot.
 
+Release verdicts below are historical shipping decisions, not evidence of a fresh human playtest. Current automated coverage is described explicitly; the R2 player study remains [pending](docs/R2_ENGINEER_LOOP_EXPERIMENT.md).
+
 ## Release 0 — Petri Dish
 
 **Design question:** _Does the firmware-as-data idea produce interesting drift on its own, with no goals or pressure?_
@@ -31,8 +33,8 @@ The list for a release is fleshed out when work on that release begins; speculat
 - `✓` Determinism — same seed → byte-for-byte same event log; locked under `test/determinism/golden/` and verified in CI
 - `✓` Save / load — headless CLI (`pnpm sim --save-dir … --run-id … --resume`) and dashboard buttons; both back the same on-disk shape via `Storage`
 - `✓` Headless capability — `pnpm sim` runs the same simulation without any UI attached
-- `✓` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`
-- `✓` Layered review — Layer 1 lint enforces sim-side determinism disciplines; Layer 2 review skill (`/bobivolve-review`) is authored and ready
+- `✓` Automated gates — CI runs format, lint, typecheck, Vitest and build, plus functional Chromium workflows. Local diagnostic browser probes are excluded from CI; see [validation policy](docs/QUALITY.md)
+- `✓` Review discipline — ESLint enforces sim-side determinism rules; human/agent review follows the [code review guide](docs/CODE_REVIEW_GUIDE.md). The former `/bobivolve-review` skill has been retired.
 
 ### Acceptance test (manual)
 
@@ -73,7 +75,7 @@ Shipped as `r0-petri-dish`. The R0 design question — does firmware-as-data dri
 - `✓` Save / load round-trips the new state — probe positions, energies, and the lattice resource grid all survive a snapshot
 - `✓` Headless capability extends — `pnpm sim` runs the full R1 mechanics with no UI attached
 - `✓` Auto-pause: lineage extinction fires when a clade loses its last extant member; the dashboard checkbox is live
-- `✓` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`
+- `✓` Automated gates — CI runs format, lint, typecheck, Vitest and build, plus functional Chromium workflows. Local diagnostic browser probes are excluded from CI; see [validation policy](docs/QUALITY.md)
 
 ### Acceptance test (manual)
 
@@ -111,10 +113,10 @@ R2 turns the player from a spectator into a participant. The simulation already 
 
 ### Technical acceptance criteria
 
-- `✓` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. Goldens are checked in and verified in CI.
+- `✓` Determinism extends to interventions — the same (seed, command-log) including patch / decree / quarantine commands produces a byte-for-byte identical event log. The seed-42 intervention golden exercises patch application/saturation, decree queue/fire, and quarantine/release; it is checked in and verified in CI. Full-state save/load/rewind/run-switch equivalence is covered separately by `host/node-history.test.ts`.
 - `✓` Save / load round-trips intervention state — quarantines, queued decrees, applied-patch metadata, and the Origin compute budget all survive a snapshot.
-- `✓` Headless capability extends — `pnpm sim` accepts a command script that includes patches, decrees, and quarantines, and produces the same event log a UI-driven session would.
-- `✓` Always green — format / lint / typecheck / vitest / Playwright e2e all pass on every commit to `main`.
+- `—` CLI command scripts — the Node host and determinism runner accept interventions programmatically, but `scripts/sim.sh` has no command-script flag. Scripted CLI input and browser/headless byte-stream parity are not verified release guarantees; the CLI follow-up is tracked in [TODO.md](TODO.md).
+- `✓` Automated gates — CI runs format, lint, typecheck, Vitest and build, plus functional Chromium workflows. Local diagnostic browser probes are excluded from CI; see [validation policy](docs/QUALITY.md).
 
 ### Deferred to a later release (with rationale)
 
