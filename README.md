@@ -52,6 +52,8 @@ Schedule interventions with `--commands path/to/script.json`. The JSON array use
 
 Commands run after advancing to their tick, before the next tick, in array order. Supported kinds are `applyPatch`, `queueDecree`, `revokeDecree`, `quarantine`, and `releaseQuarantine`; their fields follow `protocol/types.ts`. Scripts must be at most 1 MiB, ordered, within `--ticks`, and have unique nonempty command IDs (the `cli-` prefix is reserved). The entire structure is validated before starting; missing lineages or insufficient compute fail at execution with a nonzero exit code. Earlier successful commands are not rolled back; when persistence is enabled, their history is flushed before exiting after a rejected command. If that flush fails, the CLI reports both the command and storage errors. With `--resume`, supply only new commands strictly after the persisted endpoint so same-tick interventions cannot be accidentally applied twice. Heartbeats remain optional; use `--no-heartbeat` for reproducible output.
 
+The experimental R2 cost comparison runs with `scripts/r2-cost-experiment.sh`; its scope and recorded results are in [the experiment report](docs/R2_ENGINEER_LOOP_EXPERIMENT.md#delegated-cost-model-pass--2026-09-24). It does not change production simulation rules.
+
 ## Development workflows
 
 Run these executable scripts directly. Dependencies are installed with `scripts/install.sh`; refresh Git hooks after pulling hook changes with `scripts/setup.sh`.
