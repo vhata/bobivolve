@@ -224,7 +224,8 @@ describe('CLI run recovery', () => {
     const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       expect(await runCli(['--resume', ...persistentArgs('20')])).toBe(1);
-      expect(io.stderr).toContain('run restoration failed');
+      expect(io.stderr).toContain('cannot resume:');
+      expect(io.stdout).toContain('"kind":"commandError"');
       expect(readFileSync(logPath, 'utf8')).toBe('{bad json\n');
     } finally {
       diagnostic.mockRestore();

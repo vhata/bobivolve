@@ -10,6 +10,7 @@
 // every backing store we plan to use.
 export interface Storage {
   read(key: string): Promise<Uint8Array | null>;
+  // Replace atomically: a rejected write must leave any previous value intact.
   write(key: string, data: Uint8Array): Promise<void>;
   append(key: string, data: Uint8Array): Promise<void>;
   delete(key: string): Promise<void>;

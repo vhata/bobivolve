@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
+import { EventLogReader } from './event-log.js';
 import { NodeHost } from './node.js';
 import { NodeStorage } from './storage-node.js';
 import type { Command, SimEvent } from '../protocol/types.js';
@@ -134,7 +135,11 @@ it('reports an unrecoverable loaded timeline without replacing live state or tru
     await host.flush();
     const before = await storage.read('saves/before.save');
     const log = await storage.read('runs/run/log.ndjson');
-    await storage.write('runs/run/snapshots/10.snap', new TextEncoder().encode('broken'));
+    const anchor = (await new EventLogReader(storage, 'runs/run/log.ndjson').readAll()).find(
+      (e) => e.type === 'snap',
+    );
+    if (anchor?.type !== 'snap') throw new Error('missing load anchor');
+    await storage.write(anchor.snapshotKey, new TextEncoder().encode('broken'));
     host.send({ kind: 'rewindToTick', commandId: 'recover', tick: 15n });
     await host.flush();
     expect(

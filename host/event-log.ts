@@ -110,6 +110,7 @@ export class EventLogWriter {
   private buffer: LogEntry[] = [];
   private currentTick: bigint | null = null;
   private nextSeq = 0;
+  private flushing: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly storage: Storage,
@@ -129,11 +130,18 @@ export class EventLogWriter {
   }
 
   // Drain all buffered entries to storage. Idempotent on an empty buffer.
-  async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
-    const text = this.buffer.map(serializeEntry).join('');
-    this.buffer = [];
-    await this.storage.append(this.key, new TextEncoder().encode(text));
+  flush(): Promise<void> {
+    const operation = this.flushing
+      .catch(() => {})
+      .then(async () => {
+        if (this.buffer.length === 0) return;
+        const count = this.buffer.length;
+        const text = this.buffer.slice(0, count).map(serializeEntry).join('');
+        await this.storage.append(this.key, new TextEncoder().encode(text));
+        this.buffer.splice(0, count);
+      });
+    this.flushing = operation;
+    return operation;
   }
 
   // Force the writer to use a specific (tick, seq) baseline. Used by load

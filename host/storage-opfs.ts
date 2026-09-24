@@ -72,6 +72,7 @@ interface OPFSWritable {
   write(data: Uint8Array): Promise<void>;
   seek(position: number): Promise<void>;
   close(): Promise<void>;
+  abort(): Promise<void>;
 }
 
 // Locator for a key once it has been validated and split into directory
@@ -112,9 +113,11 @@ export class OPFSStorage implements Storage {
     const writable = await fileHandle.createWritable({ keepExistingData: false });
     try {
       await writable.write(data);
-    } finally {
-      await writable.close();
+    } catch (error) {
+      await writable.abort();
+      throw error;
     }
+    await writable.close();
   }
 
   async append(key: string, data: Uint8Array): Promise<void> {
@@ -129,9 +132,11 @@ export class OPFSStorage implements Storage {
     try {
       await writable.seek(file.size);
       await writable.write(data);
-    } finally {
-      await writable.close();
+    } catch (error) {
+      await writable.abort();
+      throw error;
     }
+    await writable.close();
   }
 
   async delete(key: string): Promise<void> {
