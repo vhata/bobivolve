@@ -30,8 +30,8 @@ export interface ExploreDirective {
   readonly kind: 'explore';
   // u64-threshold gate per tick: a PRNG draw strictly less than this
   // value triggers a single-step move to a uniformly random cardinal
-  // neighbour (boundary blocks are no-ops). Threshold ≈ 2^60 ≈ 6.25%
-  // chance per tick at the founder default.
+  // neighbour (boundary blocks are no-ops). The founder threshold 2^58
+  // gives a 1/64 (1.5625%) movement-attempt probability per tick.
   readonly threshold: bigint;
 }
 

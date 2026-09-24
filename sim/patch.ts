@@ -11,9 +11,9 @@
 // firmware AND every extant probe in the lineage. New mutations roll on
 // top of the patch from that point forward; descendants speciating from
 // the patched lineage carry the patched directives as their starting
-// point. PatchSaturated detection and per-patch propagation tracking are
-// deferred — the immediate UX gives the player a working "edit and apply"
-// loop without the full bookkeeping the spec implies.
+// point. Patch records track inherited provenance; checkPatchSaturation
+// reports when carriers reach the configured population share. Provenance
+// does not imply that mutation has preserved the authored firmware.
 //
 // Determinism: applying a patch consumes no PRNG draws and uses pure
 // integer arithmetic. Two runs that share the same (seed, command-log,
