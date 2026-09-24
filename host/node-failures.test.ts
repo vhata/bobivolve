@@ -114,3 +114,34 @@ it('reports a failed save once and permits a later successful save', async () =>
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('accepts commands issued synchronously by a completion listener and drains their work', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'bobivolve-ack-ready-'));
+  try {
+    const storage = new NodeStorage({ root });
+    const host = new NodeHost({ heartbeatHz: 0, persistence: { storage, runId: 'run' } });
+    const events: SimEvent[] = [];
+    host.subscribe((event) => {
+      events.push(event);
+      if (event.kind === 'commandAck' && event.commandId === 'load-first') {
+        host.send({ kind: 'load', commandId: 'load-second', slot: 'checkpoint' });
+      }
+      if (event.kind === 'commandAck' && event.commandId === 'load-second') {
+        host.send({ kind: 'quarantine', commandId: 'after-load', lineageId: 'L0' });
+      }
+    });
+    host.send({ kind: 'newRun', commandId: 'new', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'save', commandId: 'save', slot: 'checkpoint' });
+    await host.flush();
+    host.send({ kind: 'load', commandId: 'load-first', slot: 'checkpoint' });
+    await host.flush();
+    expect(events.filter((event) => event.kind === 'commandError')).toEqual([]);
+    expect(
+      events.some((event) => event.kind === 'commandAck' && event.commandId === 'after-load'),
+    ).toBe(true);
+    expect(host.quarantinedLineages().has('L0')).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

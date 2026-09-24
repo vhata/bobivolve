@@ -53,8 +53,11 @@ export class NodeStorage implements Storage {
     try {
       await writeFile(temporary, data);
       await rename(temporary, path);
-    } finally {
-      await rm(temporary, { force: true });
+    } catch (error) {
+      // Cleanup is best effort; preserve the original write failure.
+      // Once rename commits, no further fallible work may reject write().
+      await rm(temporary, { force: true }).catch(() => {});
+      throw error;
     }
   }
 

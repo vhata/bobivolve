@@ -339,7 +339,7 @@ export class NodeHost {
   // listener emission so replayed events don't double-up the log or fire
   // the UI again.
   private replaying = false;
-  private transitionPending = false;
+  private transitionCommandId: string | null = null;
   private backgroundFailure: unknown = null;
 
   // Run-loop state. Null until the first newRun command lands.
@@ -379,7 +379,7 @@ export class NodeHost {
   // call in a Promise for interface symmetry with cross-process variants.
   // ARCHITECTURE.md "Query: pull-only, never pushed".
   async executeQuery(query: Query): Promise<QueryResult> {
-    if (this.transitionPending) await this.workQueue;
+    if (this.transitionCommandId !== null) await this.workQueue;
     switch (query.kind) {
       case 'probeInspector':
         return this.queryProbeInspector(query.queryId, query.probeId);
@@ -647,7 +647,11 @@ export class NodeHost {
   // work (Save, Load, snapshot writes) to complete. Tests await this before
   // asserting on storage contents; the CLI awaits it before close.
   async flush(): Promise<void> {
-    await this.workQueue;
+    let pending: Promise<void>;
+    do {
+      pending = this.workQueue;
+      await pending;
+    } while (pending !== this.workQueue);
     if (this.backgroundFailure !== null) {
       const failure = this.backgroundFailure;
       this.backgroundFailure = null;
@@ -668,8 +672,8 @@ export class NodeHost {
   // commands are acknowledged via commandAck once their effect has been
   // applied to host state.
   send(cmd: Command): void {
-    if (this.transitionPending) {
-      this.error(cmd.commandId, 'timeline operation in progress; retry after completion');
+    if (this.transitionCommandId !== null) {
+      this.error(cmd.commandId, 'timeline operation in progress; retry after completion', false);
       return;
     }
     // Log every command except Load, newRun, and RewindToTick:
@@ -988,7 +992,7 @@ export class NodeHost {
   // tick is BigInt-heavy, and any incoming pause/setSpeed message sits
   // in the postMessage queue for that whole duration.
   runUntil(untilTick: bigint, wallClockBudgetMs?: number): void {
-    if (this.state === null || this.transitionPending) return;
+    if (this.state === null || this.transitionCommandId !== null) return;
     // The heartbeat baseline is updated at end-of-emit, not at start
     // here. Resetting at runUntil start would constrain each heartbeat
     // to measure only the per-pulse advance, ignoring the idle gap
@@ -1260,6 +1264,7 @@ export class NodeHost {
   // ── ack / error / emit ─────────────────────────────────────────────────────
 
   private ack(commandId: string): void {
+    if (this.transitionCommandId === commandId) this.transitionCommandId = null;
     if (commandId === '') return;
     const tickAt = this.state?.simTick ?? 0n;
     const event: CommandAckEvent & { simTick: bigint } = {
@@ -1270,7 +1275,9 @@ export class NodeHost {
     this.emit(event);
   }
 
-  private error(commandId: string, message: string): void {
+  private error(commandId: string, message: string, completesTransition = true): void {
+    if (completesTransition && this.transitionCommandId === commandId)
+      this.transitionCommandId = null;
     if (commandId === '') return;
     const tickAt = this.state?.simTick ?? 0n;
     const event: CommandErrorEvent & { simTick: bigint } = {
@@ -1821,13 +1828,13 @@ export class NodeHost {
   }
 
   private transition(commandId: string, work: () => Promise<void>): void {
-    this.transitionPending = true;
+    this.transitionCommandId = commandId;
     this.paused = true;
     this.enqueue(async () => {
       try {
         await work();
       } finally {
-        this.transitionPending = false;
+        if (this.transitionCommandId === commandId) this.transitionCommandId = null;
       }
     }, commandId);
   }
