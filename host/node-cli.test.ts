@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runCli } from './node-cli.js';
+import { NodeStorage } from './storage-node.js';
 
 // CLI smoke tests. The CLI itself is a thin wrapper around NodeTransport;
 // these tests verify argument parsing, NDJSON emission, and the exit-code
@@ -377,5 +378,76 @@ describe('CLI intervention scripts', () => {
       await runCli(['--resume', '--ticks', '400', ...common, '--commands', script(INTERVENTIONS)]),
     ).toBe(1);
     expect(io.stderr).toContain('continuation-only');
+  });
+
+  it('persists successful interventions before a later rejection and can resume them', async () => {
+    const common = ['--no-heartbeat', '--save-dir', root, '--run-id', 'run'];
+    expect(await runCli(['--seed', '42', '--ticks', '5', ...common])).toBe(0);
+    const path = script([
+      { tick: '6', command: { kind: 'quarantine', commandId: 'held', lineageId: 'L0' } },
+      { tick: '7', command: { kind: 'quarantine', commandId: 'missing', lineageId: 'L999' } },
+      { tick: '8', command: { kind: 'releaseQuarantine', commandId: 'later', lineageId: 'L0' } },
+    ]);
+    expect(await runCli(['--resume', '--ticks', '10', ...common, '--commands', path])).toBe(1);
+    expect(io.stderr).toContain('unknown lineage');
+    const history = readFileSync(join(root, 'runs/run/log.ndjson'), 'utf8');
+    expect(history).toContain('"commandId":"held"');
+    expect(history).not.toContain('"commandId":"later"');
+
+    io.stderr = '';
+    expect(
+      await runCli([
+        '--resume',
+        '--ticks',
+        '10',
+        ...common,
+        '--commands',
+        script([
+          {
+            tick: '8',
+            command: { kind: 'releaseQuarantine', commandId: 'continued', lineageId: 'L0' },
+          },
+        ]),
+      ]),
+    ).toBe(0);
+    expect(io.stderr).toBe('');
+    expect(readFileSync(join(root, 'runs/run/log.ndjson'), 'utf8')).toContain(
+      '"commandId":"continued"',
+    );
+  });
+
+  it('reports both the rejected intervention and failure to persist earlier commands', async () => {
+    const common = ['--no-heartbeat', '--save-dir', root, '--run-id', 'run'];
+    expect(await runCli(['--seed', '42', '--ticks', '5', ...common])).toBe(0);
+    const append = NodeStorage.prototype.append;
+    const fault = vi.spyOn(NodeStorage.prototype, 'append').mockImplementation(function (
+      this: NodeStorage,
+      key,
+      data,
+    ) {
+      if (new TextDecoder().decode(data).includes('"commandId":"missing"')) {
+        return Promise.reject(new Error('disk full'));
+      }
+      return append.call(this, key, data);
+    });
+    try {
+      expect(
+        await runCli([
+          '--resume',
+          '--ticks',
+          '10',
+          ...common,
+          '--commands',
+          script([
+            { tick: '6', command: { kind: 'quarantine', commandId: 'held', lineageId: 'L0' } },
+            { tick: '7', command: { kind: 'quarantine', commandId: 'missing', lineageId: 'L999' } },
+          ]),
+        ]),
+      ).toBe(1);
+      expect(io.stderr).toContain('unknown lineage');
+      expect(io.stderr).toContain('could not persist completed commands: disk full');
+    } finally {
+      fault.mockRestore();
+    }
   });
 });

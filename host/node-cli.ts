@@ -185,9 +185,18 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       host.runUntil(entry.tick);
       transport.send(entry.command);
       if (errors.length > 0 || !acknowledged.has(entry.command.commandId)) {
-        throw new Error(
-          errors.join('; ') || `command ${entry.command.commandId} was not acknowledged`,
-        );
+        const failure =
+          errors.join('; ') || `command ${entry.command.commandId} was not acknowledged`;
+        // Earlier acknowledged interventions must survive a rejected command.
+        // Preserve the execution error if storage cannot flush that history.
+        try {
+          await host.flush();
+        } catch (error) {
+          throw new Error(
+            `${failure}; could not persist completed commands: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        throw new Error(failure);
       }
     }
     host.runUntil(opts.ticks);
