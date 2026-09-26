@@ -29,7 +29,9 @@ The earlier 50,000-tick incursion guess is too late for a short session and prec
 
 The old brief proposed only a `proximityToCell` decree trigger. That detects a situation but cannot express avoidance with today's gather/explore/replicate directives. The prototype therefore needs one additional firmware directive: `protectedZone { x, y, radius }`.
 
-Treat protection as a constraint collected before action execution, regardless of its stack position. A probe carrying it cannot gather or replicate inside the zone, and explore refuses destination cells inside the zone. A probe already inside may leave; it receives no forced movement or free energy. Evaluate distances with squared integer Euclidean distance, including the boundary. Multiple zones form a union. Coordinates must be inside the lattice and radius must be 0–8 inclusive. Host validation happens before charging compute.
+Treat protection as a constraint collected before action execution, regardless of its stack position. A probe carrying it cannot gather or replicate inside any protected zone. Evaluate distances with squared integer Euclidean distance, including the boundary; multiple zones form a union. Coordinates must be inside the lattice and radius must be 0–8 inclusive. Host validation happens before charging compute.
+
+Exploration from outside that union refuses destinations inside it. An existing occupant may take ordinary exploration steps, including steps that remain inside the union, until it reaches an unprotected cell; from there, re-entry is refused. This permits gradual escape through overlapping zones without extra history state or a guaranteed escape time. Gathering and replication remain blocked on every protected cell throughout. Apply the constraint after the normal exploration gate and destination draws; reject a forbidden candidate without redrawing, forced movement, or free energy.
 
 The directive is inheritable. Initially mutate only radius by one cell, clamped to bounds; existing directive loss/duplication can also remove or duplicate protection. Keep the centre stable so a minor mutation cannot silently relocate a treaty. Compare the current firmware with the authored zone in the inspector. A historical patch ID must never be presented as proof that current descendants still protect the same area.
 
@@ -59,7 +61,7 @@ The current proposal PR depends on the [R2 experiment and player-facing decision
 ## Acceptance evidence to collect
 
 - A fixture reaches an inhabited cell; zero-yield gather and blocked replication cause no false violation. Positive extraction escalates once; successful replication emits exactly one extinction.
-- Protected-zone boundaries, existing occupants, duplicate zones, and removal/radius mutation behave as described without extra movement PRNG draws.
+- Protected-zone boundaries, duplicate zones, and removal/radius mutation behave as described without extra movement PRNG draws. An occupant at the centre of a radius-2 zone can escape over ordinary steps, including through overlapping zones; intermediate protected cells still block gathering and replication. Once outside the union, re-entry is refused and a rejected step does not redraw.
 - A queued proximity response cannot prevent harm earlier in its firing tick, and the player sees that limitation before queueing it.
 - The same contact history survives full-state save/load, missing-cache rebuild, same-tick rewind, run switching, and scripted headless replay. R2 saves retain R2 outcomes.
 - Crisis speed caps never resume a paused game; expiry restores requested speed. Invalid commands do not spend compute.
