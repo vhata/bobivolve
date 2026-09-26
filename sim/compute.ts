@@ -6,8 +6,7 @@
 // tunables and the pure functions that move the budget; sim/step.ts wires
 // them into the tick loop.
 //
-// Cost shapes by intervention (the three flavours land in their own
-// commits as each lands):
+// Current intervention costs:
 //
 //   - Patch authoring: one-shot cost on submission. Failure surfaces as
 //     CommandError when the budget is too small.
@@ -38,15 +37,13 @@ export const ORIGIN_COMPUTE_REGEN_PER_TICK = 1n;
 // regen so one hold is a true wash; two holds bleed at 1/tick; etc.
 export const QUARANTINE_MAINTENANCE_PER_TICK = 1n;
 
-// One-shot cost to author a patch. Patches are the "design work"
-// intervention — meaningful enough that the player should feel the
-// scarcity of the budget. ~17 minutes of regen at default cap.
-// Patches are not yet implemented; the constant lives here so the
-// budget UX can show the cost before the mechanic ships.
+// One-shot patch authoring cost. At one compute unit per tick this
+// recovers in 100 ticks without quarantines; wall-clock time depends
+// on achieved simulation speed.
 export const PATCH_AUTHORING_COST = 100n;
 
 // One-shot cost to queue a decree. Decrees are conditional patches and
-// share the same authoring cost. Same caveat — not yet implemented.
+// share the same authoring cost.
 export const DECREE_AUTHORING_COST = 100n;
 
 // Apply per-tick maintenance and regen, in that order. Maintenance is
@@ -55,11 +52,11 @@ export const DECREE_AUTHORING_COST = 100n;
 // clamped at the cap. Returns the new budget; callers store it back on
 // the state.
 //
-// Order rationale: maintenance first, regen second. Reversing would let
-// a tick's regen cover that same tick's hold cost, which softens the
-// signal — at one regen per tick and one hold per tick the player would
-// see a stable budget under load and never feel the bleed. Maintenance
-// first surfaces the cost as a falling readout the player notices.
+// Maintenance precedes regeneration. With one funded hold, its one-unit
+// cost cancels the one-unit regeneration; multiple holds drain the budget.
+// At exhaustion the current rule clamps the charge and regenerates one
+// unit while holds remain active. Exhaustion policy remains deferred in
+// TODO.md.
 export function applyComputeTick(budget: bigint, heldQuarantines: number): bigint {
   const maintenance = QUARANTINE_MAINTENANCE_PER_TICK * BigInt(heldQuarantines);
   const drained = maintenance > budget ? 0n : budget - maintenance;

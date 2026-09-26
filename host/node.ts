@@ -936,10 +936,8 @@ export class NodeHost {
   // commands kept the seam clean; a single internal helper keeps the host
   // code from duplicating the validation.
   //
-  // Origin compute gating is deferred to task 3 — SPEC says quarantine
-  // costs Origin compute, the agreed shape is a per-tick maintenance
-  // cost while a quarantine is held. That gate lands when the budget
-  // does; this slice ships the flag-only mechanic.
+  // Quarantine maintenance is charged by applyComputeTick in the sim.
+  // Toggling the flag itself has no one-shot authoring charge.
   private handleQuarantineToggle(commandId: string, lineageId: string, quarantine: boolean): void {
     if (this.state === null) {
       this.error(
