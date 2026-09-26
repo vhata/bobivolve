@@ -16,6 +16,7 @@ import type { DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.
 import { useSimStore } from '../sim-store.js';
 import { DecreeComposerModal } from './DecreeComposerModal.js';
 import { PatchEditorModal } from './PatchEditorModal.js';
+import { AncestryPinControls } from './AncestryGroups.js';
 
 const BAR_PX = 220;
 const SPARK_PX_W = 220;
@@ -230,6 +231,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
   const lineages = useSimStore((s) => s.lineages);
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
+  const selectLineage = useSimStore((s) => s.selectLineage);
   const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
   const quarantine = useSimStore((s) => s.quarantine);
   const releaseQuarantine = useSimStore((s) => s.releaseQuarantine);
@@ -373,6 +375,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
           <p className="panel-empty">unknown lineage {selectedLineageId}</p>
         ) : (
           <>
+            <AncestryPinControls key={lineage.id} lineageId={lineage.id} />
             <dl className="inspector-detail">
               <div>
                 <dt>founder</dt>
@@ -384,7 +387,21 @@ export function LineageInspectorPanel(): React.JSX.Element {
               </div>
               <div>
                 <dt>parent</dt>
-                <dd>{lineage.parentId ?? '—'}</dd>
+                <dd>
+                  {lineage.parentId === null ? (
+                    '—'
+                  ) : (
+                    <button
+                      type="button"
+                      className="lineage-action"
+                      onClick={() => {
+                        if (lineage.parentId !== null) selectLineage(lineage.parentId);
+                      }}
+                    >
+                      Inspect parent {lineage.parentId}
+                    </button>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>members</dt>

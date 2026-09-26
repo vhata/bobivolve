@@ -264,6 +264,7 @@ body {
 .lineage-tree-panel {
   grid-column: span 2;
   min-width: 0;
+  max-height: 640px;
 }
 
 .inspector-panel {
@@ -312,6 +313,115 @@ body {
    deep. */
 .lineage-tree-panel .panel-body {
   overflow-x: auto;
+}
+
+.ancestry-groups {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  white-space: normal;
+}
+
+.ancestry-heading,
+.ancestry-pin-actions,
+.ancestry-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ancestry-heading > span,
+.ancestry-help,
+.ancestry-pagination {
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+
+.ancestry-help {
+  line-height: 1.5;
+  margin: 0.5rem 0;
+}
+.ancestry-group-list,
+.ancestry-member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+.ancestry-group-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.ancestry-group-button {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  padding: 0.6rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.ancestry-group-button[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+.ancestry-group-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.ancestry-group-name .lineage-swatch {
+  flex-shrink: 0;
+}
+.ancestry-root {
+  color: var(--text-2);
+  font-size: 0.7rem;
+}
+.ancestry-members {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+.ancestry-members h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.ancestry-search {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+.ancestry-search input {
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  color: var(--text);
+  background: var(--surface);
+}
+.ancestry-member-list button {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  margin-bottom: 0.3rem;
+  text-align: left;
+}
+.ancestry-pin-controls {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.ancestry-pin-actions {
+  justify-content: flex-start;
 }
 
 /* Living / Phylogeny tab toggle. Inline at the top of the panel
@@ -2056,4 +2166,9 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.ancestry-member-list {
+  max-height: 14rem;
+  overflow-y: auto;
 }

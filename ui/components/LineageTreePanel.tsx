@@ -14,6 +14,7 @@ import type { LineageNode, PopulationHistoryPoint } from '../sim-store.js';
 import { useSimStore } from '../sim-store.js';
 import { useThrottled } from '../use-throttled.js';
 import { PhylogenyView } from './PhylogenyView.js';
+import { AncestryGroups } from './AncestryGroups.js';
 
 // At fat population the tree-build (~O(lineages²) on parent-chain
 // walks) and trend computation (O(living × history-window) BigInt
@@ -364,6 +365,7 @@ export function LineageTreePanel(): React.JSX.Element {
         </span>
       </header>
       <div className="panel-body">
+        <AncestryGroups />
         <LineageViewToggle view={view} onChange={setView} />
         {view === 'phylogeny' ? (
           <PhylogenyView
