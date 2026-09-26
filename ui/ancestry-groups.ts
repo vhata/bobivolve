@@ -2,6 +2,16 @@ import type { LineageNode } from './sim-store.js';
 
 export const MAX_ANCESTRY_GROUPS = 6;
 export const MAX_ANCESTRY_NAME_LENGTH = 40;
+// Group identity is player-selected, so adjacent genetic IDs must not receive
+// indistinguishable colours from the lineage hash. Persist the chosen slot.
+export const ANCESTRY_GROUP_COLORS = [
+  'oklch(0.72 0.13 255)',
+  'oklch(0.78 0.13 75)',
+  'oklch(0.75 0.13 150)',
+  'oklch(0.75 0.13 330)',
+  'oklch(0.78 0.1 200)',
+  'oklch(0.72 0.16 25)',
+] as const;
 
 // Dashboard metadata only: genetic names, ancestry and firmware stay untouched.
 export interface AncestryPin {

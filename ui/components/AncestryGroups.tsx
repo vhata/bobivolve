@@ -96,7 +96,7 @@ function ReadyAncestryGroups(): React.JSX.Element {
                 root {group.rootId}
                 {!sample.lineages.has(group.rootId)
                   ? ' · not on this timeline'
-                  : (sample.population.get(group.rootId) ?? 0n) === 0n
+                  : (sample.lineages.get(group.rootId)?.extinctionTick ?? null) !== null
                     ? ' · root extinct'
                     : ''}
               </span>

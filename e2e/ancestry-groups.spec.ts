@@ -80,7 +80,13 @@ test('pinned roots follow new descendants, partition nested groups, and retain r
     })
     .toBe(true);
   await expect(root.locator('.lineage-swatch')).toHaveAttribute('style', color!);
+  await expect(
+    page.locator(`.ancestry-group-list [data-root-id="${childId}"] .lineage-swatch`),
+  ).not.toHaveAttribute('style', color!);
   await page.setViewportSize({ width: 1400, height: 1000 });
+  await page.locator('.lineage-tree-panel .panel-body').evaluate((body) => {
+    body.scrollTop = 0;
+  });
   await page.screenshot({
     path: testInfo.outputPath('ancestry-nested-desktop.png'),
     fullPage: true,
@@ -200,6 +206,9 @@ test('an extinct pinned root retains its living descendants and remains inspecta
     })
     .toBe(true);
   await page.setViewportSize({ width: 1400, height: 1000 });
+  await page.locator('.lineage-tree-panel .panel-body').evaluate((body) => {
+    body.scrollTop = 0;
+  });
   await page.screenshot({ path: testInfo.outputPath('ancestry-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath('ancestry-narrow.png'), fullPage: true });

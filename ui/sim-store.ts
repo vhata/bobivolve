@@ -22,6 +22,7 @@ import type {
 } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
 import {
+  ANCESTRY_GROUP_COLORS,
   MAX_ANCESTRY_GROUPS,
   MAX_ANCESTRY_NAME_LENGTH,
   readAncestryPins,
@@ -29,7 +30,6 @@ import {
   writeAncestryPins,
   type AncestryPin,
 } from './ancestry-groups.js';
-import { lineageColor } from './lineage-color.js';
 
 export interface LineagePopulation {
   readonly lineageId: string;
@@ -851,6 +851,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     rewindToTick: (tick) => {
       const transport = get().transport;
       if (transport === null) return;
+      // A pending bootstrap/switch has not resolved its stored pin candidates.
+      // Do not treat the temporary empty projection as authoritative metadata.
+      if (!get().ancestryPinsReady) {
+        set({ commandError: 'Wait for ancestry to finish loading before rewinding.' });
+        return;
+      }
       const commandId = mintCommandId('ui-rewindToTick');
       if (!beginTimelineChange(commandId)) return;
       const pending = new Map(get().pendingCommands);
@@ -894,12 +900,15 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         return `You can pin up to ${MAX_ANCESTRY_GROUPS} ancestry groups.`;
       const root = state.lineages.get(rootId);
       if (root === undefined) return 'This lineage is no longer in the current run.';
+      const usedColors = new Set(state.ancestryPins.map((pin) => pin.color));
+      const color = ANCESTRY_GROUP_COLORS.find((candidate) => !usedColors.has(candidate));
+      if (color === undefined) return 'No ancestry group colour is available.';
       updatePins([
         ...state.ancestryPins,
         {
           rootId,
           name: [...root.name].slice(0, MAX_ANCESTRY_NAME_LENGTH).join(''),
-          color: lineageColor(rootId),
+          color,
           foundedAtTick: root.foundedAtTick,
           founderProbeId: root.founderProbeId,
         },

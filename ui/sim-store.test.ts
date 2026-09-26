@@ -107,12 +107,63 @@ function ancestryFixture() {
 }
 
 describe('ancestry group state and lifecycle', () => {
+  it.each(['bootstrap', 'switch'] as const)(
+    'keeps stored roots when rewind is requested during %s hydration',
+    async (transition) => {
+      const fixture = ancestryFixture();
+      const targetRun = transition === 'switch' ? `${fixture.runId}-other` : fixture.runId;
+      writeAncestryPins(targetRun, [
+        {
+          rootId: 'L0',
+          name: 'Remembered root',
+          color: 'oklch(0.72 0.13 10)',
+          foundedAtTick: 0n,
+          founderProbeId: 'PL0',
+        },
+      ]);
+      if (transition === 'switch') await useSimStore.getState().bootstrapRun();
+      const query = fixture.transport.queryHandler!;
+      let resolveTree!: (result: QueryResult) => void;
+      fixture.transport.queryHandler = (request) =>
+        request.kind === 'lineageTree'
+          ? new Promise((resolve) => {
+              resolveTree = resolve;
+            })
+          : query(request);
+      let bootstrap: Promise<void> | undefined;
+      if (transition === 'switch') {
+        useSimStore.getState().switchRun(targetRun);
+        fixture.host.activeRunId = targetRun;
+        fixture.complete();
+      } else bootstrap = useSimStore.getState().bootstrapRun();
+      await vi.waitFor(() => expect(resolveTree).toBeTypeOf('function'));
+      const sentBefore = fixture.transport.sent.length;
+      useSimStore.getState().rewindToTick(0n);
+      expect(fixture.transport.sent).toHaveLength(sentBefore);
+      expect(useSimStore.getState().commandError).toContain('Wait for ancestry');
+      expect(readAncestryPins(targetRun).pins[0]?.name).toBe('Remembered root');
+      resolveTree(treeResult([lineage()]));
+      await bootstrap;
+      await fixture.ready();
+      expect(useSimStore.getState().ancestryPins[0]?.name).toBe('Remembered root');
+      fixture.transport.queryHandler = query;
+      useSimStore.getState().rewindToTick(0n);
+      fixture.complete(true, 0n);
+      await fixture.ready();
+      expect(useSimStore.getState().ancestryPins[0]?.name).toBe('Remembered root');
+    },
+  );
+
   it('captures names and colors, limits pins, and never renames genetic lineages', async () => {
     const fixture = ancestryFixture();
     fixture.host.nodes = Array.from({ length: 7 }, (_, index) => lineage(`L${index}`));
     await useSimStore.getState().bootstrapRun();
     for (let index = 0; index < 6; index += 1)
       expect(useSimStore.getState().pinAncestry(`L${index}`)).toBeNull();
+    const colors = new Map(
+      useSimStore.getState().ancestryPins.map((pin) => [pin.rootId, pin.color]),
+    );
+    expect(new Set(colors.values()).size).toBe(6);
     expect(useSimStore.getState().pinAncestry('L6')).toContain('6');
     const captured = useSimStore.getState().ancestryPins[0];
     expect(useSimStore.getState().renameAncestry('L0', '  Watchful descendants  ')).toBeNull();
@@ -125,6 +176,9 @@ describe('ancestry group state and lifecycle', () => {
     expect(useSimStore.getState().renameAncestry('L0', '   ')).not.toBeNull();
     useSimStore.getState().unpinAncestry('L1');
     expect(useSimStore.getState().pinAncestry('L6')).toBeNull();
+    for (const pin of useSimStore.getState().ancestryPins) {
+      expect(pin.color).toBe(colors.get(pin.rootId === 'L6' ? 'L1' : pin.rootId));
+    }
     expect(readAncestryPins(fixture.runId).pins).toEqual(useSimStore.getState().ancestryPins);
   });
 
