@@ -21,6 +21,15 @@ import type {
   TickEvent,
 } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
+import {
+  MAX_ANCESTRY_GROUPS,
+  MAX_ANCESTRY_NAME_LENGTH,
+  readAncestryPins,
+  validAncestryPins,
+  writeAncestryPins,
+  type AncestryPin,
+} from './ancestry-groups.js';
+import { lineageColor } from './lineage-color.js';
 
 export interface LineagePopulation {
   readonly lineageId: string;
@@ -86,6 +95,7 @@ export interface PendingCommand {
   // rewinding overlay reads this to surface "rewinding to tick N…"
   // while the work is in flight.
   readonly targetTick?: bigint;
+  readonly runId?: string;
 }
 
 const RETRY_AFTER_MS = 1_000;
@@ -140,6 +150,13 @@ export interface SimStoreState {
   // updates it. Defaults to L0 once the founder lineage is seeded.
   readonly selectedLineageId: string;
   readonly selectLineage: (id: string) => void;
+  readonly ancestryPins: readonly AncestryPin[];
+  readonly ancestryPinsReady: boolean;
+  readonly ancestryPinStorageError: string | null;
+  readonly ancestryRestoreError: string | null;
+  readonly pinAncestry: (rootId: string) => string | null;
+  readonly unpinAncestry: (rootId: string) => void;
+  readonly renameAncestry: (rootId: string, name: string) => string | null;
   // Lineages currently under player quarantine. Maintained from
   // QuarantineImposed / QuarantineLifted events. After a Load the set
   // is reset to empty — the client does not yet pull the restored
@@ -221,6 +238,60 @@ export const useSimStore = create<SimStoreState>((set, get) => {
   let unsubscribe: (() => void) | null = null;
   let retryHandle: ReturnType<typeof setInterval> | null = null;
   const interventionReplies = new Map<string, (error: string | null) => void>();
+  const pinsByRun = new Map<string, readonly AncestryPin[]>();
+  type PinRestore = { readonly mode: 'stored' | 'current'; readonly pins: readonly AncestryPin[] };
+  let pinRestore: PinRestore = { mode: 'stored', pins: [] };
+  let hydrationOrdinal = 0;
+  let hydrationUpdates: Map<string, LineageNode> | null = null;
+  let hydrationExtinctions: Map<string, bigint> | null = null;
+  const projection = (state: SimStoreState) => ({
+    seed: state.seed,
+    simTick: state.simTick,
+    populationTotal: state.populationTotal,
+    populationByLineage: state.populationByLineage,
+    populationHistory: state.populationHistory,
+    lineages: state.lineages,
+    paused: state.paused,
+    actualSpeed: state.actualSpeed,
+    selectedLineageId: state.selectedLineageId,
+    quarantinedLineages: state.quarantinedLineages,
+    originCompute: state.originCompute,
+    originComputeMax: state.originComputeMax,
+    activeRunId: state.activeRunId,
+    ancestryPins: state.ancestryPins,
+    ancestryPinsReady: state.ancestryPinsReady,
+    ancestryPinStorageError: state.ancestryPinStorageError,
+    ancestryRestoreError: state.ancestryRestoreError,
+  });
+  let timelineChange: {
+    readonly commandId: string;
+    readonly previous: ReturnType<typeof projection>;
+    readonly restore: PinRestore;
+  } | null = null;
+
+  function beginTimelineChange(commandId: string): boolean {
+    if (timelineChange !== null) {
+      set({ commandError: 'Wait for the current run change to finish.' });
+      return false;
+    }
+    timelineChange = { commandId, previous: projection(get()), restore: pinRestore };
+    cancelPendingTick();
+    hydrationUpdates = null;
+    hydrationExtinctions = null;
+    set({ ancestryPins: [], ancestryPinsReady: false, ancestryRestoreError: null });
+    return true;
+  }
+
+  function persistPins(runId: string, pins: readonly AncestryPin[]): string | null {
+    pinsByRun.set(runId, pins);
+    return writeAncestryPins(runId, pins);
+  }
+
+  function updatePins(pins: readonly AncestryPin[]): void {
+    const error = persistPins(get().activeRunId, pins);
+    pinRestore = { mode: 'current', pins };
+    set({ ancestryPins: pins, ancestryPinStorageError: error });
+  }
   const settleInterventions = (error: string): void => {
     for (const reply of interventionReplies.values()) reply(error);
     interventionReplies.clear();
@@ -394,6 +465,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           founderProbeId: event.founderProbeId,
           extinctionTick: null,
         });
+        hydrationUpdates?.set(event.newLineageId, lineages.get(event.newLineageId)!);
         set({ simTick: event.simTick, lineages });
         return;
       }
@@ -414,7 +486,39 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         const ackedEntry = pending.get(event.commandId);
         if (ackedEntry !== undefined) {
           pending.delete(event.commandId);
-          if (ackedEntry.kind === 'save') {
+          if (timelineChange?.commandId === event.commandId) {
+            const previous = timelineChange.previous;
+            const previousRestore = timelineChange.restore;
+            timelineChange = null;
+            if (ackedEntry.kind === 'newRun' || ackedEntry.kind === 'load') {
+              pinRestore = { mode: 'current', pins: [] };
+              // A load may import unrelated ancestry with identical IDs.
+              // Named saves do not contain browser presentation metadata.
+              if (previous.activeRunId !== '') {
+                set({ ancestryPinStorageError: persistPins(previous.activeRunId, []) });
+              }
+            } else if (ackedEntry.kind === 'switchRun') {
+              pinRestore = { mode: 'stored', pins: [] };
+            } else {
+              const pins = previous.ancestryPinsReady
+                ? previous.ancestryPins
+                : previousRestore.pins;
+              pinRestore = {
+                mode: 'current',
+                pins: pins.filter((pin) => pin.foundedAtTick <= event.simTick),
+              };
+              if (previous.activeRunId !== '') {
+                set({
+                  ancestryPinStorageError: persistPins(previous.activeRunId, pinRestore.pins),
+                });
+              }
+            }
+            set({ pendingCommands: pending });
+            void get().rehydrateAfterLoad();
+          } else if (ackedEntry.kind === 'deleteRun' && ackedEntry.runId !== undefined) {
+            persistPins(ackedEntry.runId, []);
+            set({ pendingCommands: pending });
+          } else if (ackedEntry.kind === 'save') {
             set({ pendingCommands: pending, lastSaveAtTick: event.simTick });
             // Refresh the saves list so the new entry appears in the UI
             // without the player needing to hit a Refresh button.
@@ -443,7 +547,14 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         const entry = pending.get(event.commandId);
         if (entry !== undefined) {
           pending.delete(event.commandId);
-          if (entry.projection?.paused === true) {
+          if (timelineChange?.commandId === event.commandId) {
+            const previous = timelineChange.previous;
+            pinRestore = timelineChange.restore;
+            timelineChange = null;
+            cancelPendingTick();
+            set({ ...previous, pendingCommands: pending, paused: true, actualSpeed: 0 });
+            void get().rehydrateAfterLoad();
+          } else if (entry.projection?.paused === true) {
             set({ pendingCommands: pending, paused: false });
           } else if (entry.projection?.paused === false) {
             set({ pendingCommands: pending, paused: true });
@@ -460,6 +571,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // draw the right end of the lineage's lifeline. If the lineage
         // is unknown (post-Load with extinctions that predate the
         // session), drop it: the rehydrate query doesn't carry tick.
+        hydrationExtinctions?.set(event.lineageId, event.simTick);
         const existing = get().lineages.get(event.lineageId);
         if (existing === undefined) return;
         if (existing.extinctionTick !== null) return;
@@ -520,6 +632,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     autoPauseTriggers: new Set(),
     lastAutoPauseTrigger: null,
     selectedLineageId: 'L0',
+    ancestryPins: [],
+    ancestryPinsReady: false,
+    ancestryPinStorageError: null,
+    ancestryRestoreError: null,
     lastSaveAtTick: null,
     saves: [],
     runs: [],
@@ -542,7 +658,20 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (retryHandle === null) {
         retryHandle = setInterval(retryStalePending, 500);
       }
-      set({ transport });
+      timelineChange = null;
+      pinRestore = { mode: 'stored', pins: [] };
+      cancelPendingTick();
+      hydrationUpdates = null;
+      hydrationExtinctions = null;
+      set({
+        transport,
+        pendingCommands: new Map(),
+        activeRunId: '',
+        timelineEpoch: get().timelineEpoch + 1,
+        ancestryPins: [],
+        ancestryPinsReady: false,
+        ancestryRestoreError: null,
+      });
     },
     detach: () => {
       const transport = get().transport;
@@ -560,7 +689,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // their ack — drop them so the retry loop doesn't try to re-send
       // them through some future transport. (React StrictMode exercises
       // this on every dev-mode mount/unmount cycle.)
-      set({ transport: null, pendingCommands: new Map() });
+      timelineChange = null;
+      hydrationUpdates = null;
+      hydrationExtinctions = null;
+      set({
+        transport: null,
+        pendingCommands: new Map(),
+        timelineEpoch: get().timelineEpoch + 1,
+        ancestryPins: [],
+        ancestryPinsReady: false,
+      });
     },
     startRun: (seed) => {
       const transport = get().transport;
@@ -568,6 +706,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         throw new Error('useSimStore.startRun: no transport attached');
       }
       const commandId = mintCommandId('ui-newRun');
+      if (!beginTimelineChange(commandId)) return;
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, {
         commandId,
@@ -676,6 +815,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const transport = get().transport;
       if (transport === null) return;
       const commandId = mintCommandId('ui-load');
+      if (!beginTimelineChange(commandId)) return;
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, { commandId, kind: 'load', issuedAtMs: Date.now(), retryCount: 0 });
       // Reset projected state — after a Load, the sim is at a different
@@ -712,6 +852,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const transport = get().transport;
       if (transport === null) return;
       const commandId = mintCommandId('ui-rewindToTick');
+      if (!beginTimelineChange(commandId)) return;
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, {
         commandId,
@@ -744,6 +885,40 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     },
     selectLineage: (id) => {
       set({ selectedLineageId: id });
+    },
+    pinAncestry: (rootId) => {
+      const state = get();
+      if (!state.ancestryPinsReady) return 'Wait for ancestry to finish loading.';
+      if (state.ancestryPins.some((pin) => pin.rootId === rootId)) return null;
+      if (state.ancestryPins.length >= MAX_ANCESTRY_GROUPS)
+        return `You can pin up to ${MAX_ANCESTRY_GROUPS} ancestry groups.`;
+      const root = state.lineages.get(rootId);
+      if (root === undefined) return 'This lineage is no longer in the current run.';
+      updatePins([
+        ...state.ancestryPins,
+        {
+          rootId,
+          name: [...root.name].slice(0, MAX_ANCESTRY_NAME_LENGTH).join(''),
+          color: lineageColor(rootId),
+          foundedAtTick: root.foundedAtTick,
+          founderProbeId: root.founderProbeId,
+        },
+      ]);
+      return null;
+    },
+    unpinAncestry: (rootId) => {
+      if (!get().ancestryPinsReady) return;
+      updatePins(get().ancestryPins.filter((pin) => pin.rootId !== rootId));
+    },
+    renameAncestry: (rootId, value) => {
+      if (!get().ancestryPinsReady) return 'Wait for ancestry to finish loading.';
+      const name = value.trim();
+      if (name.length === 0 || [...name].length > MAX_ANCESTRY_NAME_LENGTH)
+        return `Use a name with 1–${MAX_ANCESTRY_NAME_LENGTH} characters.`;
+      if (!get().ancestryPins.some((pin) => pin.rootId === rootId))
+        return 'This ancestry group is no longer pinned.';
+      updatePins(get().ancestryPins.map((pin) => (pin.rootId === rootId ? { ...pin, name } : pin)));
+      return null;
     },
     quarantine: (lineageId) => {
       const transport = get().transport;
@@ -801,14 +976,33 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     },
     rehydrateAfterLoad: async () => {
       const transport = get().transport;
-      if (transport === null) return;
+      if (transport === null || timelineChange !== null) return;
       const timelineEpoch = get().timelineEpoch;
+      const ordinal = ++hydrationOrdinal;
+      const current = () =>
+        get().transport === transport &&
+        get().timelineEpoch === timelineEpoch &&
+        hydrationOrdinal === ordinal;
+      set({ ancestryRestoreError: null });
       try {
+        // Bootstrap and acknowledged switches already establish the namespace.
+        // Avoid making their lineage refresh depend on another storage listing.
+        let activeRunId = get().activeRunId;
+        if (activeRunId === '') {
+          const runs = (await transport.query({ kind: 'listRuns', queryId: '' })) as ListRunsResult;
+          if (!current()) return;
+          activeRunId = runs.activeRunId;
+          set({ runs: runs.runs });
+        }
+        const updates = new Map<string, LineageNode>();
+        const extinctions = new Map<string, bigint>();
+        hydrationUpdates = updates;
+        hydrationExtinctions = extinctions;
         const result = (await transport.query({
           kind: 'lineageTree',
           queryId: '',
         })) as LineageTreeResult & { queryId: string };
-        if (get().transport !== transport || get().timelineEpoch !== timelineEpoch) return;
+        if (!current()) return;
         const lineages = new Map<string, LineageNode>();
         const quarantined = new Set<string>();
         for (const entry of result.lineages) {
@@ -827,6 +1021,25 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           });
           if (entry.quarantined) quarantined.add(entry.id);
         }
+        for (const [id, lineage] of updates) lineages.set(id, lineage);
+        for (const [id, extinctionTick] of extinctions) {
+          const lineage = lineages.get(id);
+          if (lineage !== undefined) lineages.set(id, { ...lineage, extinctionTick });
+        }
+        let candidates = pinRestore.pins;
+        let storageError = get().ancestryPinStorageError;
+        if (pinRestore.mode === 'stored') {
+          const cached = pinsByRun.get(activeRunId);
+          if (cached !== undefined) candidates = cached;
+          else {
+            const restored = readAncestryPins(activeRunId);
+            candidates = restored.pins;
+            storageError = restored.error;
+          }
+        }
+        const ancestryPins = validAncestryPins(candidates, lineages);
+        storageError = persistPins(activeRunId, ancestryPins) ?? storageError;
+        pinRestore = { mode: 'current', pins: ancestryPins };
         // Preserve current selection if the lineage exists in the
         // restored slab; otherwise fall back to L0.
         const selected = get().selectedLineageId;
@@ -835,11 +1048,20 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           lineages,
           quarantinedLineages: quarantined,
           selectedLineageId: selectedExists ? selected : 'L0',
+          activeRunId,
+          ancestryPins,
+          ancestryPinsReady: true,
+          ancestryPinStorageError: storageError,
         });
       } catch {
-        // Swallow — the rehydration is best-effort. If it fails the
-        // dashboard remains usable, just with the post-Load empty
-        // lineage view until events start firing again.
+        if (current()) {
+          set({ ancestryRestoreError: 'Could not restore ancestry groups. Retry to load them.' });
+        }
+      } finally {
+        if (current()) {
+          hydrationUpdates = null;
+          hydrationExtinctions = null;
+        }
       }
     },
     refreshSaves: async () => {
@@ -859,12 +1081,16 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     refreshRuns: async () => {
       const transport = get().transport;
       if (transport === null) return;
+      const timelineEpoch = get().timelineEpoch;
       try {
         const result = (await transport.query({
           kind: 'listRuns',
           queryId: '',
         })) as ListRunsResult & { queryId: string };
-        set({ runs: result.runs, activeRunId: result.activeRunId });
+        if (get().transport !== transport || get().timelineEpoch !== timelineEpoch) return;
+        // Namespace changes are committed only by bootstrap / timeline actions.
+        // A listing requested during a switch may describe its previous run.
+        set({ runs: result.runs });
       } catch {
         // Swallow — same rationale as refreshSaves.
       }
@@ -873,6 +1099,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       const transport = get().transport;
       if (transport === null) return;
       const commandId = mintCommandId('ui-switchRun');
+      if (!beginTimelineChange(commandId)) return;
       const pending = new Map(get().pendingCommands);
       pending.set(commandId, {
         commandId,
@@ -911,6 +1138,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       pending.set(commandId, {
         commandId,
         kind: 'deleteRun',
+        runId,
         issuedAtMs: Date.now(),
         retryCount: 0,
       });
