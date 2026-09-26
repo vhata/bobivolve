@@ -184,7 +184,7 @@ describe('NodeHost persistence', () => {
       expect.objectContaining({
         type: 'snap',
         tick: 10n,
-        snapshotKey: 'runs/load-anchor/snapshots/10.snap',
+        snapshotKey: expect.stringMatching(/^runs\/load-anchor\/snapshots\/load-.*\.snap$/),
       }),
     );
   });

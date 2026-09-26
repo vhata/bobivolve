@@ -26,7 +26,7 @@
 
 // @vitest-environment node
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OPFSStorage } from './storage-opfs.js';
 
 // -----------------------------------------------------------------------
@@ -92,6 +92,10 @@ class FakeWritable {
   async seek(position: number): Promise<void> {
     if (this.closed) throw new Error('writable closed');
     this.position = position;
+  }
+
+  async abort(): Promise<void> {
+    this.closed = true;
   }
 
   async close(): Promise<void> {
@@ -455,5 +459,24 @@ describe('OPFSStorage', () => {
       expect(await storage.exists('runs/r/snapshots/500.snap')).toBe(false);
       expect(await storage.exists('runs/other/log.ndjson')).toBe(true);
     });
+  });
+
+  it('aborts a partially written replacement and preserves committed bytes', async () => {
+    const storage = new OPFSStorage();
+    await storage.write('atomic', new Uint8Array([1, 2, 3]));
+    const write = FakeWritable.prototype.write;
+    const spy = vi.spyOn(FakeWritable.prototype, 'write').mockImplementation(async function (
+      this: FakeWritable,
+      data,
+    ) {
+      await write.call(this, data);
+      throw new Error('disk full');
+    });
+    try {
+      await expect(storage.write('atomic', new Uint8Array([9]))).rejects.toThrow('disk full');
+      expect(await storage.read('atomic')).toEqual(new Uint8Array([1, 2, 3]));
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -339,6 +339,8 @@ export class NodeHost {
   // listener emission so replayed events don't double-up the log or fire
   // the UI again.
   private replaying = false;
+  private transitionCommandId: string | null = null;
+  private backgroundFailure: unknown = null;
 
   // Run-loop state. Null until the first newRun command lands.
   private state: SimState | null = null;
@@ -377,6 +379,7 @@ export class NodeHost {
   // call in a Promise for interface symmetry with cross-process variants.
   // ARCHITECTURE.md "Query: pull-only, never pushed".
   async executeQuery(query: Query): Promise<QueryResult> {
+    if (this.transitionCommandId !== null) await this.workQueue;
     switch (query.kind) {
       case 'probeInspector':
         return this.queryProbeInspector(query.queryId, query.probeId);
@@ -644,7 +647,16 @@ export class NodeHost {
   // work (Save, Load, snapshot writes) to complete. Tests await this before
   // asserting on storage contents; the CLI awaits it before close.
   async flush(): Promise<void> {
-    await this.workQueue;
+    let pending: Promise<void>;
+    do {
+      pending = this.workQueue;
+      await pending;
+    } while (pending !== this.workQueue);
+    if (this.backgroundFailure !== null) {
+      const failure = this.backgroundFailure;
+      this.backgroundFailure = null;
+      throw failure;
+    }
     if (this.logWriter !== null) await this.logWriter.flush();
   }
 
@@ -660,6 +672,10 @@ export class NodeHost {
   // commands are acknowledged via commandAck once their effect has been
   // applied to host state.
   send(cmd: Command): void {
+    if (this.transitionCommandId !== null) {
+      this.error(cmd.commandId, 'timeline operation in progress; retry after completion', false);
+      return;
+    }
     // Log every command except Load, newRun, and RewindToTick:
     //  - Load is a meta-control that forks the timeline; logging it would
     //    cause a circular reference on future loads.
@@ -976,7 +992,7 @@ export class NodeHost {
   // tick is BigInt-heavy, and any incoming pause/setSpeed message sits
   // in the postMessage queue for that whole duration.
   runUntil(untilTick: bigint, wallClockBudgetMs?: number): void {
-    if (this.state === null) return;
+    if (this.state === null || this.transitionCommandId !== null) return;
     // The heartbeat baseline is updated at end-of-emit, not at start
     // here. Resetting at runUntil start would constrain each heartbeat
     // to measure only the per-pulse advance, ignoring the idle gap
@@ -1248,6 +1264,7 @@ export class NodeHost {
   // ── ack / error / emit ─────────────────────────────────────────────────────
 
   private ack(commandId: string): void {
+    if (this.transitionCommandId === commandId) this.transitionCommandId = null;
     if (commandId === '') return;
     const tickAt = this.state?.simTick ?? 0n;
     const event: CommandAckEvent & { simTick: bigint } = {
@@ -1258,7 +1275,9 @@ export class NodeHost {
     this.emit(event);
   }
 
-  private error(commandId: string, message: string): void {
+  private error(commandId: string, message: string, completesTransition = true): void {
+    if (completesTransition && this.transitionCommandId === commandId)
+      this.transitionCommandId = null;
     if (commandId === '') return;
     const tickAt = this.state?.simTick ?? 0n;
     const event: CommandErrorEvent & { simTick: bigint } = {
@@ -1328,7 +1347,7 @@ export class NodeHost {
         new TextEncoder().encode(JSON.stringify(updated)),
       );
       this.ack(commandId);
-    });
+    }, commandId);
   }
 
   private handleLoad(commandId: string, slot: string): void {
@@ -1336,9 +1355,7 @@ export class NodeHost {
       this.error(commandId, 'cannot load: no persistence configured');
       return;
     }
-    this.enqueue(async () => {
-      await this.doLoad(commandId, slot);
-    });
+    this.transition(commandId, () => this.doLoad(commandId, slot));
   }
 
   private async doLoad(commandId: string, slot: string): Promise<void> {
@@ -1378,24 +1395,25 @@ export class NodeHost {
       );
       return;
     }
+    // A distinct anchor keeps a failed load from overwriting a snapshot
+    // still referenced by the previous timeline. Only the atomic log
+    // replacement commits the fork; failed preparation leaves an orphan.
+    await this.logWriter?.flush();
+    const activeLogKey = logKey(persistence.runId);
+    const anchorKey = `${snapshotsDirKey(persistence.runId)}/load-${crypto.randomUUID()}.snap`;
+    await persistence.storage.write(anchorKey, snapBytes);
+    const anchor: SnapLogEntry = {
+      type: 'snap',
+      tick: restored.simTick,
+      seq: 0,
+      snapshotKey: anchorKey,
+    };
+    await persistence.storage.write(activeLogKey, new TextEncoder().encode(serializeEntry(anchor)));
     this.state = restored;
     this.lastSnapAtTick = restored.simTick;
-    // The previous run's heartbeat samples belong to a different
-    // timeline; the rolling buffer rebuilds from post-load heartbeats.
     this.populationHistory = [];
-
-    // Reset the active run's log — the loaded state forks the timeline,
-    // and continuing to append to the prior run's log would create a
-    // confusing discontinuity. The save slot itself is unchanged on
-    // disk; the player can save again under the same slot to update.
-    const activeLogKey = logKey(persistence.runId);
-    await persistence.storage.delete(activeLogKey);
     this.logWriter = new EventLogWriter(persistence.storage, activeLogKey);
-    // The named slot may be overwritten later. Give this fork its own
-    // snapshot and log anchor so rewind and run switching can rebuild it.
-    const anchorKey = snapshotKey(persistence.runId, restored.simTick);
-    await persistence.storage.write(anchorKey, snapBytes);
-    this.logWriter.appendSnap(restored.simTick, anchorKey);
+    this.logWriter.resumeAt(restored.simTick, 1);
 
     // Pause post-load; the user is presumed to be inspecting before
     // resuming.
@@ -1463,7 +1481,7 @@ export class NodeHost {
     // enqueued switch work.
     this.paused = true;
 
-    this.enqueue(async () => {
+    this.transition(commandId, async () => {
       // (1) Snap-out the outgoing slot at its current tick if the
       //     state is live, so a future switch-back restores cleanly.
       //     Flush the active log writer first so any pending cmd/ev
@@ -1482,52 +1500,27 @@ export class NodeHost {
         }
       }
 
-      // (2) Repoint persistence at the incoming slot. The storage
-      //     adapter is unchanged; only the runId changes.
+      // Restore into an isolated host. Live state and writer stay on the
+      // outgoing run until the incoming history and active marker succeed.
+      const entries = await new EventLogReader(persistence.storage, logKey(runId)).readAll();
+      const candidate = new NodeHost({ heartbeatHz: 0 });
+      if (entries.length > 0) {
+        const maxTick = entries.reduce((max, entry) => (entry.tick > max ? entry.tick : max), 0n);
+        const result = await candidate.restoreToTick(maxTick, entries, persistence);
+        if (!result.ok) throw new Error(`cannot switchRun to ${runId}: ${result.reason}`);
+      }
+      await writeActiveRunMarker(persistence.storage, runId);
       this.persistence = { ...persistence, runId };
-      // The active log writer must follow.
       this.logWriter = new EventLogWriter(persistence.storage, logKey(runId));
-
-      // (3) Try to restore from the incoming slot's log. The shared
-      //     restoreToTick helper picks the highest snap entry at-or-
-      //     before the log head, falls back to rebuild-from-log if
-      //     the snap file is missing, and replays any logged commands
-      //     past the snap up to the log head. The log head is the max
-      //     tick seen across all entries — the upper bound on what
-      //     was observably recorded for this slot.
-      //
-      //     A slot with no log entries (fresh, never had newRun) takes
-      //     the early-return path: state stays null, lastSnapAtTick
-      //     resets to 0, and the player can issue newRun against it.
-      const reader = new EventLogReader(persistence.storage, logKey(runId));
-      const entries = await reader.readAll();
       const last = entries.at(-1);
       if (last !== undefined) this.logWriter.resumeAt(last.tick, last.seq + 1);
-      if (entries.length === 0) {
-        this.state = null;
-        this.lastSnapAtTick = SimTick(0n);
-      } else {
-        let maxTick = 0n;
-        for (const entry of entries) {
-          if (entry.tick > maxTick) maxTick = entry.tick;
-        }
-        const result = await this.restoreToTick(maxTick, entries, persistence);
-        if (!result.ok) {
-          // Malformed log (no newRun command and no usable snapshot).
-          // Surface the error rather than silently entering null state;
-          // the UI can prompt the player to delete-and-recreate the slot.
-          this.error(commandId, `cannot switchRun to ${runId}: ${result.reason}`);
-          return;
-        }
-      }
+      this.state = candidate.state;
+      this.lastSnapAtTick = candidate.lastSnapAtTick;
+
       // The outgoing slot's heartbeat samples don't apply to the
       // incoming slot's timeline; the buffer rebuilds from heartbeats
       // emitted after the switch.
       this.populationHistory = [];
-
-      // (4) Persist the active marker so the next host startup picks
-      //     up this slot.
-      await writeActiveRunMarker(persistence.storage, runId);
 
       // SwitchRun always lands paused — the player explicitly asked
       // to step away from the live run; resuming the new slot is a
@@ -1566,7 +1559,7 @@ export class NodeHost {
     this.enqueue(async () => {
       await storage.removeDirectory(`runs/${runId}`);
       this.ack(commandId);
-    });
+    }, commandId);
   }
 
   private async queryListRuns(queryId: string): Promise<QueryResult> {
@@ -1610,9 +1603,7 @@ export class NodeHost {
       );
       return;
     }
-    this.enqueue(async () => {
-      await this.doRewindToTick(commandId, targetTick);
-    });
+    this.transition(commandId, () => this.doRewindToTick(commandId, targetTick));
   }
 
   private async doRewindToTick(commandId: string, targetTick: bigint): Promise<void> {
@@ -1634,7 +1625,8 @@ export class NodeHost {
     const reader = new EventLogReader(persistence.storage, logKey(persistence.runId));
     const entries = await reader.readAll();
 
-    const result = await this.restoreToTick(targetTick, entries, persistence);
+    const candidate = new NodeHost({ heartbeatHz: 0 });
+    const result = await candidate.restoreToTick(targetTick, entries, persistence);
     if (!result.ok) {
       this.error(commandId, `cannot rewind: ${result.reason}`);
       return;
@@ -1647,6 +1639,8 @@ export class NodeHost {
       logKey(persistence.runId),
       new TextEncoder().encode(retained.map(serializeEntry).join('')),
     );
+    this.state = candidate.state;
+    this.lastSnapAtTick = candidate.lastSnapAtTick;
     const last = retained.at(-1);
     this.logWriter = new EventLogWriter(persistence.storage, logKey(persistence.runId));
     this.logWriter.resumeAt(targetTick, last?.tick === targetTick ? last.seq + 1 : 0);
@@ -1833,11 +1827,25 @@ export class NodeHost {
     });
   }
 
-  private enqueue(work: () => Promise<void>): void {
-    this.workQueue = this.workQueue
-      .then(() => work())
-      .catch((e: unknown) => {
-        console.error('NodeHost work queue:', e);
-      });
+  private transition(commandId: string, work: () => Promise<void>): void {
+    this.transitionCommandId = commandId;
+    this.paused = true;
+    this.enqueue(async () => {
+      try {
+        await work();
+      } finally {
+        if (this.transitionCommandId === commandId) this.transitionCommandId = null;
+      }
+    }, commandId);
+  }
+
+  private enqueue(work: () => Promise<void>, commandId?: string): void {
+    this.workQueue = this.workQueue.then(work).catch((error: unknown) => {
+      if (commandId !== undefined) {
+        this.error(commandId, error instanceof Error ? error.message : String(error));
+      } else {
+        this.backgroundFailure = error;
+      }
+    });
   }
 }

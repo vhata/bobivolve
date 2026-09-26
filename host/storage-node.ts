@@ -10,7 +10,16 @@
 // (e.g. `./saves`, `~/.bobivolve`, or a temp dir for tests) so the adapter
 // itself does not encode any "where do save files live" policy.
 
-import { mkdir, readdir, readFile, rm, stat, writeFile, appendFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+  appendFile,
+  rename,
+} from 'node:fs/promises';
 import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
 import type { Storage } from '../sim/ports.js';
 
@@ -40,7 +49,16 @@ export class NodeStorage implements Storage {
   async write(key: string, data: Uint8Array): Promise<void> {
     const path = this.resolveKey(key);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, data);
+    const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, data);
+      await rename(temporary, path);
+    } catch (error) {
+      // Cleanup is best effort; preserve the original write failure.
+      // Once rename commits, no further fallible work may reject write().
+      await rm(temporary, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   async append(key: string, data: Uint8Array): Promise<void> {

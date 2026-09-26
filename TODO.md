@@ -10,7 +10,6 @@ Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Finding
 - Complete the [R2 engineer-loop experiment](docs/R2_ENGINEER_LOOP_EXPERIMENT.md) with player sessions and a chosen cost model before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. The seeded founder comparison is complete; mechanic selection and human playtest remain player decisions. #r2 #design
 
 - Add a validated CLI command-script input for patch/decree/quarantine histories, then compare its event stream with the transport-driven intervention fixture. Acceptance previously claimed this capability without a CLI implementation. Source: acceptance coverage audit, 2026-09-23. #r2 #host #test
-- Make async persistence failures report correlated command errors and preserve the previous run on failed switches/loads. Cached-snapshot fallback now handles missing/unreadable anchors, but malformed logs and storage write failures can still be swallowed by the host work queue. Source: project review persistence failure paths and 2026-09-23 recovery tests. #host #test
 
 ## Foundational
 
