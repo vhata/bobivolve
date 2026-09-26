@@ -26,6 +26,8 @@
 // convention here so the NDJSON is round-trippable with a JSON parser that
 // does not natively understand bigints.
 
+import { readFile } from 'node:fs/promises';
+import { parseCommandScript, type ScriptCommand } from './command-script.js';
 import { parseArgs } from 'node:util';
 import { NodeHost } from './node.js';
 import { NodeStorage } from './storage-node.js';
@@ -40,6 +42,7 @@ interface CliOptions {
   readonly saveDir: string | null;
   readonly runId: string | null;
   readonly resume: boolean;
+  readonly commands: string | null;
 }
 
 function parseCliArgs(argv: readonly string[]): CliOptions {
@@ -52,6 +55,7 @@ function parseCliArgs(argv: readonly string[]): CliOptions {
       'save-dir': { type: 'string' },
       'run-id': { type: 'string' },
       resume: { type: 'boolean' },
+      commands: { type: 'string' },
     },
     strict: true,
     allowPositionals: false,
@@ -96,6 +100,7 @@ function parseCliArgs(argv: readonly string[]): CliOptions {
     saveDir,
     runId,
     resume,
+    commands: values.commands ?? null,
   };
 }
 
@@ -112,8 +117,13 @@ function emitEventLine(event: SimEvent): void {
 
 export async function runCli(argv: readonly string[]): Promise<number> {
   let opts: CliOptions;
+  let script: readonly ScriptCommand[];
   try {
     opts = parseCliArgs(argv);
+    script =
+      opts.commands === null
+        ? []
+        : parseCommandScript(await readFile(opts.commands, 'utf8'), opts.ticks);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(`bobivolve: ${msg}\n`);
@@ -161,11 +171,34 @@ export async function runCli(argv: readonly string[]): Promise<number> {
           `--ticks ${opts.ticks} precedes persisted tick ${restoredTick}; resume cannot rewind`,
         );
       }
+      if (script.some((entry) => entry.tick <= restoredTick)) {
+        throw new Error(
+          'resumed command scripts must start strictly after the persisted tick; use a continuation-only script',
+        );
+      }
       transport.send({ kind: 'resume', commandId: 'cli-resume' });
     } else if (opts.seed !== null) {
       transport.send({ kind: 'newRun', commandId: 'cli-newRun', seed: opts.seed });
     }
 
+    for (const entry of script) {
+      host.runUntil(entry.tick);
+      transport.send(entry.command);
+      if (errors.length > 0 || !acknowledged.has(entry.command.commandId)) {
+        const failure =
+          errors.join('; ') || `command ${entry.command.commandId} was not acknowledged`;
+        // Earlier acknowledged interventions must survive a rejected command.
+        // Preserve the execution error if storage cannot flush that history.
+        try {
+          await host.flush();
+        } catch (error) {
+          throw new Error(
+            `${failure}; could not persist completed commands: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        throw new Error(failure);
+      }
+    }
     host.runUntil(opts.ticks);
     // Record the exact endpoint even if the final ticks emitted no domain
     // events. switchRun reconstructs to the log head on the next invocation.
