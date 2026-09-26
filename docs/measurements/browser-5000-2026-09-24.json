@@ -1,0 +1,94 @@
+{
+  "measuredAt": "2026-09-24T10:29:33.787Z",
+  "browser": "147.0.7727.15",
+  "platform": "darwin",
+  "arch": "arm64",
+  "fixture": {
+    "ticks": 5000,
+    "seed": "42",
+    "cadence": 30000,
+    "population": 5958,
+    "lineages": 4332,
+    "forwardAndMeasurementMs": 4402,
+    "captureMs": 0.5,
+    "saveAndFlushMs": 67.79999995231628,
+    "decodeRestoreMs": 56,
+    "referenceBytes": 4205839,
+    "growth": [
+      {
+        "tick": 5000,
+        "logBytes": 7857572,
+        "snapshotBytes": 161528
+      }
+    ],
+    "operations": [
+      {
+        "operation": "write",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 1.2000000476837158
+      },
+      {
+        "operation": "write",
+        "key": "saves/benchmark-reference.save",
+        "bytes": 4205839,
+        "ms": 6
+      },
+      {
+        "operation": "read",
+        "key": "saves/index.json",
+        "bytes": 0,
+        "ms": 0.19999980926513672
+      },
+      {
+        "operation": "write",
+        "key": "saves/index.json",
+        "bytes": 82,
+        "ms": 0.5999999046325684
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7856020,
+        "ms": 8.299999952316284
+      },
+      {
+        "operation": "read",
+        "key": "saves/benchmark-reference.save",
+        "bytes": 4205839,
+        "ms": 2.3999998569488525
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 1552,
+        "ms": 11
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.6000001430511475
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7857572,
+        "ms": 2.5999999046325684
+      },
+      {
+        "operation": "write",
+        "key": "runs/.active",
+        "bytes": 17,
+        "ms": 0.5999999046325684
+      }
+    ]
+  },
+  "reloadVisibleMs": 4908,
+  "rewind": {
+    "target": 4999,
+    "acknowledgedMs": 4306.900000095367,
+    "visibleMs": 4332.600000143051
+  },
+  "fullStateEquivalent": true
+}

@@ -1,0 +1,221 @@
+{
+  "measuredAt": "2026-09-24T10:26:32.461Z",
+  "browser": "147.0.7727.15",
+  "platform": "darwin",
+  "arch": "arm64",
+  "fixture": {
+    "ticks": 30000,
+    "seed": "42",
+    "cadence": 30000,
+    "population": 5990,
+    "lineages": 24039,
+    "forwardAndMeasurementMs": 47698.799999952316,
+    "captureMs": 1.6000001430511475,
+    "saveAndFlushMs": 143.60000014305115,
+    "decodeRestoreMs": 186.40000009536743,
+    "referenceBytes": 12848413,
+    "growth": [
+      {
+        "tick": 5000,
+        "logBytes": 7857152,
+        "snapshotBytes": 161528
+      },
+      {
+        "tick": 10000,
+        "logBytes": 16270967,
+        "snapshotBytes": 161528
+      },
+      {
+        "tick": 15000,
+        "logBytes": 23997162,
+        "snapshotBytes": 161528
+      },
+      {
+        "tick": 20000,
+        "logBytes": 31479035,
+        "snapshotBytes": 161528
+      },
+      {
+        "tick": 25000,
+        "logBytes": 38914353,
+        "snapshotBytes": 161528
+      },
+      {
+        "tick": 30000,
+        "logBytes": 46227203,
+        "snapshotBytes": 13006788
+      }
+    ],
+    "operations": [
+      {
+        "operation": "write",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 1.4000000953674316
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7857152,
+        "ms": 9.099999904632568
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.7000000476837158
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7857152,
+        "ms": 2.5
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 8413815,
+        "ms": 19.09999990463257
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.5
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 16270967,
+        "ms": 4.700000047683716
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7726195,
+        "ms": 24
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.5
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 23997162,
+        "ms": 6.700000047683716
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7481873,
+        "ms": 31.40000009536743
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.6000001430511475
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 31479035,
+        "ms": 8.799999952316284
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7435318,
+        "ms": 41.40000009536743
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.7000000476837158
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 38914353,
+        "ms": 10.899999856948853
+      },
+      {
+        "operation": "write",
+        "key": "saves/benchmark-reference.save",
+        "bytes": 12848413,
+        "ms": 12.200000047683716
+      },
+      {
+        "operation": "read",
+        "key": "saves/index.json",
+        "bytes": 0,
+        "ms": 0.2999999523162842
+      },
+      {
+        "operation": "write",
+        "key": "saves/index.json",
+        "bytes": 83,
+        "ms": 0.6000001430511475
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 7311255,
+        "ms": 46.60000014305115
+      },
+      {
+        "operation": "read",
+        "key": "saves/benchmark-reference.save",
+        "bytes": 12848413,
+        "ms": 3.8999998569488525
+      },
+      {
+        "operation": "write",
+        "key": "runs/browser-benchmark/snapshots/30000.snap",
+        "bytes": 12845260,
+        "ms": 11.899999856948853
+      },
+      {
+        "operation": "append",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 1595,
+        "ms": 47.700000047683716
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/30000.snap",
+        "bytes": 12845260,
+        "ms": 3.9000000953674316
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/snapshots/0.snap",
+        "bytes": 161528,
+        "ms": 0.5
+      },
+      {
+        "operation": "read",
+        "key": "runs/browser-benchmark/log.ndjson",
+        "bytes": 46227203,
+        "ms": 12.399999856948853
+      },
+      {
+        "operation": "write",
+        "key": "runs/.active",
+        "bytes": 17,
+        "ms": 18.299999952316284
+      }
+    ]
+  },
+  "reloadVisibleMs": 892,
+  "rewind": {
+    "target": 29999,
+    "acknowledgedMs": 50228.799999952316,
+    "visibleMs": 50263.699999809265
+  },
+  "fullStateEquivalent": true
+}

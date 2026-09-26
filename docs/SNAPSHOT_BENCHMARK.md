@@ -37,3 +37,5 @@ Keep the production 30,000-tick cadence until browser OPFS measurements and play
 All three replayed states matched the canonical forward state byte-for-byte after serialization. By tick 30,000 the simulation held 5,981 probes and 24,039 lineage records. The event log grew from about 7.49 MiB at tick 5,000 to 44.09 MiB at tick 30,000; the tick-30,000 snapshot alone was 12.25 MiB. Retaining more frequent snapshots raised total stored bytes from about 56.49 MiB (30,000 cadence) to 93.61 MiB (5,000 cadence).
 
 Full snapshot operations are hundreds of milliseconds in this sample, and complete rewinds are tens of seconds. The former in-memory-copy number around 1 ms is not an estimate of either operation. Repeat on an idle machine and in browser OPFS before making a tuning decision.
+
+Browser OPFS and rendered rewind measurements are now recorded separately in [the browser budget report](BROWSER_PERSISTENCE_BUDGET.md). They do not change the production cadence.

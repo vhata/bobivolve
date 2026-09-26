@@ -6,7 +6,7 @@ Deferred work and unresolved decisions. See [the TODO guide](docs/TODO_GUIDE.md)
 
 Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Findings are deferred; the proposed sequence is not an approved redesign or R3 implementation brief.
 
-- Measure browser OPFS persistence and player-visible rewind latency, then choose supported session/storage budgets and retention rules. The [filesystem benchmark](docs/SNAPSHOT_BENCHMARK.md) now measures capture/encode/write/read/restore, full host rewind, and cumulative storage growth; Node timings do not establish browser performance. #host #performance
+- Implement and validate the [proposed browser session/storage budgets and retention policy](docs/BROWSER_PERSISTENCE_BUDGET.md): wider seed/device/repeat measurements, cadence/anchor comparison, quota warnings, and explicit named-save deletion. Chromium OPFS and rendered rewinds are measured through 30,000 ticks; 5,000 ticks is the initial local playtest envelope. No budget or pruning is enforced yet. #host #performance
 - Complete the [R2 engineer-loop experiment](docs/R2_ENGINEER_LOOP_EXPERIMENT.md) with player sessions and a chosen cost model before R3: stable player-facing clades, meaningful firmware trade-offs, understandable editor units, explicit compute exhaustion, and provenance versus retained patch behaviour. The seeded founder comparison is complete; mechanic selection and human playtest remain player decisions. #r2 #design
 
 - Add a validated CLI command-script input for patch/decree/quarantine histories, then compare its event stream with the transport-driven intervention fixture. Acceptance previously claimed this capability without a CLI implementation. Source: acceptance coverage audit, 2026-09-23. #r2 #host #test
@@ -16,7 +16,7 @@ Source: [project direction review](docs/PROJECT_REVIEW.md) of `c8ca0c3`. Finding
 - Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
 - `Clock` port for sim core (when achieved-speed telemetry needs it) #r0 #sim
 - Extend rebuild-from-log to the named-save Load path. `handleSave` already captures a fresh snapshot at save-time (so save_tick is exactly the snap's tick); the gap is on the Load side — `handleLoad` (named save slot) still fails fast when the save's `.save` snapshot is missing or unreadable. Two minimal-cost paths to close it: **(A')** add a `runId` field to the saves-index entry and have Load fall back to `restoreToTick(saveTick, runLogEntries, persistence)` using the save's recorded runId when the `.save` file is missing — requires the run's log to still exist, which usually does. **(B)** Bundle a `<slot>.log` file alongside `<slot>.save` containing event-log entries the loader can replay forward — invents a new on-disk container, legacy saves degrade to today's behaviour. Decision pending. #r0 #host
-- Tune snapshot cadence after browser persistence measurements and rewind/storage budgets are available. Keep 30,000 ticks for now; see the [filesystem benchmark and its limits](docs/SNAPSHOT_BENCHMARK.md). The earlier in-memory copy table did not measure total snapshot cost. #r0 #host
+- Tune snapshot cadence against the [measured browser rewind and storage targets](docs/BROWSER_PERSISTENCE_BUDGET.md). Keep 30,000 ticks for now; see the [filesystem benchmark and its limits](docs/SNAPSHOT_BENCHMARK.md). The earlier in-memory copy table did not measure total snapshot cost. #r0 #host
 
 ## Release 2 — The Engineer's Console
 
