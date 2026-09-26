@@ -5,7 +5,8 @@ A real-time evolutionary simulation: the player authors inheritable firmware for
 ## Workflow
 
 - Use a focused branch and pull request for each unit of work. The user merges unless explicitly delegated. Preserve linear history with squash or rebase; do not merge main into a work branch.
-- Use separate worktrees for concurrent work and check existing branches, worktrees, and open PRs before starting overlapping work. Parallel agents are optional, not a routine review requirement.
+- Parallelize independent work through sub-agents wherever practical, with clear ownership and separate writer worktrees. Check existing branches, worktrees, and open PRs before starting overlapping work.
+- Pair every code-writing agent, including the coordinating agent when it writes code, with a separate reviewer agent before handing a PR to the user. Follow the [agent workflow and review procedure](docs/CODE_REVIEW_GUIDE.md#agent-workflow).
 - Keep changes scoped to the requested outcome, including the fixes and validation it requires. Capture unrelated ideas using the guide below and continue the original task.
 - Use the standalone entrypoints in `scripts/` (listed in README.md). Follow the quality guide before presenting a PR; report checks actually run and any limitations.
 - Explain the problem, resulting behaviour, and validation in the PR description. Commit the completed work. Do not merge or create a release tag merely because implementation is finished.
@@ -17,7 +18,7 @@ Read only the guide and sections relevant to the task; there is no mandatory who
 
 - **Changing code or validating a PR:** [quality and test policy](docs/QUALITY.md).
 - **Capturing an idea or selecting/completing deferred work:** [TODO guide](docs/TODO_GUIDE.md).
-- **Reviewing a change or the codebase:** [code review guide](docs/CODE_REVIEW_GUIDE.md). Review depth follows risk; additional reviewers and review ledgers are not required for routine work.
+- **Delegating work or reviewing a change:** [code review guide](docs/CODE_REVIEW_GUIDE.md). Review depth follows risk.
 - **Preparing a release:** [acceptance criteria](ACCEPTANCE.md). Release tags require explicit user sign-off in the current or immediately preceding turns, even under a broad autonomy grant.
 
 ## Where to find what
