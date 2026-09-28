@@ -56,6 +56,12 @@ Snapshot cadence tuning, milestone-triggered snapshots, and named-save recovery 
 
 Lint enforces some of these boundaries; tests and review cover what static rules cannot. See [quality policy](docs/QUALITY.md) for verification.
 
+## Player attention groups
+
+`ui/ancestry-groups.ts` derives pinned ancestry groups from the existing lineage tree and heartbeat populations. Each living lineage belongs to its nearest pinned ancestor, including itself; nested groups do not double count probes. An extinct root can still have living descendants. Group names and colours stay with the player-selected root while genetic lineage identities and firmware remain unchanged. The dashboard keeps the Living and Phylogeny views and offers searchable member pages of 20 lineages.
+
+Pins are browser-local, per-run UI preferences (at most six), managed by `ui/sim-store.ts`; they are not simulation state, logged commands, or named-save contents. Run switching and reload restore that run's preferences. New runs and named-save loads clear pins; rewind removes roots absent from the restored ancestry, validating founding tick and founder identity to reject reused lineage IDs. Controls wait for authoritative ancestry during restoration. Storage failures are surfaced without preventing session-only grouping. Patches, quarantine, and decrees continue to target individual genetic lineages, never all group members.
+
 ## Migration path to Rust (future option)
 
 No Rust runtime or Tauri transport exists here. If TypeScript becomes a demonstrated constraint, port the core behind the same protocol and compare event logs against the TypeScript reference. Code generation and a native transport would arrive with that work. Old-run recovery would require compatible command replay; cross-version migration is not implemented today.

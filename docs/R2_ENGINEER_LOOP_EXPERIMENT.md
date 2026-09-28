@@ -73,7 +73,9 @@ This experiment supports selecting an upkeep model for the next player-facing pr
 - **Provenance:** distinguish “descended from patch P” from “current firmware matches P.” Show both current/reference differences and present carrier population; ancestry alone is not evidence of retained behaviour.
 - **One local predicate:** prototype `cellResourceBelow` for exploration after the cost model reaches the dashboard. It reads the probe's current cell before that directive executes, consumes no RNG draw when false, and avoids moving away from an adequate resource cell. Its threshold and interaction with movement upkeep need a separate comparison. It is selected here but is not implemented by this cost-only harness.
 
-These are proposed implementation decisions, not shipped capabilities. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
+The stable-clade slice now ships as **pinned ancestry groups**: up to six roots with names and colours, nearest-pinned-ancestor population counts, and searchable member pages. Living and Phylogeny views retain genetic lineage identities. Groups follow ancestry, not shared firmware, and do not widen intervention targets. Pins are browser/run preferences; named saves do not contain them. This implements the attention aid, not evidence that players can explain a trade-off.
+
+The remaining decisions above are proposed implementation work. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
 
 ### Human playtest record (not yet conducted)
 
