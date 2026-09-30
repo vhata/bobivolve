@@ -167,6 +167,8 @@ describe('named save deletion', () => {
     ['Café', 'Cafe\u0301'],
     ['σ', 'ς'],
     ['ß', 'ss'],
+    ['ẞ', 'ss'],
+    ['ẞ', 'ß'],
     ['ſ', 's'],
   ])(
     'refuses potentially aliased names %s / %s without deleting either save',

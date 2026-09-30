@@ -1411,7 +1411,7 @@ export class NodeHost {
       // Unicode names. Never remove bytes that another listed slot may
       // reference, including legacy aliases created before this guard.
       const foldName = (name: string): string =>
-        name.normalize('NFD').toUpperCase().toLowerCase().normalize('NFD');
+        name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
       const foldedSlot = foldName(slot);
       if (index.saves.some((entry) => entry.slot !== slot && foldName(entry.slot) === foldedSlot)) {
         throw new Error(
