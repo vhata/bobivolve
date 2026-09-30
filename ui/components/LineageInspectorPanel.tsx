@@ -229,6 +229,7 @@ function pushSample(buffer: SparkBuffer, key: string, value: number): void {
 
 export function LineageInspectorPanel(): React.JSX.Element {
   const transport = useSimStore((s) => s.transport);
+  const timelineEpoch = useSimStore((s) => s.timelineEpoch);
   const lineages = useSimStore((s) => s.lineages);
   const selectedLineageId = useSimStore((s) => s.selectedLineageId);
   const selectLineage = useSimStore((s) => s.selectLineage);
@@ -239,6 +240,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const [drift, setDrift] = useState<DriftTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [patchEditorOpen, setPatchEditorOpen] = useState(false);
+  const referenceRevision = useRef(0);
   const [decreeComposerOpen, setDecreeComposerOpen] = useState(false);
   // Per-lineage sparkline buffers. Held in a ref so a render does not
   // discard the history; we surface a render counter to push samples
@@ -255,13 +257,14 @@ export function LineageInspectorPanel(): React.JSX.Element {
     setSparkVersion((v) => v + 1);
     let cancelled = false;
     const fetch = async (): Promise<void> => {
+      const revision = referenceRevision.current;
       try {
         const result = (await transport.query({
           kind: 'driftTelemetry',
           queryId: '',
           lineageId: selectedLineageId,
         })) as DriftTelemetryResult & { queryId: string };
-        if (cancelled) return;
+        if (cancelled || revision !== referenceRevision.current) return;
         setDrift(result.drift);
         setError(null);
         if (result.drift !== null) {
@@ -277,7 +280,8 @@ export function LineageInspectorPanel(): React.JSX.Element {
           setSparkVersion((v) => v + 1);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled && revision === referenceRevision.current)
+          setError(e instanceof Error ? e.message : String(e));
       }
     };
     void fetch();
@@ -288,7 +292,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [transport, selectedLineageId]);
+  }, [transport, selectedLineageId, timelineEpoch]);
 
   const lineage = lineages.get(selectedLineageId);
   const divisorStr = drift?.divergenceDivisor ?? null;
@@ -481,6 +485,22 @@ export function LineageInspectorPanel(): React.JSX.Element {
           lineageId={lineage.id}
           lineageName={lineage.name}
           initialFirmware={drift.referenceFirmware}
+          onApplied={(firmware) => {
+            const currentState = useSimStore.getState();
+            if (
+              currentState.selectedLineageId !== lineage.id ||
+              currentState.timelineEpoch !== timelineEpoch ||
+              currentState.transport !== transport
+            )
+              return;
+            // A paused player can reopen before the next telemetry poll.
+            // Publish the acknowledged reference now, and ignore any poll
+            // that started before this acknowledgement.
+            referenceRevision.current += 1;
+            setDrift((current) =>
+              current === null ? null : { ...current, referenceFirmware: firmware },
+            );
+          }}
           onClose={() => {
             setPatchEditorOpen(false);
           }}

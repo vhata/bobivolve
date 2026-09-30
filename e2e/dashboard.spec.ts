@@ -521,12 +521,133 @@ test('patch editor rejects values beyond uint64', async ({ page }) => {
   await page.locator('.lineage-tree button[aria-pressed]').first().click();
   await page.getByRole('button', { name: /^Apply patch$/ }).click();
 
-  const gatherRate = page.getByRole('textbox', { name: 'gather rate' });
+  const gatherRate = page.getByRole('textbox', { name: 'Proposed maximum energy per tick' });
   const apply = page.locator('.patch-editor-button-primary');
-  await gatherRate.fill((1n << 64n).toString());
-  await expect(apply).toBeDisabled();
+  for (const invalid of ['', '-1', '1.5', (1n << 64n).toString()]) {
+    await gatherRate.fill(invalid);
+    await expect(apply).toBeDisabled();
+    await expect(gatherRate).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('.firmware-editor-validation')).toContainText('Enter a whole number');
+  }
   await gatherRate.fill(((1n << 64n) - 1n).toString());
   await expect(apply).toBeEnabled();
+});
+
+test('patch editor compares readable reference values and preserves exact submitted firmware', async ({
+  page,
+}) => {
+  await startFreshRun(page);
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await page.locator('.lineage-tree button[aria-pressed]').first().click();
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  const dialog = page.getByRole('dialog', { name: /Apply patch to/ });
+  const gather = dialog.locator('.patch-editor-row').filter({ hasText: 'Maximum energy per tick' });
+  const explore = dialog
+    .locator('.patch-editor-row')
+    .filter({ hasText: 'Movement-attempt probability per tick' });
+  const replicate = dialog
+    .locator('.patch-editor-row')
+    .filter({ hasText: 'Minimum stored energy' });
+  await expect(dialog).toContainText('Individual probes may have drifted');
+  await expect(dialog).toContainText('One-time authoring charge: 100 Origin compute');
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('Available compute1000');
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('After submission900');
+  await expect(gather.locator('.firmware-editor-current strong')).toHaveText('2');
+  await expect(explore.locator('.firmware-editor-current strong')).toHaveText('1.5625%');
+  await expect(replicate.locator('.firmware-editor-current strong')).toHaveText('1000');
+
+  await dialog.getByRole('textbox', { name: 'Proposed maximum energy per tick' }).fill('4');
+  const encoded = dialog.getByRole('textbox', { name: 'Proposed encoded threshold' });
+  await encoded.fill('1');
+  await expect(explore.locator('.firmware-editor-probability')).toHaveText('<0.000001%');
+  const exactMaximum = '18446744073709551615';
+  await encoded.fill(exactMaximum);
+  await expect(explore.locator('.firmware-editor-probability')).toHaveText('>99.999999%');
+  await dialog.getByRole('textbox', { name: 'Proposed minimum stored energy' }).fill(exactMaximum);
+  await expect(gather.locator('.firmware-editor-current strong')).toHaveText('2');
+  await expect(explore.locator('.firmware-editor-current strong')).toHaveText('1.5625%');
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('After submission900');
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  await expect(gather.locator('.firmware-editor-current strong')).toHaveText('4');
+  await expect(encoded).toHaveValue(exactMaximum);
+  await expect(dialog.getByRole('textbox', { name: 'Proposed minimum stored energy' })).toHaveValue(
+    exactMaximum,
+  );
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('Available compute900');
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('After submission800');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
+test('patch editor charges unchanged submissions and blocks an unaffordable patch', async ({
+  page,
+}) => {
+  await startFreshRun(page);
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await page.locator('.lineage-tree button[aria-pressed]').first().click();
+  const dialog = page.getByRole('dialog', { name: /Apply patch to/ });
+  for (let submission = 0; submission < 10; submission += 1) {
+    await page.getByRole('button', { name: /^Apply patch$/ }).click();
+    await expect(dialog.locator('.firmware-editor-cost')).toContainText(
+      `After submission${(900 - submission * 100).toString()}`,
+    );
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('Available compute0');
+  await expect(dialog.locator('.firmware-editor-cost')).toContainText('Shortfall100');
+  await expect(dialog).toContainText('Insufficient Origin compute to apply.');
+  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Resume$/ })).toBeVisible();
+});
+
+test('a cancelled patch editor ignores a late acknowledgement after a new run', async ({
+  page,
+}) => {
+  await startFreshRun(page);
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await page.locator('.lineage-tree button[aria-pressed]').first().click();
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  // Hold the command reply at the store boundary to exercise the modal's
+  // lifecycle independently of worker speed.
+  await page.evaluate(async () => {
+    const path = '/sim-store.ts';
+    const { useSimStore } = (await import(
+      /* @vite-ignore */ path
+    )) as typeof import('../ui/sim-store.js');
+    useSimStore.setState({
+      applyPatch: () =>
+        new Promise<string | null>((resolve) => {
+          (window as Window & { finishPatch?: () => void }).finishPatch = () => {
+            resolve(null);
+          };
+        }),
+    });
+  });
+  const dialog = page.getByRole('dialog', { name: /Apply patch to/ });
+  await dialog.getByRole('textbox', { name: 'Proposed maximum energy per tick' }).fill('4');
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('button', { name: /^Pause$/ }).click();
+  await page.getByRole('button', { name: /^Apply patch$/ }).click();
+  await expect(
+    dialog.getByRole('textbox', { name: 'Proposed maximum energy per tick' }),
+  ).toHaveValue('2');
+  await page.evaluate(() => {
+    (window as Window & { finishPatch?: () => void }).finishPatch?.();
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.firmware-editor-current strong').first()).toHaveText('2');
+  await expect(
+    dialog.getByRole('textbox', { name: 'Proposed maximum energy per tick' }),
+  ).toHaveValue('2');
 });
 
 test('quarantine toggle flips the inspector and the tree pip', async ({ page }) => {
@@ -573,7 +694,7 @@ test('queued decrees and patch history survive a named save and load', async ({ 
 
   await page.getByRole('button', { name: /^Apply patch$/ }).click();
   const patch = page.getByRole('dialog', { name: /Apply patch to/ });
-  await patch.getByRole('textbox', { name: 'gather rate' }).fill('3');
+  await patch.getByRole('textbox', { name: 'Proposed maximum energy per tick' }).fill('3');
   await patch.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(patch).toHaveCount(0);
   await expect(page.locator('.inspector-panel .patches-list')).toContainText('PT0');
