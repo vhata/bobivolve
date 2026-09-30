@@ -56,6 +56,12 @@ Snapshot cadence tuning, milestone-triggered snapshots, and named-save recovery 
 
 Lint enforces some of these boundaries; tests and review cover what static rules cannot. See [quality policy](docs/QUALITY.md) for verification.
 
+## Quarantine funding
+
+Each tick funds existing quarantine holds oldest-first from the starting Origin compute budget, releases holds that cannot be fully paid, then regenerates compute. Released lineages can replicate during that same tick. Hold priority is Set insertion order, preserved by the existing snapshot array; releasing and reimposing a hold gives it a new position. Funding consumes no PRNG draws. Automatic releases emit `quarantineLifted` with optional reason `computeExhausted`; manual and legacy releases omit it. The dashboard clears the hold and reports the reason in the timeline.
+
+Existing snapshots retain their hold order, but future ticks use this funded-only rule. Replaying historical underfunded holds from before this change can produce different outcomes; cross-version simulation replay is not guaranteed. Current-version direct runs, saves, and command replay share the rule.
+
 ## Player attention groups
 
 `ui/ancestry-groups.ts` derives pinned ancestry groups from the existing lineage tree and heartbeat populations. Each living lineage belongs to its nearest pinned ancestor, including itself; nested groups do not double count probes. An extinct root can still have living descendants. Group names and colours stay with the player-selected root while genetic lineage identities and firmware remain unchanged. The dashboard keeps the Living and Phylogeny views and offers searchable member pages of 20 lineages.

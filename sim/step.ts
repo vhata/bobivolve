@@ -87,7 +87,22 @@ export function tick(state: SimState, events?: SimEvent[]): void {
 
   // Phase 0c: Origin compute. Pay quarantine maintenance first, then
   // regen toward cap. See sim/compute.ts for the rationale on order.
-  state.originCompute = applyComputeTick(state.originCompute, state.quarantinedLineages.size);
+  const compute = applyComputeTick(state.originCompute, state.quarantinedLineages.size);
+  let funded = compute.fundedQuarantines;
+  for (const lineageId of state.quarantinedLineages) {
+    if (funded > 0) {
+      funded -= 1;
+      continue;
+    }
+    state.quarantinedLineages.delete(lineageId);
+    events?.push({
+      kind: 'quarantineLifted',
+      simTick: state.simTick,
+      lineageId,
+      reason: 'computeExhausted',
+    });
+  }
+  state.originCompute = compute.budget;
 
   const ids = [...state.probes.keys()];
 

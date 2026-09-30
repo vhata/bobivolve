@@ -1142,6 +1142,9 @@ export class NodeHost {
       this.maybeWriteSnapshot();
       if (pauseTrigger !== null) {
         this.paused = true;
+        // A paused worker may never reach the next heartbeat deadline.
+        // Publish the committed budget/population before it goes idle.
+        if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) this.emitHeartbeat();
         this.emit({ kind: 'autoPaused', simTick: state.simTick, trigger: pauseTrigger });
         return;
       }

@@ -52,7 +52,8 @@ type EventKind =
   | 'patchSaturated'
   | 'patchApplied'
   | 'decreeFired'
-  | 'autoPaused';
+  | 'autoPaused'
+  | 'quarantineLifted';
 
 interface TimelineEntry {
   readonly id: string;
@@ -100,6 +101,7 @@ const STRATUM_1_KINDS: ReadonlySet<SimEvent['kind']> = new Set([
   'patchApplied',
   'decreeFired',
   'autoPaused',
+  'quarantineLifted',
 ]);
 
 function describe(event: SimEvent): string {
@@ -114,6 +116,8 @@ function describe(event: SimEvent): string {
       return `patch applied · ${event.lineageId}`;
     case 'decreeFired':
       return `decree fired · ${event.patchTargetLineageId}${event.landed ? '' : ' (no-op)'}`;
+    case 'quarantineLifted':
+      return `quarantine released · ${event.lineageId}${event.reason === 'computeExhausted' ? ' · insufficient compute' : ''}`;
     case 'autoPaused':
       return `auto-paused (${event.trigger})`;
     default:

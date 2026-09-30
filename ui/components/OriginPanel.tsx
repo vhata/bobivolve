@@ -5,9 +5,8 @@
 // the cap, and a list of active drains so the player understands where
 // their budget is going.
 //
-// Drains today: held quarantines (per-tick maintenance). When patches
-// and decrees land they will appear here as one-shot costs the player
-// can afford / can't afford rather than ongoing drains.
+// Drains today: held quarantines (per-tick maintenance). Patches and
+// decrees charge once on authoring.
 
 import {
   QUARANTINE_MAINTENANCE_PER_TICK,
@@ -70,6 +69,13 @@ export function OriginPanel(): React.JSX.Element {
             </dd>
           </div>
         </dl>
+        <p className="panel-meta">
+          Holds are funded oldest first, before regeneration. Unfunded quarantines are released
+          automatically and reported in the timeline.
+        </p>
+        {hasReading && originCompute < drainPerTick ? (
+          <p role="status">Insufficient compute: newest unfunded holds will release next tick.</p>
+        ) : null}
       </div>
     </section>
   );

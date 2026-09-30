@@ -69,7 +69,7 @@ This experiment supports selecting an upkeep model for the next player-facing pr
 
 - **Stable clades:** let the player pin ancestry-root cohorts. Descendants keep the pinned cohort's display identity while full genetic lineage IDs and ancestry remain inspectable. If nested cohorts are pinned, count each probe under its nearest pinned ancestor so totals do not double count. Start with a small fixed set of player-pinned cohorts, not automatic threshold-based renaming or discarded history.
 - **Editor units:** gather is maximum energy per tick; explore is movement-attempt probability per tick (`threshold / 2^64`), with exact encoded value available; replication is minimum stored energy. Show current and proposed values, expected upkeep, and the fixed Origin authoring charge before submission. Avoid wall-clock “minutes to recover” because speed varies.
-- **Compute exhaustion:** proposed production rule is deterministic oldest-first quarantine maintenance; release and report holds that cannot be funded, then regenerate compute. No silently free holds. This changes current behaviour and requires explicit regression and replay tests in its implementation PR.
+- **Compute exhaustion:** deterministic oldest-first quarantine maintenance now ships: fund existing holds from starting compute, release and report unfunded holds, then regenerate. Reimposing a released hold gives it newest priority. See [quarantine funding](../ARCHITECTURE.md#quarantine-funding) for persistence and replay limits.
 - **Provenance:** distinguish “descended from patch P” from “current firmware matches P.” Show both current/reference differences and present carrier population; ancestry alone is not evidence of retained behaviour.
 - **One local predicate:** prototype `cellResourceBelow` for exploration after the cost model reaches the dashboard. It reads the probe's current cell before that directive executes, consumes no RNG draw when false, and avoids moving away from an adequate resource cell. Its threshold and interaction with movement upkeep need a separate comparison. It is selected here but is not implemented by this cost-only harness.
 
@@ -79,7 +79,7 @@ The editor-clarity slice now ships in the patch editor: readable per-tick/energy
 
 The provenance slice now ships in lineage inspection: each inherited patch records its authored firmware, shows ordered differences against the current reference, and separates living ancestry carriers from exact matches (including this lineage’s own matches). Older snapshots without authored firmware show unknown retention. Saturation continues to count ancestry, not exact firmware retention.
 
-The remaining decisions above are proposed implementation work. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
+Upkeep and the local predicate remain proposed implementation work. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
 
 ### Human playtest record (not yet conducted)
 

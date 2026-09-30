@@ -267,6 +267,8 @@ message QuarantineImposed {
 }
 
 message QuarantineLifted {
+  // Absent on manual/legacy releases; "computeExhausted" on unfunded holds.
+  optional string reason = 2;
   // Lineage whose quarantine was just released. Emitted only when state
   // actually flips — an idempotent ReleaseQuarantine on a lineage not
   // under quarantine emits a CommandAck but no QuarantineLifted.
