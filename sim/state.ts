@@ -82,6 +82,8 @@ export interface SimState {
 }
 
 export interface AppliedPatchRecord {
+  // Absent in snapshots predating provenance recording; never infer from current firmware.
+  readonly authoredFirmware?: DirectiveStack;
   readonly id: string;
   readonly targetLineageId: LineageId;
   readonly appliedAtTick: SimTick;

@@ -2261,3 +2261,34 @@ body {
   max-height: 14rem;
   overflow-y: auto;
 }
+
+.patch-provenance {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+}
+.patch-provenance p {
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.patch-provenance details {
+  padding: 0.6rem 0;
+}
+.patch-provenance summary {
+  cursor: pointer;
+}
+.patch-firmware-comparison {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+.patch-firmware-comparison th,
+.patch-firmware-comparison td {
+  padding: 0.35rem;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.patch-firmware-comparison th:first-child {
+  width: 3.5rem;
+}

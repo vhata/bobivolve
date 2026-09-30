@@ -444,6 +444,22 @@ message DriftTelemetry {
   // a parent lineage at speciation. The dashboard renders these as the
   // lineage's intervention history.
   repeated string patches = 5;
+  repeated PatchProvenance patch_provenance = 6;
+}
+
+message PatchProvenance {
+  string patch_id = 1;
+  string target_lineage_id = 2;
+  string applied_at_tick = 3;
+  // Living probes across all lineages carrying this patch ancestry.
+  string ancestry_population = 4;
+  // Absent firmware/exact-match fields mean historical firmware was not recorded.
+  repeated DirectiveSpec authored_firmware = 5;
+  // Exact ordered firmware matches within the ancestry population.
+  optional string exact_match_population = 6;
+  // Exact matches among the inspected lineage’s own living probes.
+  optional string selected_exact_match_population = 7;
+  optional bool reference_matches = 8;
 }
 
 message ParameterDrift {

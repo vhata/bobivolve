@@ -53,6 +53,7 @@ import {
   type SnapLogEntry,
 } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
+import { patchProvenance } from './patch-provenance.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
 // for correctness (ARCHITECTURE.md "Heartbeat: ... Best-effort delivery").
@@ -619,6 +620,7 @@ export class NodeHost {
         divergenceDivisor: SPECIATION_DIVERGENCE_DIVISOR.toString(),
         referenceFirmware,
         patches: lineage.patches.slice(),
+        patchProvenance: patchProvenance(this.state, lineage),
       },
     };
   }

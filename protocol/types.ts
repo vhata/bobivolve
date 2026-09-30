@@ -455,6 +455,23 @@ export interface DriftTelemetry {
   // speciation). The dashboard renders these as the lineage's
   // intervention history.
   readonly patches: readonly string[];
+  // Optional for compatibility with older hosts; counts and ticks are decimal strings.
+  readonly patchProvenance?: readonly PatchProvenance[];
+}
+
+export interface PatchProvenance {
+  readonly patchId: string;
+  readonly targetLineageId: string;
+  readonly appliedAtTick: string;
+  // Living probes across all lineages that inherited this patch id.
+  readonly ancestryPopulation: string;
+  // null means the historical authored firmware was not recorded.
+  readonly authoredFirmware: readonly DirectiveSpec[] | null;
+  // Exact ordered firmware matches within that ancestry population, not the whole world.
+  readonly exactMatchPopulation: string | null;
+  // Exact matches among the inspected lineage’s own living probes.
+  readonly selectedExactMatchPopulation: string | null;
+  readonly referenceMatches: boolean | null;
 }
 
 export interface ParameterDrift {
