@@ -165,6 +165,9 @@ describe('named save deletion', () => {
   it.each([
     ['Keep', 'keep'],
     ['Café', 'Cafe\u0301'],
+    ['σ', 'ς'],
+    ['ß', 'ss'],
+    ['ſ', 's'],
   ])(
     'refuses potentially aliased names %s / %s without deleting either save',
     async (first, second) => {
