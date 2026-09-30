@@ -9,6 +9,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { PATCH_AUTHORING_COST } from '../../sim/compute.js';
+import { REPLICATION_COST_ENERGY } from '../../sim/energy.js';
+import { formatMovementAttemptChance } from '../firmware-format.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
 import { parseUint64Decimal } from '../../protocol/uint64.js';
 import { useSimStore } from '../sim-store.js';
@@ -18,6 +20,7 @@ interface PatchEditorModalProps {
   readonly lineageName: string;
   readonly initialFirmware: readonly DirectiveSpec[];
   readonly onClose: () => void;
+  readonly onApplied: (firmware: readonly DirectiveSpec[]) => void;
 }
 
 interface DraftRow {
@@ -46,13 +49,22 @@ function isValidParam(value: string): boolean {
   return parseUint64Decimal(value) !== null;
 }
 
-// Plain-language label for each known parameter so the form reads like
-// the inspector's firmware summary, not a wall of identifiers.
 function paramLabel(directiveKind: string, paramKey: string): string {
-  if (directiveKind === 'replicate' && paramKey === 'threshold') return 'replicate threshold';
-  if (directiveKind === 'gather' && paramKey === 'rate') return 'gather rate';
-  if (directiveKind === 'explore' && paramKey === 'threshold') return 'explore threshold';
+  if (directiveKind === 'replicate' && paramKey === 'threshold') return 'Minimum stored energy';
+  if (directiveKind === 'gather' && paramKey === 'rate') return 'Maximum energy per tick';
+  if (directiveKind === 'explore' && paramKey === 'threshold')
+    return 'Movement-attempt probability per tick';
   return `${directiveKind}.${paramKey}`;
+}
+
+function paramHelp(directiveKind: string, paramKey: string): string | null {
+  if (directiveKind === 'gather' && paramKey === 'rate')
+    return 'Gathering is limited by resources in the current cell.';
+  if (directiveKind === 'replicate' && paramKey === 'threshold')
+    return `Replication also requires ${REPLICATION_COST_ENERGY.toString()} energy to transfer to the child. Quarantine prevents replication.`;
+  if (directiveKind === 'explore' && paramKey === 'threshold')
+    return 'Chance = encoded threshold / 2⁶⁴. A movement attempt can be blocked by the world boundary; ≈ marks a rounded percentage.';
+  return null;
 }
 
 export function PatchEditorModal({
@@ -60,6 +72,7 @@ export function PatchEditorModal({
   lineageName,
   initialFirmware,
   onClose,
+  onApplied,
 }: PatchEditorModalProps): React.JSX.Element {
   const pause = useSimStore((s) => s.pause);
   const resume = useSimStore((s) => s.resume);
@@ -79,13 +92,16 @@ export function PatchEditorModal({
   // cycle still produces a transient resume→pause flicker, which
   // production builds don't see.
   const pausedByMeRef = useRef(false);
+  const mountedRef = useRef(false);
   useEffect(() => {
+    mountedRef.current = true;
     const wasPausedAtOpen = useSimStore.getState().paused;
     if (!wasPausedAtOpen) {
       pause();
       pausedByMeRef.current = true;
     }
     return () => {
+      mountedRef.current = false;
       if (pausedByMeRef.current) {
         resume();
         pausedByMeRef.current = false;
@@ -117,10 +133,14 @@ export function PatchEditorModal({
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     setSubmitError(null);
-    void applyPatch(lineageId, fromDraft(draft)).then((error) => {
+    const firmware = fromDraft(draft);
+    void applyPatch(lineageId, firmware).then((error) => {
+      if (!mountedRef.current) return;
       setSubmitting(false);
-      if (error === null) onClose();
-      else setSubmitError(error);
+      if (error === null) {
+        onApplied(firmware);
+        onClose();
+      } else setSubmitError(error);
     });
   };
 
@@ -135,15 +155,41 @@ export function PatchEditorModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="patch-editor">
+      <div className="patch-editor firmware-editor">
         <header className="patch-editor-header">
           <h2>Apply patch</h2>
           <span className="patch-editor-target">{lineageName}</span>
         </header>
-        <div className="patch-editor-cost">
-          Cost: {PATCH_AUTHORING_COST.toString()} compute
-          {originCompute !== null ? ` · budget ${originCompute.toString()}` : ''}
-          {!canAfford ? <span className="patch-editor-warning"> insufficient</span> : null}
+        <p className="firmware-editor-intro">
+          Compare with this lineage’s current reference firmware. Individual probes may have
+          drifted. Applying replaces the reference and all living probes in this lineage; future
+          descendants inherit and can drift again.
+        </p>
+        <div className="patch-editor-cost firmware-editor-cost">
+          <strong>
+            One-time authoring charge: {PATCH_AUTHORING_COST.toString()} Origin compute
+          </strong>
+          <div>Fixed for every patch, including unchanged values.</div>
+          <dl>
+            <div>
+              <dt>Available compute</dt>
+              <dd>{originCompute?.toString() ?? 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>{canAfford ? 'After submission' : 'Shortfall'}</dt>
+              <dd>
+                {originCompute === null
+                  ? 'Unavailable'
+                  : (canAfford
+                      ? originCompute - PATCH_AUTHORING_COST
+                      : PATCH_AUTHORING_COST - originCompute
+                    ).toString()}
+              </dd>
+            </div>
+          </dl>
+          {!canAfford ? (
+            <p className="patch-editor-warning">Insufficient Origin compute to apply.</p>
+          ) : null}
         </div>
         <div className="patch-editor-body">
           {draft.map((row, rowIndex) => (
@@ -152,23 +198,72 @@ export function PatchEditorModal({
               <div className="patch-editor-params">
                 {[...row.params.entries()].map(([paramKey, value]) => {
                   const valid = isValidParam(value);
+                  const label = paramLabel(row.kind, paramKey);
+                  const help = paramHelp(row.kind, paramKey);
+                  const isExploration = row.kind === 'explore' && paramKey === 'threshold';
+                  const current = initialFirmware[rowIndex]?.params[paramKey] ?? '';
+                  const inputId = `firmware-${rowIndex.toString()}-${paramKey}`;
+                  const proposedLabel = isExploration
+                    ? 'Proposed encoded threshold'
+                    : `Proposed ${label.toLowerCase()}`;
                   return (
-                    <label key={paramKey} className="patch-editor-param">
-                      <span className="patch-editor-param-label">
-                        {paramLabel(row.kind, paramKey)}
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        className={
-                          valid ? 'patch-editor-input' : 'patch-editor-input patch-editor-invalid'
-                        }
-                        value={value}
-                        onChange={(e) => {
-                          updateParam(rowIndex, paramKey, e.currentTarget.value);
-                        }}
-                      />
-                    </label>
+                    <div key={paramKey} className="firmware-editor-param">
+                      <div className="patch-editor-param-label">{label}</div>
+                      {help !== null ? (
+                        <p id={`${inputId}-help`} className="firmware-editor-help">
+                          {help}
+                        </p>
+                      ) : null}
+                      <div className="firmware-editor-comparison">
+                        <div className="firmware-editor-current">
+                          <span className="firmware-editor-caption">Current reference</span>
+                          <strong>
+                            {isExploration ? formatMovementAttemptChance(current) : current}
+                          </strong>
+                          {isExploration ? (
+                            <span className="firmware-editor-encoded">Encoded: {current}</span>
+                          ) : null}
+                        </div>
+                        <div className="firmware-editor-proposed">
+                          <label className="firmware-editor-caption" htmlFor={inputId}>
+                            {proposedLabel}
+                          </label>
+                          {isExploration ? (
+                            <strong className="firmware-editor-probability" aria-live="polite">
+                              {formatMovementAttemptChance(value) ?? 'Invalid probability'}
+                            </strong>
+                          ) : null}
+                          <input
+                            id={inputId}
+                            type="text"
+                            inputMode="numeric"
+                            aria-invalid={!valid}
+                            aria-describedby={
+                              [
+                                help !== null ? `${inputId}-help` : '',
+                                !valid ? `${inputId}-error` : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ') || undefined
+                            }
+                            className={
+                              valid
+                                ? 'patch-editor-input'
+                                : 'patch-editor-input patch-editor-invalid'
+                            }
+                            value={value}
+                            onChange={(e) => {
+                              updateParam(rowIndex, paramKey, e.currentTarget.value);
+                            }}
+                          />
+                          {!valid ? (
+                            <span id={`${inputId}-error`} className="firmware-editor-validation">
+                              Enter a whole number from 0 to 18446744073709551615.
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

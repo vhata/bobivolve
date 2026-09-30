@@ -75,6 +75,8 @@ This experiment supports selecting an upkeep model for the next player-facing pr
 
 The stable-clade slice now ships as **pinned ancestry groups**: up to six roots with names and colours, nearest-pinned-ancestor population counts, and searchable member pages. Living and Phylogeny views retain genetic lineage identities. Groups follow ancestry, not shared firmware, and do not widen intervention targets. Pins are browser/run preferences; named saves do not contain them. This implements the attention aid, not evidence that players can explain a trade-off.
 
+The editor-clarity slice now ships in the patch editor: readable per-tick/energy units, movement-attempt probability alongside its exact editable encoding, current reference versus proposed values, and the fixed one-time Origin authoring charge with available and remaining compute. Reference firmware is explicitly distinguished from drifted probe firmware. Production has no additional upkeep for stronger firmware; expected upkeep remains pending the cost-model prototype. The decree composer retains its existing editor.
+
 The remaining decisions above are proposed implementation work. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
 
 ### Human playtest record (not yet conducted)

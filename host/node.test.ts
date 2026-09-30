@@ -458,6 +458,33 @@ describe('NodeHost patch authoring', () => {
     expect(ack).toBeDefined();
   });
 
+  it('publishes charged compute before acknowledging a patch while paused', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 4 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: 'new', seed: SEED_42 });
+    host.send({ kind: 'pause', commandId: 'pause' });
+    events.length = 0;
+    host.send({
+      kind: 'applyPatch',
+      commandId: 'patch-paused',
+      lineageId: 'L0',
+      firmware: [{ kind: 'gather', params: { rate: '2' } }],
+    });
+    const tickIndex = events.findIndex((event) => event.kind === 'tick');
+    const ackIndex = events.findIndex(
+      (event) => event.kind === 'commandAck' && event.commandId === 'patch-paused',
+    );
+    expect(tickIndex).toBeGreaterThanOrEqual(0);
+    expect(ackIndex).toBeGreaterThan(tickIndex);
+    expect(events[tickIndex]).toMatchObject({
+      kind: 'tick',
+      simTick: 0n,
+      actualSpeed: 0,
+      originCompute: 900n,
+      paused: true,
+    });
+  });
+
   it('errors when Origin compute is insufficient', () => {
     // Force the budget below cost: send three patches in a row from a
     // full budget of 1000 with cost 100; the fourth should drain past

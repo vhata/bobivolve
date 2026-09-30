@@ -1635,6 +1635,95 @@ body {
   border-color: var(--warn);
 }
 
+.firmware-editor {
+  width: 640px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.firmware-editor-intro,
+.firmware-editor-help {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.firmware-editor-help {
+  margin: 0.3rem 0 0.6rem;
+}
+
+.firmware-editor-cost dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 0.7rem 0;
+}
+
+.firmware-editor-cost dt,
+.firmware-editor-caption {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.firmware-editor-cost dd {
+  margin: 0.2rem 0 0;
+  color: var(--text);
+}
+
+.firmware-editor-param {
+  font-size: 0.85rem;
+}
+
+.firmware-editor-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.firmware-editor-current,
+.firmware-editor-proposed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.firmware-editor-current strong {
+  padding: 0.3rem 0;
+  overflow-wrap: anywhere;
+}
+
+.firmware-editor-encoded {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.firmware-editor .patch-editor-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.firmware-editor-validation {
+  color: var(--warn);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .firmware-editor {
+    padding: 1rem;
+  }
+
+  .firmware-editor-comparison {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+}
+
 .patch-editor-footer {
   display: flex;
   gap: 0.5rem;

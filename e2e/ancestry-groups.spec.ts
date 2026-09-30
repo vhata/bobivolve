@@ -183,8 +183,10 @@ test('an extinct pinned root retains its living descendants and remains inspecta
   await page.getByRole('button', { name: 'Inspect root L0', exact: true }).click();
   await page.getByRole('button', { name: 'Apply patch', exact: true }).click();
   const patch = page.getByRole('dialog', { name: /Apply patch to/ });
-  await patch.getByRole('textbox', { name: 'gather rate' }).fill('0');
-  await patch.getByRole('textbox', { name: 'replicate threshold' }).fill('18446744073709551615');
+  await patch.getByRole('textbox', { name: 'Proposed maximum energy per tick' }).fill('0');
+  await patch
+    .getByRole('textbox', { name: 'Proposed minimum stored energy' })
+    .fill('18446744073709551615');
   await patch.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(patch).toHaveCount(0);
   // Avoid an unrelated extinction auto-pause stopping the run before L0 dies.

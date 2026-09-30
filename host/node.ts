@@ -821,6 +821,13 @@ export class NodeHost {
       patchId: result.patchId,
     };
     this.emit(event);
+    // Authoring happens while paused: publish the charged budget before
+    // acknowledging so an immediately reopened editor sees current compute.
+    // Replay must not introduce extra telemetry/history samples.
+    if (!this.replaying && this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) {
+      if (this.paused) this.resetHeartbeatBaseline();
+      this.emitHeartbeat();
+    }
     this.ack(commandId);
   }
 
