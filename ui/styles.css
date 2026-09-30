@@ -1378,6 +1378,12 @@ body {
   overflow-y: auto;
 }
 
+.saves-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .load-picker {
   margin-top: 0.5rem;
   padding: 0.6rem;

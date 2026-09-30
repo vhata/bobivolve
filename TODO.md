@@ -6,7 +6,7 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ### Unprioritized
 
-- [PERFORMANCE] `browser-session-budgets` — **Validate browser session budgets and retention.** Implement and validate the [proposed browser session/storage budgets and retention policy](docs/BROWSER_PERSISTENCE_BUDGET.md): wider seed/device/repeat measurements, cadence/anchor comparison, quota warnings, and explicit named-save deletion. Chromium OPFS and rendered rewinds are measured through 30,000 ticks; 5,000 ticks is the initial local playtest envelope. No budget or pruning is enforced yet. #host #performance
+- [PERFORMANCE] `browser-session-budgets` — **Validate browser session budgets and retention.** Implement and validate the [proposed browser session/storage budgets and retention policy](docs/BROWSER_PERSISTENCE_BUDGET.md): wider seed/device/repeat measurements, cadence/anchor comparison, and quota warnings. Chromium OPFS and rendered rewinds are measured through 30,000 ticks; 5,000 ticks is the initial local playtest envelope. No budget or pruning is enforced yet. #host #performance
   - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
   - Blocked by: Browser measurements, retention choices, and human playtest evidence are incomplete.
   - Coordination: Open PR #31 implements explicit named-save deletion; do not duplicate its scope.

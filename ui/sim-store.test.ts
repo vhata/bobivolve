@@ -589,3 +589,54 @@ describe('startup history races', () => {
     expect(useSimStore.getState().quarantinedLineages.size).toBe(0);
   });
 });
+
+describe('named save deletion acknowledgements', () => {
+  const saves = [
+    { slot: 'remove', tick: '10', savedAtMs: 1 },
+    { slot: 'keep', tick: '20', savedAtMs: 2 },
+  ];
+  function attached(): StubTransport {
+    const transport = new StubTransport();
+    useSimStore.getState().attach(transport);
+    useSimStore.setState({ saves, paused: true, simTick: 20n });
+    return transport;
+  }
+
+  it('keeps the row until host acknowledgement and ignores a stale listing response', async () => {
+    const transport = attached();
+    let resolveListing!: (value: QueryResult) => void;
+    transport.queryResult = new Promise((resolve) => {
+      resolveListing = resolve;
+    });
+    const refresh = useSimStore.getState().refreshSaves();
+    useSimStore.getState().deleteSave('remove');
+    const command = transport.sent.at(-1)!;
+    expect(command).toMatchObject({ kind: 'deleteSave', slot: 'remove' });
+    expect(useSimStore.getState().saves).toEqual(saves);
+    transport.emit({ kind: 'commandAck', commandId: command.commandId, simTick: 20n });
+    resolveListing({ kind: 'listSaves', queryId: '', saves });
+    await refresh;
+    expect(useSimStore.getState().saves).toEqual([saves[1]]);
+    expect(useSimStore.getState().paused).toBe(true);
+    expect(useSimStore.getState().simTick).toBe(20n);
+    expect(useSimStore.getState().pendingCommands.has(command.commandId)).toBe(false);
+  });
+
+  it('retains a failed row for retry and surfaces the authoritative error', () => {
+    const transport = attached();
+    useSimStore.getState().deleteSave('remove');
+    const command = transport.sent.at(-1)!;
+    transport.emit({
+      kind: 'commandError',
+      commandId: command.commandId,
+      simTick: 20n,
+      message: 'Snapshot removed; retry Delete to repair listing.',
+    });
+    expect(useSimStore.getState().saves).toEqual(saves);
+    expect(useSimStore.getState().commandError).toBe(
+      'Snapshot removed; retry Delete to repair listing.',
+    );
+    expect(useSimStore.getState().paused).toBe(true);
+    expect(useSimStore.getState().pendingCommands.has(command.commandId)).toBe(false);
+  });
+});

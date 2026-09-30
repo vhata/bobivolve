@@ -45,6 +45,7 @@ message Command {
     ReleaseQuarantine release_quarantine = 13;
     RevokeDecree revoke_decree = 14;
     RewindToTick rewind_to_tick = 15;
+    DeleteSave delete_save = 16;
   }
 }
 
@@ -67,6 +68,10 @@ message Step {
 }
 
 message Save {
+  string slot = 1;
+}
+
+message DeleteSave {
   string slot = 1;
 }
 

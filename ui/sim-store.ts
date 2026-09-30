@@ -84,7 +84,8 @@ export interface PendingCommand {
     | 'load'
     | 'rewindToTick'
     | 'switchRun'
-    | 'deleteRun';
+    | 'deleteRun'
+    | 'deleteSave';
   readonly issuedAtMs: number;
   readonly retryCount: number;
   // Optimistic effect summary. The UI reads it to render the projected
@@ -96,6 +97,7 @@ export interface PendingCommand {
   // while the work is in flight.
   readonly targetTick?: bigint;
   readonly runId?: string;
+  readonly slot?: string;
 }
 
 const RETRY_AFTER_MS = 1_000;
@@ -137,6 +139,7 @@ export interface SimStoreState {
   // List of save slots written to OPFS. Refreshed via refreshSaves().
   readonly saves: readonly SaveSummary[];
   readonly refreshSaves: () => Promise<void>;
+  readonly deleteSave: (slot: string) => void;
   // Persisted run-slots and the currently active one. Distinct from
   // `saves` (point-in-time snapshots) — these are full simulations on
   // disk. Refreshed lazily when the SwitchRunModal opens.
@@ -235,6 +238,7 @@ function freshLineages(): Map<string, LineageNode> {
 }
 
 export const useSimStore = create<SimStoreState>((set, get) => {
+  let savesRevision = 0;
   let unsubscribe: (() => void) | null = null;
   let retryHandle: ReturnType<typeof setInterval> | null = null;
   const interventionReplies = new Map<string, (error: string | null) => void>();
@@ -518,6 +522,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           } else if (ackedEntry.kind === 'deleteRun' && ackedEntry.runId !== undefined) {
             persistPins(ackedEntry.runId, []);
             set({ pendingCommands: pending });
+          } else if (ackedEntry.kind === 'deleteSave') {
+            savesRevision += 1;
+            set({
+              pendingCommands: pending,
+              saves: get().saves.filter((save) => save.slot !== ackedEntry.slot),
+            });
           } else if (ackedEntry.kind === 'save') {
             set({ pendingCommands: pending, lastSaveAtTick: event.simTick });
             // Refresh the saves list so the new entry appears in the UI
@@ -811,6 +821,21 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       set({ pendingCommands: pending, lastSaveAtTick: null });
       transport.send({ kind: 'save', commandId, slot });
     },
+    deleteSave: (slot) => {
+      const transport = get().transport;
+      if (transport === null) return;
+      const commandId = mintCommandId('ui-deleteSave');
+      const pending = new Map(get().pendingCommands);
+      pending.set(commandId, {
+        commandId,
+        kind: 'deleteSave',
+        slot,
+        issuedAtMs: Date.now(),
+        retryCount: 0,
+      });
+      set({ pendingCommands: pending, commandError: null });
+      transport.send({ kind: 'deleteSave', commandId, slot });
+    },
     load: (slot = 'default') => {
       const transport = get().transport;
       if (transport === null) return;
@@ -1074,6 +1099,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       }
     },
     refreshSaves: async () => {
+      const revision = ++savesRevision;
       const transport = get().transport;
       if (transport === null) return;
       try {
@@ -1081,6 +1107,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           kind: 'listSaves',
           queryId: '',
         })) as ListSavesResult & { queryId: string };
+        if (get().transport !== transport || revision !== savesRevision) return;
         set({ saves: result.saves });
       } catch {
         // Swallow — saves remain at the previous value. The RunPanel
