@@ -162,6 +162,44 @@ describe('named save deletion', () => {
     },
   );
 
+  it.each([
+    ['Keep', 'keep'],
+    ['Café', 'Cafe\u0301'],
+  ])(
+    'refuses potentially aliased names %s / %s without deleting either save',
+    async (first, second) => {
+      host.send({ kind: 'save', commandId: 'first-alias', slot: first });
+      host.send({ kind: 'save', commandId: 'second-alias', slot: second });
+      await host.flush();
+      const index = await storage.read('saves/index.json');
+      const firstBytes = await storage.read(`saves/${first}.save`);
+      const secondBytes = await storage.read(`saves/${second}.save`);
+      for (const slot of [first, second]) {
+        const commandId = `delete-${slot}`;
+        host.send({ kind: 'deleteSave', commandId, slot });
+        await host.flush();
+        expect(response(commandId)).toMatchObject({
+          kind: 'commandError',
+          message: expect.stringContaining('No files were removed'),
+        });
+      }
+      expect(await storage.read('saves/index.json')).toEqual(index);
+      expect(await storage.read(`saves/${first}.save`)).toEqual(firstBytes);
+      expect(await storage.read(`saves/${second}.save`)).toEqual(secondBytes);
+    },
+  );
+
+  it('does not delete a differently spelled indexed save through an unlisted alias', async () => {
+    host.send({ kind: 'deleteSave', commandId: 'delete', slot: 'REMOVE' });
+    await host.flush();
+    expect(response()).toMatchObject({
+      kind: 'commandError',
+      message: expect.stringContaining('No files were removed'),
+    });
+    expect(await storage.exists('saves/remove.save')).toBe(true);
+    expect(await slots()).toEqual(['remove', 'keep']);
+  });
+
   it('refuses deletion without persistence', () => {
     const ephemeral = new NodeHost({ heartbeatHz: 0 });
     const replies: SimEvent[] = [];

@@ -1407,6 +1407,20 @@ export class NodeHost {
       )
         throw new Error('Cannot delete save: save index is invalid; no files were removed.');
       const index = parsed as SavesIndex;
+      // Some filesystem adapters fold case or canonically equivalent
+      // Unicode names. Never remove bytes that another listed slot may
+      // reference, including legacy aliases created before this guard.
+      const foldedSlot = slot.normalize('NFD').toLowerCase();
+      if (
+        index.saves.some(
+          (entry) =>
+            entry.slot !== slot && entry.slot.normalize('NFD').toLowerCase() === foldedSlot,
+        )
+      ) {
+        throw new Error(
+          `Cannot delete save "${slot}": another listed save has a name differing only by case or Unicode normalization. No files were removed.`,
+        );
+      }
       // Delete bytes first. Missing files are harmless, allowing a retry
       // to finish index cleanup after an interrupted or failed index write.
       await storage.delete(key);
