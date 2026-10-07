@@ -311,15 +311,15 @@ test('rewind retains older pinned roots and removes groups founded in the discar
 }) => {
   test.setTimeout(60_000);
   await freshRun(page);
+  await pause(page);
   await page.getByRole('button', { name: 'Pin ancestry group', exact: true }).click();
   const root = page.locator('.ancestry-group-list [data-root-id="L0"]');
-  await page.getByRole('button', { name: '64×', exact: true }).click();
+  await advanceAncestryFixture(page, 'descendants', 20);
   await expect
     .poll(async () => Number((await root.textContent())?.match(/(\d+) living lineages/)?.[1]), {
       timeout: 40_000,
     })
     .toBeGreaterThan(20);
-  await pause(page);
   await root.getByRole('button').click();
   const child = page.locator('.ancestry-member-list button:not([data-lineage-id="L0"])').first();
   const childId = await child.getAttribute('data-lineage-id');

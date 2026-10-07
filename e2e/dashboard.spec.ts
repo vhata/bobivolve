@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
+import type { SimStoreState } from '../ui/sim-store.js';
 
 // Smoke tests for the dashboard. These exercise the UI from a real
 // browser, which is the only way to catch worker pacing bugs, OPFS
@@ -141,46 +143,119 @@ test('pause stops population growth and resets the speed readout', async ({ page
   expect(populationAfterWait).toBeLessThanOrEqual(populationAtPause + 1);
 });
 
-test('1× speed advances slower than 16×', async ({ page }) => {
-  await startFreshRun(page);
+test('1× speed advances slower than 16×', async ({ page }, testInfo) => {
+  async function measure(speed: 1 | 16) {
+    // Both observations start in a fresh seed-42 world at 1x. Configure
+    // the requested speed while paused, before replication can dominate
+    // worker cost or automatic pauses can confound the pacing comparison.
+    await page.goto('/');
+    const slowButton = page.getByRole('button', { name: '1×', exact: true });
+    await slowButton.click();
+    await expect(slowButton).toHaveAttribute('data-pending', 'false');
+    await page.getByRole('textbox', { name: 'Seed', exact: true }).fill('42');
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
+      'data-pending',
+      'false',
+    );
+    // Navigation and actionability can age even a 1x run on a slow browser.
+    // Rewind through the production timeline action to give both speed
+    // observations the identical real tick-zero, one-founder state.
+    await expect(
+      page.getByRole('button', { name: 'Pin ancestry group', exact: true }),
+    ).toBeEnabled();
+    await page.evaluate(async () => {
+      const path = '/sim-store.ts';
+      const { useSimStore } = (await import(/* @vite-ignore */ path)) as {
+        useSimStore: { getState(): SimStoreState };
+      };
+      const transport = useSimStore.getState().transport;
+      if (transport === null) throw new Error('Missing simulation transport');
+      await new Promise<void>((resolve, reject) => {
+        const unsubscribe = transport.onEvent((event) => {
+          if (
+            (event.kind === 'commandAck' || event.kind === 'commandError') &&
+            event.commandId === commandId
+          ) {
+            unsubscribe();
+            if (event.kind === 'commandError') reject(new Error(event.message));
+            else resolve();
+          }
+        });
+        useSimStore.getState().rewindToTick(0n);
+        const commandId = [...useSimStore.getState().pendingCommands.values()].find(
+          (command) => command.kind === 'rewindToTick',
+        )?.commandId;
+        if (commandId === undefined) {
+          unsubscribe();
+          reject(new Error('Tick-zero rewind did not start'));
+        }
+      });
+    });
+    await expect(page.locator('.population-panel .panel-meta')).toHaveText('simTick 0');
+    await expect(page.locator('.population-total')).toHaveText('1 probes');
+    for (const name of ['Significant drift', 'Lineage extinction', 'Patch saturated']) {
+      await page.getByRole('checkbox', { name, exact: true }).uncheck();
+    }
+    const speedButton = page.getByRole('button', { name: `${speed}×`, exact: true });
+    await speedButton.click();
+    await expect(speedButton).toHaveAttribute('aria-pressed', 'true');
+    await expect(speedButton).toHaveAttribute('data-pending', 'false');
 
-  // Wait for the sim to be live.
-  await expect
-    .poll(
-      async () => {
-        const text = (await page.locator('.population-total').textContent()) ?? '';
-        return readNumeric(text);
-      },
-      { timeout: 20_000 },
-    )
-    .toBeGreaterThan(2);
-
-  // Tick advance over a fixed window is the right speed signal — under
-  // R1 the population can saturate at carrying capacity, so growth is
-  // not monotonic with speed.
-  function readSimTick(): Promise<number> {
-    return page
-      .locator('.population-panel .panel-meta')
-      .textContent()
-      .then((t) => readNumeric(t ?? ''));
+    const observation = await page.evaluate(async () => {
+      const control = document.querySelector<HTMLButtonElement>('.controls-panel .control-button');
+      if (control === null || control.textContent !== 'Resume')
+        throw new Error('Speed observation must start paused');
+      const readTick = (): number =>
+        Number(
+          document
+            .querySelector('.population-panel .panel-meta')
+            ?.textContent?.match(/simTick (\d+)/)?.[1],
+        );
+      const waitForTick = async (target: number): Promise<number> => {
+        let tick: number;
+        do {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          tick = readTick();
+        } while (tick < target);
+        return tick;
+      };
+      const pausedTick = readTick();
+      if (!Number.isFinite(pausedTick)) throw new Error('Missing rendered simulation tick');
+      // Click the production control inside this single browser observation,
+      // so driver scheduling cannot extend a growing 16x setup between calls.
+      control.click();
+      // Start timing after the real resumed pipeline renders its first tick.
+      // Compare a bounded tick window in each fresh world; a fixed short wall
+      // window can observe no rendered heartbeat on a throttled CI browser.
+      const firstTick = await waitForTick(pausedTick + 1);
+      const startedAt = performance.now();
+      const finalTick = await waitForTick(firstTick + 32);
+      const elapsedMs = performance.now() - startedAt;
+      control.click();
+      return { pausedTick, firstTick, finalTick, advance: finalTick - firstTick, elapsedMs };
+    });
+    await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
+      'data-pending',
+      'false',
+    );
+    expect(observation.advance).toBeGreaterThan(0);
+    return observation;
   }
 
-  await page.getByRole('button', { name: '1×' }).click();
-  await page.waitForTimeout(1_000);
-  const tick1xStart = await readSimTick();
-  await page.waitForTimeout(2_000);
-  const tick1xEnd = await readSimTick();
-  const advanceAt1x = tick1xEnd - tick1xStart;
-
-  await page.getByRole('button', { name: '16×' }).click();
-  await page.waitForTimeout(1_000);
-  const tick16xStart = await readSimTick();
-  await page.waitForTimeout(2_000);
-  const tick16xEnd = await readSimTick();
-  const advanceAt16x = tick16xEnd - tick16xStart;
-
-  // 16× should advance the simulation strictly faster than 1×.
-  expect(advanceAt16x).toBeGreaterThan(advanceAt1x);
+  const slow = await measure(1);
+  const fast = await measure(16);
+  const observationPath = testInfo.outputPath('speed-observations.json');
+  await writeFile(observationPath, JSON.stringify({ slow, fast }, null, 2));
+  await testInfo.attach('speed-observations', {
+    path: observationPath,
+    contentType: 'application/json',
+  });
+  // Actual elapsed time includes browser scheduling and rendered overshoot.
+  // Both tick counts must advance, and 16x must have a strictly higher rate.
+  expect(fast.advance / fast.elapsedMs).toBeGreaterThan(slow.advance / slow.elapsedMs);
 });
 
 test('pause actually halts growth at 64× with a busy worker', async ({ page }) => {
