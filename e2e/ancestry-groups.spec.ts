@@ -19,6 +19,99 @@ async function pause(page: Page): Promise<void> {
   );
 }
 
+// This inspection fixture advances the real worker while paused, so CI speed
+// cannot leave a growing 64x run competing with the final inspection clicks.
+// Pause-button responsiveness remains covered by dashboard.spec.ts.
+async function advanceAncestryFixture(
+  page: Page,
+  until: 'descendants' | 'extinct',
+  minimumLivingLineages = 5,
+): Promise<void> {
+  await page.evaluate(
+    async ({ condition, minimumLivingLineages }) => {
+      const path = '/sim-store.ts';
+      const { useSimStore } = (await import(/* @vite-ignore */ path)) as {
+        useSimStore: { getState(): SimStoreState };
+      };
+      const transport = useSimStore.getState().transport;
+      if (transport === null || !useSimStore.getState().paused)
+        throw new Error('Fixture must start paused');
+      const step = (): Promise<bigint> =>
+        new Promise((resolve, reject) => {
+          const commandId = `ancestry-fixture-${crypto.randomUUID()}`;
+          const timeout = setTimeout(() => {
+            unsubscribe();
+            reject(new Error('Fixture step was not acknowledged'));
+          }, 10_000);
+          const unsubscribe = transport.onEvent((event) => {
+            if (
+              (event.kind !== 'commandAck' && event.kind !== 'commandError') ||
+              event.commandId !== commandId
+            )
+              return;
+            clearTimeout(timeout);
+            unsubscribe();
+            if (event.kind === 'commandError') reject(new Error(event.message));
+            else resolve(event.simTick);
+          });
+          transport.send({ kind: 'step', commandId, ticks: 8n });
+        });
+      const firstTick = await step();
+      // Include the first (at most eight) ticks in the advancement budget.
+      const startedAt = firstTick - 8n;
+      let tick = firstTick;
+      for (;;) {
+        const tree = await transport.query({ kind: 'lineageTree', queryId: '' });
+        if (tree.kind !== 'lineageTree') throw new Error('Unexpected fixture query response');
+        const ready =
+          condition === 'descendants'
+            ? tree.lineages.filter((lineage) => lineage.extinctionTick === null).length >
+              minimumLivingLineages
+            : tree.lineages.some(
+                (lineage) => lineage.id === 'L0' && lineage.extinctionTick !== null,
+              );
+        if (ready) break;
+        if (tick - startedAt >= 4096n)
+          throw new Error(`Ancestry fixture did not reach ${condition} within 4096 ticks`);
+        tick = await step();
+      }
+      // Step emits domain events but no heartbeat. Briefly run at 1x to obtain
+      // a real population reading, then pause through the production action as
+      // soon as it arrives. Never synthesize events or inject projected counts.
+      useSimStore.getState().setSpeed(1);
+      await new Promise<void>((resolve, reject) => {
+        let pauseId: string | undefined;
+        const timeout = setTimeout(() => {
+          unsubscribe();
+          reject(new Error('Fixture refresh did not pause'));
+        }, 10_000);
+        const unsubscribe = transport.onEvent((event) => {
+          if (event.kind === 'tick' && pauseId === undefined) {
+            useSimStore.getState().pause();
+            pauseId = [...useSimStore.getState().pendingCommands.values()].find(
+              (command) => command.kind === 'pause',
+            )?.commandId;
+          } else if (
+            (event.kind === 'commandAck' || event.kind === 'commandError') &&
+            event.commandId === pauseId
+          ) {
+            clearTimeout(timeout);
+            unsubscribe();
+            if (event.kind === 'commandError') reject(new Error(event.message));
+            else resolve();
+          }
+        });
+        useSimStore.getState().resume();
+      });
+    },
+    { condition: until, minimumLivingLineages },
+  );
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
+    'data-pending',
+    'false',
+  );
+}
+
 async function counts(page: Page): Promise<{ grouped: number; total: number }> {
   return page.evaluate(() => {
     const numbers = [
@@ -38,11 +131,12 @@ test('pinned roots follow new descendants, partition nested groups, and retain r
 }, testInfo) => {
   test.setTimeout(90_000);
   await freshRun(page);
+  await pause(page);
   await page.getByRole('button', { name: 'Pin ancestry group', exact: true }).click();
   const root = page.locator('.ancestry-group-list [data-root-id="L0"]');
   await expect(root).toBeVisible();
   const color = await root.locator('.lineage-swatch').getAttribute('style');
-  await page.getByRole('button', { name: '64×', exact: true }).click();
+  await advanceAncestryFixture(page, 'descendants', 20);
   await expect
     .poll(
       async () => {
@@ -52,7 +146,6 @@ test('pinned roots follow new descendants, partition nested groups, and retain r
       { timeout: 45_000 },
     )
     .toBeGreaterThan(20);
-  await pause(page);
   await root.getByRole('button').click();
   await expect(page.locator('.ancestry-member-list li')).toHaveCount(20);
   const firstPageId = await page
@@ -170,15 +263,13 @@ test('an extinct pinned root retains its living descendants and remains inspecta
 }, testInfo) => {
   test.setTimeout(90_000);
   await freshRun(page);
+  await pause(page);
   await page.getByRole('button', { name: 'Pin ancestry group', exact: true }).click();
   const root = page.locator('.ancestry-group-list [data-root-id="L0"]');
-  await page.getByRole('button', { name: '64×', exact: true }).click();
+  await advanceAncestryFixture(page, 'descendants');
   await expect
-    .poll(async () => Number((await root.textContent())?.match(/(\d+) living lineages/)?.[1]), {
-      timeout: 45_000,
-    })
+    .poll(async () => Number((await root.textContent())?.match(/(\d+) living lineages/)?.[1]))
     .toBeGreaterThan(5);
-  await pause(page);
   await root.getByRole('button').click();
   await page.getByRole('button', { name: 'Inspect root L0', exact: true }).click();
   await page.getByRole('button', { name: 'Apply patch', exact: true }).click();
@@ -192,9 +283,8 @@ test('an extinct pinned root retains its living descendants and remains inspecta
   // Avoid an unrelated extinction auto-pause stopping the run before L0 dies.
   const extinctionToggle = page.getByRole('checkbox', { name: /lineage extinction/i });
   if (await extinctionToggle.count()) await extinctionToggle.uncheck();
-  await page.getByRole('button', { name: 'Resume', exact: true }).click();
-  await expect(root).toContainText('root extinct', { timeout: 45_000 });
-  await pause(page);
+  await advanceAncestryFixture(page, 'extinct');
+  await expect(root).toContainText('root extinct');
   await expect
     .poll(async () => Number(await root.locator('.ancestry-population').textContent()))
     .toBeGreaterThan(0);
