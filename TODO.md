@@ -40,10 +40,6 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
   - Depends on: `r2-engineer-loop`, `browser-session-budgets`
   - Blocked by: User review of the proposed mechanics and design pass before implementation.
 
-- [TOOLING] `github-merge-protection` — **Require checks and safe merging on main.** Main is unprotected despite passing CI; see the proposed settings in [QUALITY.md](docs/QUALITY.md#hosting-settings).
-  - Source: Live branch protection and ruleset inspection, 2026-10-06.
-  - Blocked by: The user applies and verifies hosting settings; agents do not apply them.
-
 ## Needs proof of concept
 
 ### Unprioritized
@@ -70,9 +66,6 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
   - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
 
 - [DOCS] `full-codebase-review` — **Establish the first current full-review baseline.** The historical project-direction review is preserved; it does not establish current full-codebase coverage.
-  - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.
-
-- [TOOLING] `landed-branch-cleanup` — **Clean up confirmed landed branches.** Eight local tips match merged PR heads (#19–#23, #26–#28). Recheck live status and preserve unmatched branches and unmerged work.
   - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.
 
 - [DOCS] `open-pr-review-evidence` — **Verify and record review evidence for existing ready PRs.** PRs #29–#31 have green CI but no reviewer attribution in their GitHub records. Inspect actual changes and obtain review where evidence is unavailable.

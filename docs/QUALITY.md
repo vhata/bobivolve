@@ -44,11 +44,11 @@ For a red main push or scheduled run, the same day revert the responsible change
 
 ## Hosting settings
 
-Live inspection on 2026-10-06 found main unprotected, no rulesets, squash merging enabled, merge/rebase merging disabled, and branch deletion on merge enabled. The following settings are proposed for the user to apply; they are not enforced by this PR:
+Verified on 2026-10-07 after the user authorized protection: main has branch protection with these settings. Repository merging remains squash-only, with landed head branches deleted automatically. Changes to hosting settings require explicit user authorization.
 
-- Require PR checks named `check` and `browser` on the current base (`strict: true`, or an equivalent merge queue).
-- Require linear history and resolved conversations. Block branch deletion and force pushes on main, and enforce the rules for administrators; there are no direct-to-main exceptions.
-- Keep squash-only merging and deletion of landed head branches; use the PR title as the squash subject and PR body as the commit body.
+- Require GitHub Actions checks named `check` and `browser` on the current base (`strict: true`); both checks are bound to the GitHub Actions app.
+- Require linear history and resolved conversations. Main deletion and force pushes are blocked, and rules are enforced for administrators; there are no direct-to-main exceptions.
+- Use squash-only merging and deletion of landed head branches, with the PR title as the squash subject and PR body as the commit body.
 - Zero GitHub approving reviews is acceptable with agent review recorded in `## Review`; the user retains final review and landing authority.
 
 Verify with `gh api repos/vhata/bobivolve/branches/main/protection`, `gh api repos/vhata/bobivolve/rulesets`, and repository merge settings before describing protection as active. Independent review and successful validation are required for readiness; current-base checks and landed parents additionally determine eligibility to land.
