@@ -59,3 +59,7 @@ Thumbs.db
 *.swp
 *.swo
 AUDIT.md
+
+# Agent workflow worktrees and local-only PR bodies
+.worktrees/
+.feral/

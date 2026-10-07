@@ -19,3 +19,7 @@ For occasional actions such as save/load, pause and prompt when the player click
 ## Filter irrelevant items before compressing relevant ones
 
 When a view gets crowded, hide what the player does not need before flattening the information they do need. Living lineages retain their full nesting depth; dead lineages can be hidden with survivors re-parented to the nearest living ancestor. Substrate filters narrow the visible probe set.
+
+## Full agent workflow — 2026-10-06
+
+The user selected the full repo-workflow model after the workflow audit. Staged TODO entries, exact PR claims, a separate promoted review backlog, immutable review snapshots, and scheduled validation replace the previous one-queue/no-marker/no-ledger policy. Explicit ownership and readiness make concurrent work and handoffs inspectable. Existing task rationale and design gates are preserved; historical review findings are not asserted to remain open or to have current coverage. Hosting protection remains a user-applied proposal.

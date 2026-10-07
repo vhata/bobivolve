@@ -65,3 +65,7 @@ Pins are browser-local, per-run UI preferences (at most six), managed by `ui/sim
 ## Migration path to Rust (future option)
 
 No Rust runtime or Tauri transport exists here. If TypeScript becomes a demonstrated constraint, port the core behind the same protocol and compare event logs against the TypeScript reference. Code generation and a native transport would arrive with that work. Old-run recovery would require compatible command replay; cross-version migration is not implemented today.
+
+## Agent worktree isolation
+
+Each worktree owns its dependency installation and mutable caches, run storage, browser profile, and test evidence. Do not symlink another writer's `node_modules` or reuse player saves for tests. Concurrent dev servers need distinct ports; browser checks normally run serially in a worktree. The coordinator limits heavy concurrent checks through [AGENTS.md](AGENTS.md#workflow).

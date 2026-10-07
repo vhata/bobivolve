@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-exec pnpm exec eslint . "$@"
+exec pnpm exec eslint . --max-warnings 0 "$@"

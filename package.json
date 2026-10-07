@@ -34,7 +34,7 @@
       "prettier --write"
     ],
     "*.{ts,tsx,js,mjs,cjs}": [
-      "eslint --fix"
+      "eslint --fix --max-warnings 0"
     ]
   },
   "devDependencies": {
