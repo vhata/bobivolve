@@ -63,6 +63,10 @@ function is_priority(h) {
 function is_stage(h) {
   return h ~ /^(Needs triage|Needs proof of concept|Ready for separate work)$/
 }
+# The review backlog contains promoted, ready work under priority headings.
+function is_ready(slug) {
+  return is_backlog[slug] || estage[slug] ~ /^Ready/
+}
 function finish_entry() {
   if (cur == "") return
   if (!has_source[cur]) report("error", efile[cur], eline[cur], "entry `" cur "` has no \"Source:\" line")
@@ -126,7 +130,7 @@ FNR == 1 { finish_entry(); stage = ""; priority = ""; file_is_backlog = (FILENAM
     # A decision, a person or an external condition, in prose; any `slug` in it is also a dependency.
     if (val == "" || val ~ /^[Nn]one\.?$/) ;
     else {
-      if (estage[cur] ~ /^Ready/) report("error", FILENAME, FNR, "`" cur "` is in Ready for separate work but is Blocked by: " val "; move it out of Ready until the blocker clears")
+      if (is_ready(cur)) report("error", FILENAME, FNR, "`" cur "` is marked ready but is Blocked by: " val "; move it out of ready work until the blocker clears")
       n = slugs_in(val, tmp)
       for (i = 1; i <= n; i++) { nd++; dep_from[nd] = cur; dep_to[nd] = tmp[i]; dep_file[nd] = FILENAME; dep_line[nd] = FNR }
     }
@@ -147,8 +151,8 @@ END {
   for (i = 1; i <= nd; i++) {
     if (!(dep_to[i] in efile)) {
       report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` depends on `" dep_to[i] "` which is not in any queue; if it landed, drop the line and reassess the stage")
-    } else if (estage[dep_from[i]] ~ /^Ready/) {
-      report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` is in Ready for separate work but depends on unresolved `" dep_to[i] "`; move it out of Ready until the dependency lands")
+    } else if (is_ready(dep_from[i])) {
+      report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` is marked ready but depends on unresolved `" dep_to[i] "`; move it out of ready work until the dependency lands")
     }
   }
   n = 0; for (s in efile) n++
