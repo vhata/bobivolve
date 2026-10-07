@@ -67,6 +67,3 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 - [DOCS] `full-codebase-review` — **Establish the first current full-review baseline.** The historical project-direction review is preserved; it does not establish current full-codebase coverage.
   - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.
-
-- [DOCS] `open-pr-review-evidence` — **Verify and record review evidence for existing ready PRs.** PRs #29–#31 have green CI but no reviewer attribution in their GitHub records. Inspect actual changes and obtain review where evidence is unavailable.
-  - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.
