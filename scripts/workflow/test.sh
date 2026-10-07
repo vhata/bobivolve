@@ -94,12 +94,43 @@ cat > bin/gh <<'GH'
 #!/usr/bin/env bash
 case "$1 $2" in
   'auth status'|'repo view') exit 0 ;;
-  'pr list') echo 'API unavailable' >&2; exit 1 ;;
+  'api --paginate') echo 'API unavailable' >&2; exit 1 ;;
   *) exit 2 ;;
 esac
 GH
 chmod +x bin/gh
 reject 'hosted ownership query' 'ownership remains unverified' env PATH="$fixture/bin:$PATH" bash scripts/workflow/claim-check.sh fixture-unclaimed-task
+
+cat > bin/gh <<'GH'
+#!/usr/bin/env bash
+# Search deliberately returns nothing: branch names and fresh body markers
+# need direct, paginated pull records rather than a search-index match.
+case "$1 $2" in
+  'auth status'|'repo view') exit 0 ;;
+  'pr list') exit 0 ;;
+  'api --paginate')
+    case "$*" in *--search*) exit 0 ;; esac
+    case "$3" in
+      *'state=open&per_page=100')
+        case "$5" in *'note: open PR'*) exit 0 ;; esac
+        case "$FIXTURE_PR_KIND" in
+          branch) echo '  open PR #42 [draft] task/fixture-unclaimed-task: Unrelated title' ;;
+          body) echo '  open PR #43 [draft] task/another-task: Fresh body claim' ;;
+        esac ;;
+      *'state=closed&per_page=100')
+        case "$5" in *'.merged_at != null'*) ;; *) exit 2 ;; esac
+        if [ "$FIXTURE_PR_KIND" = merged ]; then
+          echo '  merged PR #44 (2026-10-06) resolved or carried this slug: Unrelated title'
+        fi ;;
+      *) exit 2 ;;
+    esac ;;
+  *) exit 2 ;;
+esac
+GH
+reject 'branch-only remote claim' 'open PR #42' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=branch bash scripts/workflow/claim-check.sh fixture-unclaimed-task
+reject 'fresh body remote claim' 'open PR #43' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=body bash scripts/workflow/claim-check.sh fixture-unclaimed-task
+reject 'branch-only merged work' 'merged PR #44' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=merged bash scripts/workflow/claim-check.sh fixture-unclaimed-task
+pass 'unclaimed hosted work' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=none bash scripts/workflow/claim-check.sh fixture-unclaimed-task
 
 head="$(git rev-parse HEAD)"
 printf '| Date | Type | Commit |\n| 2026-10-06 | full | `%s` |\n' "$head" > review-index.md
