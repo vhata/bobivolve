@@ -44,6 +44,10 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
   - Source: Live branch protection and ruleset inspection, 2026-10-06.
   - Blocked by: The user applies and verifies hosting settings; agents do not apply them.
 
+- [TOOLING] `ancestry-browser-pause-flake` — **Make the ancestry grouping fixture stop reliably on hosted runners.** The first ancestry-group test passed locally but timed out waiting for Pause acknowledgement on the initial documentation-only PR run; the product and test code were unchanged. Preserve the real worker assertions and evidence rather than increasing timeouts or retrying until green.
+  - Source: [PR #32 initial CI failure](https://github.com/vhata/bobivolve/actions/runs/37577555193), 2026-10-06; `e2e/ancestry-groups.spec.ts:55` at `5fced57`.
+  - Starting point: Inspect bounded paused-worker setup versus the current live 64× growth/pause fixture; check open PR #31's related extinct-root fixture work before editing the same file.
+
 ## Needs proof of concept
 
 ### Unprioritized
