@@ -488,7 +488,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
           lineageId={lineage.id}
           lineageName={lineage.name}
           initialFirmware={drift.referenceFirmware}
-          onApplied={(firmware) => {
+          onApplied={() => {
             const currentState = useSimStore.getState();
             if (
               currentState.selectedLineageId !== lineage.id ||
@@ -496,14 +496,12 @@ export function LineageInspectorPanel(): React.JSX.Element {
               currentState.transport !== transport
             )
               return;
-            // A paused player can reopen before the next telemetry poll.
-            // Publish the acknowledged reference now, and ignore any poll
-            // that started before this acknowledgement.
+            // The acknowledgement invalidates the whole telemetry snapshot:
+            // its reference, provenance verdicts, and counts must refresh
+            // together. Ignore polls started before this acknowledgement.
             referenceRevision.current += 1;
             setPatchRevision((revision) => revision + 1);
-            setDrift((current) =>
-              current === null ? null : { ...current, referenceFirmware: firmware },
-            );
+            setDrift(null);
           }}
           onClose={() => {
             setPatchEditorOpen(false);
