@@ -9,3 +9,8 @@ for gate in fmt-check lint typecheck test; do
     exit 1
   fi
 done
+
+echo "Checking queues"
+bash scripts/workflow/check-queues.sh --strict
+echo "Checking links"
+bash scripts/workflow/check-links.sh

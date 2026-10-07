@@ -6,6 +6,6 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     reporters: 'default',
-    passWithNoTests: true,
+    passWithNoTests: false,
   },
 });
