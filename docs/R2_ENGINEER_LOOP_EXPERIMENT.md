@@ -77,6 +77,8 @@ The stable-clade slice now ships as **pinned ancestry groups**: up to six roots 
 
 The editor-clarity slice now ships in the patch editor: readable per-tick/energy units, movement-attempt probability alongside its exact editable encoding, current reference versus proposed values, and the fixed one-time Origin authoring charge with available and remaining compute. Reference firmware is explicitly distinguished from drifted probe firmware. Production has no additional upkeep for stronger firmware; expected upkeep remains pending the cost-model prototype. The decree composer retains its existing editor.
 
+The provenance slice now ships in lineage inspection: each inherited patch records its authored firmware, shows ordered differences against the current reference, and separates living ancestry carriers from exact matches (including this lineage’s own matches). Older snapshots without authored firmware show unknown retention. Saturation continues to count ancestry, not exact firmware retention.
+
 The remaining decisions above are proposed implementation work. Keep the human study below as the next gate; do not expand the R3 implementation until a player can explain the R2 trade-off.
 
 ### Human playtest record (not yet conducted)

@@ -16,6 +16,7 @@ import type { DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.
 import { useSimStore } from '../sim-store.js';
 import { DecreeComposerModal } from './DecreeComposerModal.js';
 import { PatchEditorModal } from './PatchEditorModal.js';
+import { PatchProvenance } from './PatchProvenance.js';
 import { AncestryPinControls } from './AncestryGroups.js';
 
 const BAR_PX = 220;
@@ -241,6 +242,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [patchEditorOpen, setPatchEditorOpen] = useState(false);
   const referenceRevision = useRef(0);
+  const [patchRevision, setPatchRevision] = useState(0);
   const [decreeComposerOpen, setDecreeComposerOpen] = useState(false);
   // Per-lineage sparkline buffers. Held in a ref so a render does not
   // discard the history; we surface a render counter to push samples
@@ -292,7 +294,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [transport, selectedLineageId, timelineEpoch]);
+  }, [transport, selectedLineageId, timelineEpoch, patchRevision]);
 
   const lineage = lineages.get(selectedLineageId);
   const divisorStr = drift?.divergenceDivisor ?? null;
@@ -412,7 +414,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
                 <dd>{drift !== null ? `${drift.population.toString()} extant` : '…'}</dd>
               </div>
               <div>
-                <dt>patches</dt>
+                <dt>patch ancestry</dt>
                 <dd>
                   {drift === null ? (
                     '…'
@@ -438,6 +440,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
                 </dd>
               </div>
             </dl>
+            {drift !== null ? <PatchProvenance drift={drift} /> : null}
             {drift !== null && Object.keys(drift.parameters).length > 0 ? (
               <div className="lineage-drift">
                 <div className="drift-heading">
@@ -485,7 +488,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
           lineageId={lineage.id}
           lineageName={lineage.name}
           initialFirmware={drift.referenceFirmware}
-          onApplied={(firmware) => {
+          onApplied={() => {
             const currentState = useSimStore.getState();
             if (
               currentState.selectedLineageId !== lineage.id ||
@@ -493,13 +496,12 @@ export function LineageInspectorPanel(): React.JSX.Element {
               currentState.transport !== transport
             )
               return;
-            // A paused player can reopen before the next telemetry poll.
-            // Publish the acknowledged reference now, and ignore any poll
-            // that started before this acknowledgement.
+            // The acknowledgement invalidates the whole telemetry snapshot:
+            // its reference, provenance verdicts, and counts must refresh
+            // together. Ignore polls started before this acknowledgement.
             referenceRevision.current += 1;
-            setDrift((current) =>
-              current === null ? null : { ...current, referenceFirmware: firmware },
-            );
+            setPatchRevision((revision) => revision + 1);
+            setDrift(null);
           }}
           onClose={() => {
             setPatchEditorOpen(false);

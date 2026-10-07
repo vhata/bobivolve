@@ -91,6 +91,7 @@ export function applyPatch(
   });
 
   const record: AppliedPatchRecord = {
+    authoredFirmware: newFirmware.map((directive) => ({ ...directive })),
     id: patchId,
     targetLineageId: lineageId,
     appliedAtTick: state.simTick,
