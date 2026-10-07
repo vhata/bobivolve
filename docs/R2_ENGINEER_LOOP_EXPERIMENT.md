@@ -1,6 +1,6 @@
 # R2 engineer-loop experiment
 
-Status: seeded simulation comparison completed on `c8c50fb` (2026-09-21); player study and mechanic selection pending. This is evidence for the [project review](PROJECT_REVIEW.md), not a shipped balance change or an R3 brief.
+Status: seeded simulation comparison completed on `c8c50fb` (2026-09-21); probe-energy upkeep selected for the next prototype; player study and production tariff remain pending. This is evidence for the [project review](PROJECT_REVIEW.md), not a shipped balance change or an R3 brief.
 
 ## Question and method
 
