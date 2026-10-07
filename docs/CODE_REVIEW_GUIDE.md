@@ -77,7 +77,7 @@ Report actionable findings with severity, file/location, failure scenario, and e
   - Review backlog: `mapped-backlog-slug`
 ```
 
-Kinds: Bug, Design, Duplication, Performance, Test, Style, Tooling, Docs, Security. Verification: **Verified** (executed or reproduced) or **Read** (inspection). Statuses: **Open**, **Moved** (open at a new location), **Fixed**, **Accepted** (reason), **Invalid** (evidence), **Superseded** (replacement slug). Every non-open status carries evidence. Closed entries are one line each with reference, location at the reviewed commit, and confirmation:
+Kinds: Bug, Design, Duplication, Performance, Test, Style, Tooling, Docs, Security. Verification: **Verified** (executed or reproduced) or **Read** (inspection). Statuses: **Open**, **Moved** (open at a new location), **Fixed**, **Accepted** (reason), **Invalid** (evidence), **Superseded** (replacement slug). Every non-open status carries evidence. Accepted records the reason, who decided, and when to reconsider. Accepting a real correctness or security risk requires the user's decision; an agent may show a finding Invalid with evidence, but cannot accept that risk on the user's behalf. Closed entries are one line each with reference, location at the reviewed commit, and confirmation:
 
 ```md
 - `finding-slug` — Fixed in #45 (f10a8e2). `path:line` (`symbol`): what the code now does. Original reproduction rerun; no longer reproduces.
