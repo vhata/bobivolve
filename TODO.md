@@ -62,8 +62,9 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ### P1 High
 
-- [TOOLING] `quarantine-exhaustion-e2e-flake` — **Make the quarantine-exhaustion browser test pass reliably in CI.** `e2e/quarantine-exhaustion.spec.ts` has failed the required `browser` check on five of the seven CI runs since #30 landed, including two main pushes, while passing locally.
-  - Source: CI runs on main 37706221176 (75b9829) and 37707047026 (42f02c9), PR #34 runs 37742103263 and 37743074646 (including a rerun), PR #35 run 37745391249 (markdown-only on top of 9b37eed); main 37707228177 (9b37eed) passed. Observed by the coordinator of #34 and #35, 2026-10-08.
+- [TOOLING] `quarantine-exhaustion-e2e-flake` — **Make the quarantine-exhaustion browser test pass reliably in CI.** `e2e/quarantine-exhaustion.spec.ts` has failed the required `browser` check on five of the seven CI runs since #30 landed, including two main pushes.
+  - Source: CI runs since #30 merged (failed: main 37706221176 at 75b9829 and 37707047026 at 42f02c9, PR #34 37742103263 and 37743074646 on both attempts, PR #35 37745391249 on markdown-only changes over 9b37eed; passed: main 37707228177 at 9b37eed, PR #35 37743485302). The pre-merge #30 branch passed twice (37704203247, 37704604442). Locally the full suite passed at 9b37eed and on #34 in three separate agent runs. Filed by PR #36, 2026-10-08.
+  - Keep this entry open after a single green main run: 9b37eed already passed once, which does not show the failure is fixed.
   - Starting point: every failure is the 5 s wait at line 25 for `Resume` to reappear after resuming with the "Patch saturated" auto-pause armed. Likely cause (not yet confirmed): the pause tick depends on how long Start ran before Pause, so the population, and the time until the ten applied patches saturate, vary between runs. Look for a deterministic fixture (for example, pausing at a fixed tick via `step`) rather than a longer timeout.
 
 ### Unprioritized
