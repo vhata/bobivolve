@@ -60,7 +60,7 @@ Directly requested work needs no invented entry and no marker. A review batch cl
 Verify the implementation against the complete entry before marking the PR ready.
 
 - **Full:** remove the entry in the PR; change `Claims` to `Resolves`. Search both queues for the slug and repair `Related:` and `Depends on:` lines that name it.
-- **Partial:** remove the original; add a remainder with a new slug, reassessed stage, priority and area, and `Remaining from: <original-slug>`. Use `Partially resolves` plus `Remaining`. For review work the remainder lists only the still-open findings.
+- **Partial:** remove the original; add a remainder with a new slug, reassessed stage, priority and area, and a `Remaining from:` line naming the original slug in backticks (``Remaining from: `original-slug` ``). Use `Partially resolves` plus `Remaining`. For review work the remainder lists only the still-open findings.
 - **Parallel subsets of a batch:** first land a queue-only PR that keeps the original slug on one narrowed entry and adds new entries with `Split from: <original-slug>`. Then each subset is claimed separately. Splitting is not resolution.
 - **Rejected or obsolete:** remove with the reason in the PR.
 
