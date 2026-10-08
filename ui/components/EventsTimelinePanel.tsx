@@ -19,7 +19,8 @@
 //   (small clades that die quickly). A two-axis filter promotes the
 //   ones the player would actually want:
 //     (A) Forward-looking, at emission: parent lineage holds ≥5% of
-//         the live population OR the parent is quarantined / patched.
+//         the live population OR the parent is quarantined OR a player
+//         patch was applied directly to the parent (timeline-promotion.ts).
 //         Promoted speciations join the "surfaced" list immediately.
 //     (B) Retroactive: speciations that did not pass (A) sit in a
 //         candidate buffer, scanned on a sim-tick cadence. A candidate
@@ -45,6 +46,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SimEvent } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
+import { promotesSpeciationAtEmission } from '../timeline-promotion.js';
 
 type EventKind =
   | 'speciation'
@@ -73,12 +75,6 @@ const TIMELINE_HEIGHT = 36;
 
 // Cadence at which buffered events flush to the rendered state.
 const FLUSH_INTERVAL_MS = 250;
-
-// Forward-looking promotion threshold. A speciation whose parent
-// lineage holds at least this fraction of the live population is
-// surfaced as Stratum 2 immediately (the parent is "important enough"
-// that any drift from it is worth a click).
-const PROMOTE_PARENT_FRACTION = 0.05;
 
 // Retroactive promotion threshold. A candidate speciation whose NEW
 // lineage grows to at least this fraction of population gets promoted.
@@ -135,6 +131,7 @@ export function EventsTimelinePanel(): React.JSX.Element {
   const populationTotal = useSimStore((s) => s.populationTotal);
   const populationByLineage = useSimStore((s) => s.populationByLineage);
   const quarantinedLineages = useSimStore((s) => s.quarantinedLineages);
+  const patchedLineages = useSimStore((s) => s.patchedLineages);
 
   const [surfaced, setSurfaced] = useState<readonly TimelineEntry[]>([]);
   // "Show all speciations" toggle — escape hatch when the player
@@ -172,6 +169,7 @@ export function EventsTimelinePanel(): React.JSX.Element {
   const populationTotalRef = useRef(populationTotal);
   const populationByLineageRef = useRef(populationByLineage);
   const quarantinedLineagesRef = useRef(quarantinedLineages);
+  const patchedLineagesRef = useRef(patchedLineages);
   useEffect(() => {
     populationTotalRef.current = populationTotal;
   }, [populationTotal]);
@@ -181,6 +179,9 @@ export function EventsTimelinePanel(): React.JSX.Element {
   useEffect(() => {
     quarantinedLineagesRef.current = quarantinedLineages;
   }, [quarantinedLineages]);
+  useEffect(() => {
+    patchedLineagesRef.current = patchedLineages;
+  }, [patchedLineages]);
 
   useEffect(() => {
     if (transport === null) return;
@@ -220,18 +221,13 @@ export function EventsTimelinePanel(): React.JSX.Element {
       }
       allSpeciationsDirtyRef.current = true;
 
-      const parentId = event.parentLineageId;
-      const total = populationTotalRef.current;
-      const parentPop = populationByLineageRef.current.get(parentId) ?? 0n;
-      const parentIsBig =
-        total > 0n && parentPop * 100n >= total * BigInt(Math.round(PROMOTE_PARENT_FRACTION * 100));
-      const parentIsQuarantined = quarantinedLineagesRef.current.has(parentId);
-      // R2 doesn't surface a "patched" lineage flag in the projection
-      // yet; the doc proposed adding it. For now, parent-quarantined +
-      // parent-big covers the load-bearing fraction. Patched-parent
-      // promotion is logged as a follow-up.
-
-      if (parentIsBig || parentIsQuarantined) {
+      const promoteNow = promotesSpeciationAtEmission(event.parentLineageId, {
+        populationTotal: populationTotalRef.current,
+        populationByLineage: populationByLineageRef.current,
+        quarantinedLineages: quarantinedLineagesRef.current,
+        patchedLineages: patchedLineagesRef.current,
+      });
+      if (promoteNow) {
         surfacedBufferRef.current.push({ ...speciationEntry, stratum: 2 });
         return;
       }
