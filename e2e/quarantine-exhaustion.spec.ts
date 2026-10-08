@@ -15,7 +15,9 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
   // than half the population, which stops holding once the run has aged past
   // its first speciations. Rewind through the production timeline action so
   // the fixture starts from the identical tick-zero, one-founder world
-  // however long Start ran before Pause took effect.
+  // however long Start ran before Pause took effect. The store ignores a
+  // rewind until ancestry pins have loaded for the new run.
+  await expect(page.getByRole('button', { name: 'Pin ancestry group', exact: true })).toBeEnabled();
   await page.evaluate(async () => {
     const path = '/sim-store.ts';
     const { useSimStore } = (await import(/* @vite-ignore */ path)) as {
