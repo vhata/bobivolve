@@ -4,10 +4,10 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 ## P0 Critical
 
-- [HOST] `browser-run-log-durability` — **Persist the browser run's event log during play, so a reload, tab close or crash does not lose the run.** The worker flushes the log only on an explicit Pause, startup or timeline operations, so a session that is never paused loses all of its history on reload.
+- [HOST] `browser-run-log-durability` — **Persist the browser run's event log during play, so a reload, tab close or crash does not lose the run.** The worker flushes the log only on an explicit Pause, startup or timeline operations. Play that is never paused, commands issued while paused before the next pause, and play after an auto-pause are lost on reload.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `browser-log-only-persisted-on-pause`
-  - Starting point: `host/worker.ts:217`, `host/node.ts` (`scheduleSnapshot`, `handleSave`, auto-pause), `host/event-log.ts` (`EventLogWriter`). Add a reload-while-running browser test; the existing reload tests pause first.
+  - Starting point: `host/worker.ts:82,217`, `host/node.ts` (`scheduleSnapshot`, auto-pause at 1155-1161, the startup `switchRun` acknowledgement), `host/event-log.ts` (`EventLogWriter`). Add a reload-while-running browser test; the existing reload tests pause first.
 
 ## P1 High
 
