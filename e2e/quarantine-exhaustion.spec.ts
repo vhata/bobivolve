@@ -3,9 +3,25 @@ import { expect, test } from '@playwright/test';
 test('unfunded quarantine releases on the next tick and explains why', async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem('bobivolve:nux-seen', '1'));
   await page.goto('/');
+  const autoPauseMeta = page.locator('.autopause-panel .panel-meta');
+  // Settle whatever run the page bootstrapped into a paused run, so no
+  // stale auto-pause can arrive once the trigger below is enabled.
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
+    'data-pending',
+    'false',
+  );
+  // Pause the fixture run on its first speciation rather than on a
+  // wall-clock click. The seeded run then reaches the same tick on any
+  // runner, while the founder still holds most of the population, so
+  // the patch below saturates on the first tick after Resume.
+  await page.getByRole('checkbox', { name: 'Significant drift', exact: true }).check();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(autoPauseMeta).toHaveText('last: speciation');
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Significant drift', exact: true }).uncheck();
   await page.locator('.lineage-tree button[aria-pressed]').first().click();
   // Spend through actual player commands while paused, so regeneration
   // cannot race this fixture. No injected simulation or store state.
@@ -22,6 +38,7 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
   await expect(page.locator('.origin-panel [role="status"]')).toContainText('Insufficient compute');
   await page.getByRole('checkbox', { name: 'Patch saturated', exact: true }).check();
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(autoPauseMeta).toHaveText('last: patchSaturated');
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quarantine', exact: true })).toBeVisible();
   await expect(page.locator('.inspector-panel .panel-meta')).not.toContainText('quarantined');
