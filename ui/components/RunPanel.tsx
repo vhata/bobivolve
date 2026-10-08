@@ -33,6 +33,10 @@ export function RunPanel(): React.JSX.Element {
   const startRun = useSimStore((s) => s.startRun);
   const save = useSimStore((s) => s.save);
   const load = useSimStore((s) => s.load);
+  const deleteSave = useSimStore((s) => s.deleteSave);
+  const deletingSave = useSimStore((s) =>
+    [...s.pendingCommands.values()].some((command) => command.kind === 'deleteSave'),
+  );
   const pause = useSimStore((s) => s.pause);
   const paused = useSimStore((s) => s.paused);
   const seed = useSimStore((s) => s.seed);
@@ -66,6 +70,16 @@ export function RunPanel(): React.JSX.Element {
     if (!paused) pause();
     void refreshSaves();
     setLoadMode(true);
+  }
+
+  function handleDeleteSlot(slot: string): void {
+    if (
+      window.confirm(
+        `Delete save "${slot}"? This permanently removes this saved snapshot. Your active run and other saves are kept.`,
+      )
+    ) {
+      deleteSave(slot);
+    }
   }
 
   function handleSelectSlot(slot: string): void {
@@ -137,6 +151,7 @@ export function RunPanel(): React.JSX.Element {
                 cancel
               </button>
             </header>
+            {deletingSave ? <p role="status">Deleting save…</p> : null}
             {sortedSaves.length === 0 ? (
               <p className="panel-empty">no saves yet</p>
             ) : (
@@ -146,6 +161,7 @@ export function RunPanel(): React.JSX.Element {
                     <button
                       type="button"
                       className="save-load-button"
+                      disabled={deletingSave}
                       onClick={() => handleSelectSlot(s.slot)}
                       title={`Load ${s.slot}`}
                     >
@@ -153,6 +169,15 @@ export function RunPanel(): React.JSX.Element {
                       <span className="save-meta">
                         tick {s.tick} · {formatSavedAt(s.savedAtMs)}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="control-button"
+                      disabled={deletingSave}
+                      onClick={() => handleDeleteSlot(s.slot)}
+                      aria-label={`Delete save ${s.slot}`}
+                    >
+                      Delete
                     </button>
                   </li>
                 ))}

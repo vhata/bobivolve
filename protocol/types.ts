@@ -117,6 +117,11 @@ export interface SaveCommand {
   readonly slot: string;
 }
 
+export interface DeleteSaveCommand {
+  readonly kind: 'deleteSave';
+  readonly slot: string;
+}
+
 export interface LoadCommand {
   readonly kind: 'load';
   readonly slot: string;
@@ -165,6 +170,7 @@ export type CommandBody =
   | QueueDecreeCommand
   | RevokeDecreeCommand
   | SaveCommand
+  | DeleteSaveCommand
   | LoadCommand
   | RewindToTickCommand
   | SwitchRunCommand

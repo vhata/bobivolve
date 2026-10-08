@@ -221,8 +221,15 @@ async function reapOrphanSnapshots(persistence: PersistenceOptions): Promise<num
 const SAVES_INDEX_KEY = 'saves/index.json';
 
 function saveSlotKey(slot: string): string {
-  // Slot names must not contain `/` (would escape the saves namespace).
-  if (slot.includes('/') || slot === '' || slot === '..' || slot === '.') {
+  // Reject path separators, NUL, and empty or traversal-only names.
+  if (
+    slot.includes('/') ||
+    slot.includes('\\') ||
+    slot.includes('\0') ||
+    slot.trim() === '' ||
+    slot === '..' ||
+    slot === '.'
+  ) {
     throw new Error(`invalid save slot: ${JSON.stringify(slot)}`);
   }
   return `saves/${slot}.save`;
@@ -678,7 +685,7 @@ export class NodeHost {
       this.error(cmd.commandId, 'timeline operation in progress; retry after completion', false);
       return;
     }
-    // Log every command except Load, newRun, and RewindToTick:
+    // Log commands except timeline changes and named-save deletion:
     //  - Load is a meta-control that forks the timeline; logging it would
     //    cause a circular reference on future loads.
     //  - newRun is logged inside handleNewRun, after the writer is reset
@@ -686,12 +693,14 @@ export class NodeHost {
     //  - RewindToTick truncates the active log after restoration; the
     //    command itself is a timeline operation, not a replayable command.
     // Save IS logged — it marks a checkpoint in the run history.
+    // deleteSave only manages external snapshots and must never be replayed.
     if (
       !this.replaying &&
       this.logWriter !== null &&
       cmd.kind !== 'load' &&
       cmd.kind !== 'newRun' &&
-      cmd.kind !== 'rewindToTick'
+      cmd.kind !== 'rewindToTick' &&
+      cmd.kind !== 'deleteSave'
     ) {
       this.logWriter.appendCommand(this.state?.simTick ?? 0n, cmd);
     }
@@ -737,6 +746,9 @@ export class NodeHost {
         return;
       case 'save':
         this.handleSave(cmd.commandId, cmd.slot);
+        return;
+      case 'deleteSave':
+        this.handleDeleteSave(cmd.commandId, cmd.slot);
         return;
       case 'load':
         this.handleLoad(cmd.commandId, cmd.slot);
@@ -1360,6 +1372,76 @@ export class NodeHost {
     }, commandId);
   }
 
+  private handleDeleteSave(commandId: string, slot: string): void {
+    if (this.persistence === undefined) {
+      this.error(commandId, 'cannot delete save: no persistence configured');
+      return;
+    }
+    let key: string;
+    try {
+      key = saveSlotKey(slot);
+    } catch (error) {
+      this.error(commandId, error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const storage = this.persistence.storage;
+    this.enqueue(async () => {
+      // Unlike listing, destructive maintenance must not treat a corrupt
+      // index as empty and silently discard the other entries.
+      const bytes = await storage.read(SAVES_INDEX_KEY);
+      const parsed: unknown =
+        bytes === null ? { saves: [] } : JSON.parse(new TextDecoder().decode(bytes));
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('saves' in parsed) ||
+        !Array.isArray(parsed.saves) ||
+        !parsed.saves.every(
+          (entry: unknown) =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            'slot' in entry &&
+            typeof entry.slot === 'string' &&
+            'tick' in entry &&
+            typeof entry.tick === 'string' &&
+            'savedAtMs' in entry &&
+            typeof entry.savedAtMs === 'number',
+        )
+      )
+        throw new Error('Cannot delete save: save index is invalid; no files were removed.');
+      const index = parsed as SavesIndex;
+      // Some filesystem adapters fold case or canonically equivalent
+      // Unicode names. Never remove bytes that another listed slot may
+      // reference, including legacy aliases created before this guard.
+      const foldName = (name: string): string =>
+        name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
+      const foldedSlot = foldName(slot);
+      if (index.saves.some((entry) => entry.slot !== slot && foldName(entry.slot) === foldedSlot)) {
+        throw new Error(
+          `Cannot delete save "${slot}": another listed save has a name differing only by case or Unicode normalization. No files were removed.`,
+        );
+      }
+      // Delete bytes first. Missing files are harmless, allowing a retry
+      // to finish index cleanup after an interrupted or failed index write.
+      await storage.delete(key);
+      try {
+        await storage.write(
+          SAVES_INDEX_KEY,
+          new TextEncoder().encode(
+            JSON.stringify({
+              saves: index.saves.filter((entry) => entry.slot !== slot),
+            }),
+          ),
+        );
+      } catch (error) {
+        throw new Error(
+          `Save "${slot}" was removed, but its listing could not be updated. Retry Delete to clean up the listing. ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      this.ack(commandId);
+    }, commandId);
+  }
+
   private handleLoad(commandId: string, slot: string): void {
     if (this.persistence === undefined) {
       this.error(commandId, 'cannot load: no persistence configured');
@@ -1777,6 +1859,7 @@ export class NodeHost {
         if (
           entry.command.kind === 'switchRun' ||
           entry.command.kind === 'deleteRun' ||
+          entry.command.kind === 'deleteSave' ||
           entry.command.kind === 'save'
         ) {
           continue;
