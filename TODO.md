@@ -60,6 +60,12 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ## Ready for separate work
 
+### P1 High
+
+- [TOOLING] `quarantine-exhaustion-e2e-flake` — **Make the quarantine-exhaustion browser test pass reliably in CI.** `e2e/quarantine-exhaustion.spec.ts` has failed the required `browser` check on five of the seven CI runs since #30 landed, including two main pushes, while passing locally.
+  - Source: CI runs on main 37706221176 (75b9829) and 37707047026 (42f02c9), PR #34 runs 37742103263 and 37743074646 (including a rerun), PR #35 run 37745391249 (markdown-only on top of 9b37eed); main 37707228177 (9b37eed) passed. Observed by the coordinator of #34 and #35, 2026-10-08.
+  - Starting point: every failure is the 5 s wait at line 25 for `Resume` to reappear after resuming with the "Patch saturated" auto-pause armed. Likely cause (not yet confirmed): the pause tick depends on how long Start ran before Pause, so the population, and the time until the ten applied patches saturate, vary between runs. Look for a deterministic fixture (for example, pausing at a fixed tick via `step`) rather than a longer timeout.
+
 ### Unprioritized
 
 - [UI] `patched-parent-promotion` — **Promote events for patched parents.** Patched-parent promotion in the rewindable-events filter. The forward-looking promotion path currently checks parent-quarantined OR parent-big; the brainstorm also called for parent-patched as a third axis. The store doesn't project per-lineage patch status today (would need a small additional reducer fed from `patchApplied` events). Logged for follow-up; today's promotion list still catches every patched lineage indirectly via the `patchApplied` stratum-1 event. #r2-stretch #ui
