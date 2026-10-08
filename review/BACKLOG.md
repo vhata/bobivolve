@@ -20,6 +20,11 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [UI] `confirm-run-replacement` — **Confirm before Start replaces the active run.** Start deletes the active slot's log and snapshots with one click, unlike every other destructive action.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `run-start-overwrites-without-confirm`
+- [HOST] `fresh-browser-run-autostart` — **Start the default seed-42 run on a first visit, as documented.** The startup `switchRun` acknowledgement is written to the empty slot's log, so the dashboard restores an empty run instead of starting one.
+  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
+  - Findings: `fresh-browser-run-never-starts`
+  - Related: `browser-run-log-durability`
+  - Starting point: `host/node.ts` (`handleSwitchRun` acknowledgement), `ui/sim-store.ts` (`bootstrapRun`). Add a browser test that starts from cleared OPFS without clicking Start.
 - [HOST] `event-log-replay-fidelity` — **Make logged commands replay exactly as they executed live.** Rejected commands are logged and revived by field name. Their replay diverges or poisons the log, `step` replays differently from live play, and `logSlice` can race a new run's log reset.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `event-log-reviver-revives-string-params`, `step-pause-and-replay-semantics`, `logslice-flush-races-newrun-delete`

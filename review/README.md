@@ -6,7 +6,7 @@ The [historical project-direction review](../docs/PROJECT_REVIEW.md) records `c8
 
 | Review (UTC)                                | Type | Reviewed commit | Open findings at close |
 | ------------------------------------------- | ---- | --------------- | ---------------------- |
-| [2026-10-08 07:01](2026-10-08-0701-full.md) | Full | `9b37eed`       | 61                     |
+| [2026-10-08 07:01](2026-10-08-0701-full.md) | Full | `9b37eed`       | 62                     |
 
 ## Pending reconciliation
 
