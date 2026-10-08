@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import type {
   DecreeTriggerSpec,
   DirectiveSpec,
+  LineageTreeEntry,
   LineageTreeResult,
   ListRunsResult,
   ListSavesResult,
@@ -167,6 +168,13 @@ export interface SimStoreState {
   readonly quarantinedLineages: ReadonlySet<string>;
   readonly quarantine: (lineageId: string) => void;
   readonly releaseQuarantine: (lineageId: string) => void;
+  // Lineages a player patch has directly overwritten in the current
+  // timeline: PatchApplied targets and DecreeFired targets that landed.
+  // Descendants inherit patch ancestry in the sim but are not members;
+  // the events timeline promotes speciations from these parents. Reset
+  // with the rest of the projection on run changes and rebuilt from the
+  // lineageTree query by rehydrateAfterLoad.
+  readonly patchedLineages: ReadonlySet<string>;
   // Origin compute, updated from the Tick heartbeat. Null until the
   // first heartbeat arrives. Heartbeats can drop under load; treat a
   // gap as "value unchanged", not "value zero".
@@ -237,6 +245,19 @@ function freshLineages(): Map<string, LineageNode> {
   ]);
 }
 
+// Lineages a patch was applied to directly. A child copies its parent's
+// patch list at speciation, so a lineage is a direct target when it
+// carries a patch id that its parent does not.
+function directPatchTargets(entries: readonly LineageTreeEntry[]): Set<string> {
+  const patchesById = new Map(entries.map((entry) => [entry.id, entry.patches]));
+  const targets = new Set<string>();
+  for (const entry of entries) {
+    const inherited = new Set(patchesById.get(entry.parentLineageId) ?? []);
+    if (entry.patches.some((patchId) => !inherited.has(patchId))) targets.add(entry.id);
+  }
+  return targets;
+}
+
 export const useSimStore = create<SimStoreState>((set, get) => {
   let savesRevision = 0;
   let unsubscribe: (() => void) | null = null;
@@ -248,6 +269,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
   let hydrationOrdinal = 0;
   let hydrationUpdates: Map<string, LineageNode> | null = null;
   let hydrationExtinctions: Map<string, bigint> | null = null;
+  let hydrationPatched: Set<string> | null = null;
   const projection = (state: SimStoreState) => ({
     seed: state.seed,
     simTick: state.simTick,
@@ -259,6 +281,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     actualSpeed: state.actualSpeed,
     selectedLineageId: state.selectedLineageId,
     quarantinedLineages: state.quarantinedLineages,
+    patchedLineages: state.patchedLineages,
     originCompute: state.originCompute,
     originComputeMax: state.originComputeMax,
     activeRunId: state.activeRunId,
@@ -282,6 +305,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     cancelPendingTick();
     hydrationUpdates = null;
     hydrationExtinctions = null;
+    hydrationPatched = null;
     set({ ancestryPins: [], ancestryPinsReady: false, ancestryRestoreError: null });
     return true;
   }
@@ -436,6 +460,14 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       tickRafHandle = null;
     }
     pendingTick = null;
+  }
+
+  function markPatched(lineageId: string): void {
+    hydrationPatched?.add(lineageId);
+    if (get().patchedLineages.has(lineageId)) return;
+    const next = new Set(get().patchedLineages);
+    next.add(lineageId);
+    set({ patchedLineages: next });
   }
 
   const handleEvent = (event: SimEvent): void => {
@@ -610,17 +642,20 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       }
       case 'patchApplied':
         // The lineage inspector re-polls driftTelemetry every 1500ms
-        // and picks up the new reference firmware from there. No
-        // dedicated store state needed at V1; future work will track
-        // applied patches for the lineage tree's intervention history.
+        // and picks up the new reference firmware from there. The store
+        // only records the target for the events timeline's promotion.
+        markPatched(event.lineageId);
         return;
       case 'patchSaturated':
         // The host's auto-pause path will follow up with an
         // AutoPaused event when the player has the trigger armed; the
         // store does not need additional state here today.
         return;
-      case 'decreeQueued':
       case 'decreeFired':
+        // A landed decree applies its patch without a PatchApplied event.
+        if (event.landed) markPatched(event.patchTargetLineageId);
+        return;
+      case 'decreeQueued':
       case 'decreeRevoked':
         // The decrees panel re-polls the queue via a query; events
         // are surfaced in the events timeline. No store state today.
@@ -652,6 +687,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     activeRunId: '',
     timelineEpoch: 0,
     quarantinedLineages: new Set(),
+    patchedLineages: new Set(),
     originCompute: null,
     originComputeMax: null,
     transport: null,
@@ -673,6 +709,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       cancelPendingTick();
       hydrationUpdates = null;
       hydrationExtinctions = null;
+      hydrationPatched = null;
       set({
         transport,
         pendingCommands: new Map(),
@@ -702,6 +739,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       timelineChange = null;
       hydrationUpdates = null;
       hydrationExtinctions = null;
+      hydrationPatched = null;
       set({
         transport: null,
         pendingCommands: new Map(),
@@ -739,6 +777,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         pendingCommands: pending,
         selectedLineageId: 'L0',
         quarantinedLineages: new Set(),
+        patchedLineages: new Set(),
         originCompute: null,
         originComputeMax: null,
       });
@@ -865,6 +904,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // work logged in TODO.md will surface the restored set so the
         // dashboard can render it correctly post-Load.
         quarantinedLineages: new Set(),
+        patchedLineages: new Set(),
         // Cleared so the panel does not display the pre-Load reading;
         // the next heartbeat (the host emits one at end of Load) lands
         // the restored value.
@@ -909,6 +949,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         actualSpeed: 0,
         selectedLineageId: 'L0',
         quarantinedLineages: new Set(),
+        patchedLineages: new Set(),
         originCompute: null,
         originComputeMax: null,
       });
@@ -1030,8 +1071,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         }
         const updates = new Map<string, LineageNode>();
         const extinctions = new Map<string, bigint>();
+        const patchedDuringHydration = new Set<string>();
         hydrationUpdates = updates;
         hydrationExtinctions = extinctions;
+        hydrationPatched = patchedDuringHydration;
         const result = (await transport.query({
           kind: 'lineageTree',
           queryId: '',
@@ -1055,6 +1098,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
           });
           if (entry.quarantined) quarantined.add(entry.id);
         }
+        const patched = directPatchTargets(result.lineages);
+        for (const id of patchedDuringHydration) patched.add(id);
         for (const [id, lineage] of updates) lineages.set(id, lineage);
         for (const [id, extinctionTick] of extinctions) {
           const lineage = lineages.get(id);
@@ -1081,6 +1126,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         set({
           lineages,
           quarantinedLineages: quarantined,
+          patchedLineages: patched,
           selectedLineageId: selectedExists ? selected : 'L0',
           activeRunId,
           ancestryPins,
@@ -1095,6 +1141,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         if (current()) {
           hydrationUpdates = null;
           hydrationExtinctions = null;
+          hydrationPatched = null;
         }
       }
     },
@@ -1160,6 +1207,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         actualSpeed: 0,
         selectedLineageId: 'L0',
         quarantinedLineages: new Set(),
+        patchedLineages: new Set(),
         originCompute: null,
         originComputeMax: null,
         activeRunId: runId,

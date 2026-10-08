@@ -640,3 +640,144 @@ describe('named save deletion acknowledgements', () => {
     expect(useSimStore.getState().pendingCommands.has(command.commandId)).toBe(false);
   });
 });
+
+describe('patched lineage projection', () => {
+  function patchedTree(
+    entries: readonly { id: string; parent?: string; patches: readonly string[] }[],
+  ): QueryResult {
+    return {
+      kind: 'lineageTree',
+      queryId: '',
+      lineages: entries.map((entry) => ({
+        ...lineage(entry.id, 0n, entry.parent ?? null),
+        parentLineageId: entry.parent ?? '',
+        patches: entry.patches,
+        quarantined: false,
+      })),
+    };
+  }
+
+  it('marks lineages a patch or landed decree overwrote, but not their later children', () => {
+    const transport = new StubTransport();
+    useSimStore.getState().attach(transport);
+    transport.emit({
+      kind: 'patchApplied',
+      simTick: 10n,
+      lineageId: 'L1',
+      probesAffected: 3n,
+      patchId: 'PT0',
+    });
+    transport.emit({
+      kind: 'decreeFired',
+      simTick: 11n,
+      decreeId: 'D0',
+      patchTargetLineageId: 'L2',
+      landed: true,
+      probesAffected: 2n,
+    });
+    transport.emit({
+      kind: 'decreeFired',
+      simTick: 12n,
+      decreeId: 'D1',
+      patchTargetLineageId: 'L3',
+      landed: false,
+      probesAffected: 0n,
+    });
+    // A child inherits the patched firmware, but it is the parent the
+    // player intervened on; the child's own speciations are not promoted.
+    transport.emit({
+      kind: 'speciation',
+      simTick: 13n,
+      newLineageId: 'L4',
+      newLineageName: 'Child of patched',
+      parentLineageId: 'L1',
+      founderProbeId: 'P4',
+    });
+    expect([...useSimStore.getState().patchedLineages].sort()).toEqual(['L1', 'L2']);
+  });
+
+  it('clears on run changes and rehydrates direct patch targets from the lineage tree', async () => {
+    const transport = new StubTransport();
+    transport.queryHandler = async (query) => {
+      if (query.kind === 'lineageTree')
+        return patchedTree([
+          { id: 'L0', patches: ['PT0'] },
+          // Inherited PT0 only: not a direct target.
+          { id: 'L1', parent: 'L0', patches: ['PT0'] },
+          // Inherited PT0 plus its own PT1: a direct target.
+          { id: 'L2', parent: 'L0', patches: ['PT0', 'PT1'] },
+          { id: 'L3', parent: 'L2', patches: ['PT0', 'PT1'] },
+          { id: 'L4', parent: 'L1', patches: [] },
+        ]);
+      if (query.kind === 'listRuns')
+        return { kind: 'listRuns', queryId: '', activeRunId: 'patched', runs: [] };
+      throw new Error(`Unexpected ${query.kind} query`);
+    };
+    useSimStore.getState().attach(transport);
+    transport.emit({
+      kind: 'patchApplied',
+      simTick: 10n,
+      lineageId: 'L9',
+      probesAffected: 1n,
+      patchId: 'PT9',
+    });
+    useSimStore.getState().startRun(7n);
+    expect(useSimStore.getState().patchedLineages.size).toBe(0);
+
+    useSimStore.setState({ ancestryPinsReady: true });
+    useSimStore.getState().rewindToTick(50n);
+    expect(useSimStore.getState().patchedLineages.size).toBe(0);
+    const rewind = transport.sent.at(-1)!;
+    transport.emit({ kind: 'commandAck', commandId: rewind.commandId, simTick: 50n });
+    await vi.waitFor(() =>
+      expect([...useSimStore.getState().patchedLineages].sort()).toEqual(['L0', 'L2']),
+    );
+  });
+
+  it('keeps a patch that lands while lineage hydration is pending', async () => {
+    const transport = new StubTransport();
+    let resolve!: (result: QueryResult) => void;
+    transport.queryHandler = (query) =>
+      query.kind === 'listRuns'
+        ? Promise.resolve({ kind: 'listRuns', queryId: '', activeRunId: 'patched', runs: [] })
+        : new Promise((done) => {
+            resolve = done;
+          });
+    useSimStore.getState().attach(transport);
+    const hydration = useSimStore.getState().rehydrateAfterLoad();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    transport.emit({
+      kind: 'patchApplied',
+      simTick: 101n,
+      lineageId: 'L0',
+      probesAffected: 1n,
+      patchId: 'PT0',
+    });
+    resolve(patchedTree([{ id: 'L0', patches: [] }]));
+    await hydration;
+    expect([...useSimStore.getState().patchedLineages]).toEqual(['L0']);
+  });
+
+  it('restores the previous patched set when a run change fails', () => {
+    const transport = new StubTransport();
+    transport.queryHandler = () => new Promise(() => {});
+    useSimStore.getState().attach(transport);
+    transport.emit({
+      kind: 'patchApplied',
+      simTick: 10n,
+      lineageId: 'L0',
+      probesAffected: 1n,
+      patchId: 'PT0',
+    });
+    useSimStore.getState().load('missing');
+    expect(useSimStore.getState().patchedLineages.size).toBe(0);
+    const load = transport.sent.at(-1)!;
+    transport.emit({
+      kind: 'commandError',
+      commandId: load.commandId,
+      simTick: 10n,
+      message: 'no such save',
+    });
+    expect([...useSimStore.getState().patchedLineages]).toEqual(['L0']);
+  });
+});
