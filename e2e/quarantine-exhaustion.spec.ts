@@ -31,7 +31,7 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
     await patch.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(patch).toHaveCount(0);
   }
-  await expect(page.locator('.origin-panel .panel-header')).toContainText('0 / 1000');
+  await expect(page.locator('.origin-panel .panel-header')).toContainText(/(^|\D)0 \/ 1000/);
   await page.getByRole('button', { name: 'Quarantine', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Release quarantine', exact: true })).toBeVisible();
   await expect(page.locator('.origin-panel')).toContainText('Holds are funded oldest first');
@@ -43,7 +43,7 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
   await expect(page.getByRole('button', { name: 'Quarantine', exact: true })).toBeVisible();
   await expect(page.locator('.inspector-panel .panel-meta')).not.toContainText('quarantined');
   await expect(page.locator('.lineage-tree .lineage-quarantine-pip')).toHaveCount(0);
-  await expect(page.locator('.origin-panel .panel-header')).toContainText('1 / 1000');
+  await expect(page.locator('.origin-panel .panel-header')).toContainText(/(^|\D)1 \/ 1000/);
   await expect(page.locator('.origin-panel [role="status"]')).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: /quarantine released.*insufficient compute/ }),
