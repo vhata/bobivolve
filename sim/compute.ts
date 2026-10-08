@@ -11,12 +11,8 @@
 //   - Patch authoring: one-shot cost on submission. Failure surfaces as
 //     CommandError when the budget is too small.
 //   - Decree authoring: one-shot cost on submission. Same failure mode.
-//   - Quarantine: per-tick maintenance cost while held. Multiple
-//     concurrent holds stack. The drain is deducted every tick before
-//     regen, clamped at zero — when the budget can't pay, the cost is
-//     simply skipped that tick. Future polish may surface a "budget
-//     bankrupt" signal so the player notices their holds are no longer
-//     paying for themselves.
+//   - Quarantine: fund holds oldest-first from the starting budget each
+//     tick. Release unfunded holds before regeneration; no free holds.
 //
 // Determinism: pure integer arithmetic, no PRNG draws. The state
 // (budget, max) survives snapshot/restore as ordinary u64 fields.
@@ -46,20 +42,19 @@ export const PATCH_AUTHORING_COST = 100n;
 // share the same authoring cost.
 export const DECREE_AUTHORING_COST = 100n;
 
-// Apply per-tick maintenance and regen, in that order. Maintenance is
-// clamped at the current budget — when the player owes more than they
-// have, the rest goes uncharged that tick. Regen is then applied and
-// clamped at the cap. Returns the new budget; callers store it back on
-// the state.
-//
-// Maintenance precedes regeneration. With one funded hold, its one-unit
-// cost cancels the one-unit regeneration; multiple holds drain the budget.
-// At exhaustion the current rule clamps the charge and regenerates one
-// unit while holds remain active. Exhaustion policy remains deferred in
-// TODO.md.
-export function applyComputeTick(budget: bigint, heldQuarantines: number): bigint {
-  const maintenance = QUARANTINE_MAINTENANCE_PER_TICK * BigInt(heldQuarantines);
-  const drained = maintenance > budget ? 0n : budget - maintenance;
-  const regenerated = drained + ORIGIN_COMPUTE_REGEN_PER_TICK;
-  return regenerated > ORIGIN_COMPUTE_MAX ? ORIGIN_COMPUTE_MAX : regenerated;
+// Calculate how many oldest holds can be fully funded before regeneration.
+// The caller releases every remaining hold in insertion order. Regeneration
+// cannot pay this tick's maintenance; unused compute remains in the budget.
+export function applyComputeTick(
+  budget: bigint,
+  heldQuarantines: number,
+): { readonly budget: bigint; readonly fundedQuarantines: number } {
+  const affordable = budget / QUARANTINE_MAINTENANCE_PER_TICK;
+  const funded = affordable < BigInt(heldQuarantines) ? affordable : BigInt(heldQuarantines);
+  const regenerated =
+    budget - funded * QUARANTINE_MAINTENANCE_PER_TICK + ORIGIN_COMPUTE_REGEN_PER_TICK;
+  return {
+    budget: regenerated > ORIGIN_COMPUTE_MAX ? ORIGIN_COMPUTE_MAX : regenerated,
+    fundedQuarantines: Number(funded),
+  };
 }

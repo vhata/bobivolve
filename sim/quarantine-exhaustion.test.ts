@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import type { SimEvent } from '../protocol/types.js';
+import { deserializeSnapshot, serializeSnapshot } from '../host/snapshot-codec.js';
+import { createInitialState, restore, snapshot } from './state.js';
+import { tick, tickN } from './step.js';
+import { LineageId, Seed } from './types.js';
+
+describe('quarantine maintenance exhaustion', () => {
+  it('funds oldest holds first, releases the rest in insertion order, and consumes no RNG', () => {
+    const state = createInitialState(Seed(42n));
+    state.probes.clear();
+    state.originCompute = 2n;
+    const ids = ['L9', 'L2', 'L7', 'L1'].map(LineageId);
+    state.quarantinedLineages = new Set(ids);
+    const rngBefore = state.rng.state();
+    const events: SimEvent[] = [];
+    tick(state, events);
+    expect([...state.quarantinedLineages]).toEqual(ids.slice(0, 2));
+    expect(state.originCompute).toBe(1n);
+    expect(events).toEqual(
+      ids.slice(2).map((lineageId) => ({
+        kind: 'quarantineLifted',
+        simTick: 1n,
+        lineageId,
+        reason: 'computeExhausted',
+      })),
+    );
+    expect(state.rng.state()).toEqual(rngBefore);
+    tick(state, events);
+    expect([...state.quarantinedLineages]).toEqual([LineageId('L9')]);
+    tickN(state, 10n, events);
+    expect(events.filter((event) => event.kind === 'quarantineLifted')).toHaveLength(3);
+  });
+
+  it('releases before directives and cannot use regeneration to fund an empty budget', () => {
+    const state = createInitialState(Seed(42n));
+    const baseline = restore(snapshot(state));
+    state.originCompute = 0n;
+    state.quarantinedLineages.add(LineageId('L0'));
+    const events: SimEvent[] = [];
+    const baselineEvents: SimEvent[] = [];
+    tick(state, events);
+    tick(baseline, baselineEvents);
+    expect(state.originCompute).toBe(1n);
+    expect(state.quarantinedLineages.size).toBe(0);
+    expect(events[0]).toMatchObject({ kind: 'quarantineLifted', lineageId: 'L0' });
+    expect(events.slice(1)).toEqual(baselineEvents);
+    expect(baselineEvents.some((event) => event.kind === 'replication')).toBe(true);
+    expect(state.rng.state()).toEqual(baseline.rng.state());
+  });
+
+  it('preserves reimposition priority and event parity through encoded snapshot restore', () => {
+    const state = createInitialState(Seed(42n));
+    state.originCompute = 2n;
+    for (const id of ['L0', 'L9', 'L2']) state.quarantinedLineages.add(LineageId(id));
+    state.quarantinedLineages.delete(LineageId('L0'));
+    state.quarantinedLineages.add(LineageId('L0'));
+    const loaded = restore(deserializeSnapshot(serializeSnapshot(snapshot(state))));
+    const events: SimEvent[] = [];
+    const restoredEvents: SimEvent[] = [];
+    tickN(state, 5n, events);
+    tickN(loaded, 5n, restoredEvents);
+    expect(
+      events.filter((event) => event.kind === 'quarantineLifted').map((event) => event.lineageId),
+    ).toEqual(['L0', 'L2']);
+    expect(restoredEvents).toEqual(events);
+    expect(snapshot(loaded)).toEqual(snapshot(state));
+  });
+});

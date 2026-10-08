@@ -15,13 +15,13 @@ import { LineageId, Seed } from './types.js';
 
 describe('applyComputeTick', () => {
   it('regenerates by ORIGIN_COMPUTE_REGEN_PER_TICK when no holds and below cap', () => {
-    expect(applyComputeTick(0n, 0)).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
-    expect(applyComputeTick(500n, 0)).toBe(500n + ORIGIN_COMPUTE_REGEN_PER_TICK);
+    expect(applyComputeTick(0n, 0).budget).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
+    expect(applyComputeTick(500n, 0).budget).toBe(500n + ORIGIN_COMPUTE_REGEN_PER_TICK);
   });
 
   it('clamps regen at ORIGIN_COMPUTE_MAX', () => {
-    expect(applyComputeTick(ORIGIN_COMPUTE_MAX, 0)).toBe(ORIGIN_COMPUTE_MAX);
-    expect(applyComputeTick(ORIGIN_COMPUTE_MAX - 1n, 0)).toBe(ORIGIN_COMPUTE_MAX);
+    expect(applyComputeTick(ORIGIN_COMPUTE_MAX, 0).budget).toBe(ORIGIN_COMPUTE_MAX);
+    expect(applyComputeTick(ORIGIN_COMPUTE_MAX - 1n, 0).budget).toBe(ORIGIN_COMPUTE_MAX);
   });
 
   it('a single hold cancels regen exactly when both are 1/tick', () => {
@@ -30,22 +30,22 @@ describe('applyComputeTick', () => {
     // tuned apart this assertion will need updating — but the
     // relationship between the two constants is the design intent.
     expect(QUARANTINE_MAINTENANCE_PER_TICK).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
-    expect(applyComputeTick(500n, 1)).toBe(500n);
+    expect(applyComputeTick(500n, 1).budget).toBe(500n);
   });
 
   it('multiple holds bleed the budget by holds × maintenance − regen per tick', () => {
     // Two holds: drain 2, regen 1, net −1.
-    expect(applyComputeTick(500n, 2)).toBe(499n);
+    expect(applyComputeTick(500n, 2).budget).toBe(499n);
     // Three holds: drain 3, regen 1, net −2.
-    expect(applyComputeTick(500n, 3)).toBe(498n);
+    expect(applyComputeTick(500n, 3).budget).toBe(498n);
   });
 
-  it('clamps at zero when maintenance overdrafts', () => {
-    // No regen at 1 unit; drain of 5 from a budget of 0 should not
-    // produce a negative number. After regen, the budget is 1.
-    expect(applyComputeTick(0n, 5)).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
+  it('only charges affordable holds before regenerating', () => {
+    expect(applyComputeTick(0n, 5).fundedQuarantines).toBe(0);
+    expect(applyComputeTick(2n, 5).fundedQuarantines).toBe(2);
+    expect(applyComputeTick(0n, 5).budget).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
     // A near-empty budget drained then regen'd settles at regen.
-    expect(applyComputeTick(2n, 5)).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
+    expect(applyComputeTick(2n, 5).budget).toBe(ORIGIN_COMPUTE_REGEN_PER_TICK);
   });
 });
 
