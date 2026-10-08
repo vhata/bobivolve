@@ -62,9 +62,9 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ### Unprioritized
 
-- [TOOLING] `worktree-git-hooks` — **Install git hooks from linked worktrees.** `scripts/setup.sh` runs `simple-git-hooks`, which fails in a linked worktree (`ENOTDIR ... .git/hooks`, because `.git` is a file there) yet exits 0, so pre-commit and pre-push hooks are silently missing for every agent and Conductor workspace. Install into `git rev-parse --git-common-dir`/hooks (or set `core.hooksPath` to a tracked directory) and fail loudly when installation fails.
+- [TOOLING] `worktree-git-hooks` — **Install git hooks from linked worktrees.** `scripts/setup.sh` runs `simple-git-hooks`, which fails in a linked worktree (`ENOTDIR ... .git/hooks`, because `.git` is a file there) yet exits 0, so pre-commit and pre-push hooks are silently missing for every agent and Conductor workspace.
   - Source: `todo/patched-parent-promotion` writer report, reproduced by the coordinator 2026-10-08; the shared hooks directory held only `.sample` files.
-  - Starting point: `scripts/setup.sh`, the `simple-git-hooks` block in `package.json`, docs/QUALITY.md hook section.
+  - Starting point: `scripts/setup.sh`, the `simple-git-hooks` block in `package.json`, docs/QUALITY.md hook section. Install into the hooks directory under `git rev-parse --git-common-dir` (or set `core.hooksPath` to a tracked directory) and fail loudly when installation fails.
 
 - [DOCS] `full-codebase-review` — **Establish the first current full-review baseline.** The historical project-direction review is preserved; it does not establish current full-codebase coverage.
   - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.

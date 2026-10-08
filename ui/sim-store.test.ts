@@ -758,6 +758,22 @@ describe('patched lineage projection', () => {
     expect([...useSimStore.getState().patchedLineages]).toEqual(['L0']);
   });
 
+  it('clears the patched set when switching runs', () => {
+    const transport = new StubTransport();
+    transport.queryHandler = () => new Promise(() => {});
+    useSimStore.getState().attach(transport);
+    transport.emit({
+      kind: 'patchApplied',
+      simTick: 10n,
+      lineageId: 'L0',
+      probesAffected: 1n,
+      patchId: 'PT0',
+    });
+    expect([...useSimStore.getState().patchedLineages]).toEqual(['L0']);
+    useSimStore.getState().switchRun('other');
+    expect(useSimStore.getState().patchedLineages.size).toBe(0);
+  });
+
   it('restores the previous patched set when a run change fails', () => {
     const transport = new StubTransport();
     transport.queryHandler = () => new Promise(() => {});
