@@ -449,6 +449,23 @@ describe('NodeHost patch authoring', () => {
     expect(events.some((event) => event.kind === 'decreeQueued')).toBe(false);
   });
 
+  it('rejects a zero decree trigger threshold, which could never fire', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: 'new', seed: SEED_42 });
+    host.send({
+      kind: 'queueDecree',
+      commandId: 'zero-decree',
+      trigger: { kind: 'populationBelow', lineageId: 'L0', threshold: '0' },
+      patchTargetLineageId: 'L0',
+      patchFirmware: [{ kind: 'gather', params: { rate: '2' } }],
+    });
+    expect(
+      events.find((event) => event.kind === 'commandError' && event.commandId === 'zero-decree'),
+    ).toMatchObject({ message: 'threshold must be at least 1' });
+    expect(events.some((event) => event.kind === 'decreeQueued')).toBe(false);
+  });
+
   it('ApplyPatch emits PatchApplied and overwrites probe firmware', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
     const { events } = collectEvents(host);

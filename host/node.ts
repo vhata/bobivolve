@@ -873,6 +873,12 @@ export class NodeHost {
           this.error(cmd.commandId, `threshold must be a decimal uint64: ${cmd.trigger.threshold}`);
           return;
         }
+        // No population is strictly below 0; a zero threshold would be
+        // charged and queued but could never fire.
+        if (threshold === 0n) {
+          this.error(cmd.commandId, 'threshold must be at least 1');
+          return;
+        }
         trigger = { kind: 'populationBelow', lineageId: monitored, threshold };
         break;
       }

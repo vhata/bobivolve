@@ -47,7 +47,8 @@ it('preserves complete intervention state through save, rewind, load and run swi
     await send({
       kind: 'queueDecree',
       commandId: 'queue',
-      trigger: { kind: 'populationBelow', lineageId: 'L0', threshold: '0' },
+      // Stays queued: L0 keeps at least one probe through tick 25.
+      trigger: { kind: 'populationBelow', lineageId: 'L0', threshold: '1' },
       patchTargetLineageId: 'L0',
       patchFirmware: INTERVENTION_FIRMWARE,
     });

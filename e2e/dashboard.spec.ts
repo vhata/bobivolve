@@ -776,8 +776,9 @@ test('queued decrees and patch history survive a named save and load', async ({ 
 
   await page.getByRole('button', { name: 'Queue decree', exact: true }).click();
   const decree = page.getByRole('dialog', { name: 'Compose decree' });
-  // Zero keeps it queued while we test persistence, irrespective of population.
-  await decree.getByRole('textbox', { name: 'population <' }).fill('0');
+  // The run stays paused and the monitored lineage is living, so a
+  // threshold of 1 keeps the decree queued while we test persistence.
+  await decree.getByRole('textbox', { name: 'population <' }).fill('1');
   await decree.getByRole('button', { name: 'Queue', exact: true }).click();
   await expect(decree).toHaveCount(0);
   await expect(page.locator('.decrees-panel .decree-row')).toHaveCount(1);
