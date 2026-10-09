@@ -54,6 +54,7 @@ import {
 } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 import { patchProvenance } from './patch-provenance.js';
+import { isValidRunId } from './run-id.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
 // for correctness (ARCHITECTURE.md "Heartbeat: ... Best-effort delivery").
@@ -1557,7 +1558,7 @@ export class NodeHost {
       this.error(commandId, 'cannot switchRun: no persistence configured');
       return;
     }
-    if (runId === '' || runId.includes('/') || runId.includes('\0')) {
+    if (!isValidRunId(runId)) {
       this.error(commandId, `invalid runId: ${JSON.stringify(runId)}`);
       return;
     }
@@ -1634,7 +1635,7 @@ export class NodeHost {
       this.error(commandId, 'cannot deleteRun: no persistence configured');
       return;
     }
-    if (runId === '' || runId.includes('/') || runId.includes('\0')) {
+    if (!isValidRunId(runId)) {
       this.error(commandId, `invalid runId: ${JSON.stringify(runId)}`);
       return;
     }
