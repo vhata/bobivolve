@@ -28,8 +28,11 @@ export interface PopulationBelowTrigger {
   // current population is strictly less than `threshold`. Targeting
   // an extinct lineage is fine — the trigger fires immediately on
   // the next tick, and the decree's patch is delivered against the
-  // patch's own targetLineageId, which may or may not still exist.
+  // patch's own targetLineageId. If that lineage has no extant probes
+  // when the decree fires, the decree is consumed without landing.
   readonly lineageId: LineageId;
+  // At least 1: no population is strictly below 0, so the host rejects
+  // a zero threshold rather than queue a decree that can never fire.
   readonly threshold: bigint;
 }
 

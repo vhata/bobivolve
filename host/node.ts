@@ -20,7 +20,13 @@ import type { Directive, DirectiveStack } from '../sim/directive.js';
 import { SPECIATION_DIVERGENCE_DIVISOR } from '../sim/lineage.js';
 import { applyPatch, validatePatchFirmware } from '../sim/patch.js';
 import { tick } from '../sim/step.js';
-import { type SimState, createInitialState, restore, snapshot } from '../sim/state.js';
+import {
+  type SimState,
+  createInitialState,
+  lineageHasExtantProbes,
+  restore,
+  snapshot,
+} from '../sim/state.js';
 import { LATTICE_SIDE, MAX_RESOURCE_PER_CELL } from '../sim/substrate.js';
 import { LineageId, ProbeId, Seed, SimTick } from '../sim/types.js';
 import type { Storage } from '../sim/ports.js';
@@ -786,15 +792,7 @@ export class NodeHost {
       return;
     }
     // Lineage must be living for the patch to bite anything.
-    let extant = 0;
-    for (const probe of this.state.probes.values()) {
-      if (probe.lineageId === id) {
-        extant += 1;
-        // No need to count higher than 1; the gate is "any".
-        break;
-      }
-    }
-    if (extant === 0) {
+    if (!lineageHasExtantProbes(this.state, id)) {
       this.error(commandId, `lineage ${lineageId} has no extant probes`);
       return;
     }
@@ -871,6 +869,12 @@ export class NodeHost {
         const threshold = parseUint64Decimal(cmd.trigger.threshold);
         if (threshold === null) {
           this.error(cmd.commandId, `threshold must be a decimal uint64: ${cmd.trigger.threshold}`);
+          return;
+        }
+        // No population is strictly below 0; a zero threshold would be
+        // charged and queued but could never fire.
+        if (threshold === 0n) {
+          this.error(cmd.commandId, 'threshold must be at least 1');
           return;
         }
         trigger = { kind: 'populationBelow', lineageId: monitored, threshold };
@@ -980,6 +984,13 @@ export class NodeHost {
       return;
     }
     if (quarantine) {
+      // An extinct lineage has nothing to suspend; a hold would only
+      // draw maintenance. Releases stay allowed so a hold restored from
+      // an older save can still be cleared.
+      if (!lineageHasExtantProbes(this.state, id)) {
+        this.error(commandId, `lineage ${lineageId} has no extant probes`);
+        return;
+      }
       set.add(id);
       const event: QuarantineImposedEvent & { simTick: bigint } = {
         kind: 'quarantineImposed',
