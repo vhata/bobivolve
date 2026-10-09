@@ -241,7 +241,7 @@ describe('CLI run recovery', () => {
     },
   );
 
-  it.each(['../escape', '', '.', '..', 'nested/run', 'nested\\run'])(
+  it.each(['../escape', '', '.', '..', '.hidden', 'nested/run', 'nested\\run'])(
     'rejects invalid run id %s',
     async (runId) => {
       expect(
