@@ -2,6 +2,15 @@
 # Regression checks for ownership and queue gates, using disposable git state.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# start-work.sh runs claim-check.sh directly, so every workflow script must
+# stay executable both on disk and in the committed mode.
+for f in "$root"/scripts/workflow/*.sh; do
+  [ -x "$f" ] || { echo "workflow-test: $f is not executable" >&2; exit 1; }
+done
+if git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+  modes="$(git -C "$root" ls-files -s -- scripts/workflow | awk '$4 ~ /\.sh$/ && $1 != "100755" { print $4 }')"
+  [ -z "$modes" ] || { echo "workflow-test: not committed as executable: $modes" >&2; exit 1; }
+fi
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/scripts/workflow" "$fixture/review" "$fixture/bin"
