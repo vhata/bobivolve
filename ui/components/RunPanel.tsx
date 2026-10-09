@@ -20,7 +20,8 @@ function parseSeed(input: string): bigint | null {
 }
 
 function defaultSlotName(seed: bigint | null, simTick: bigint): string {
-  const seedPart = seed === null ? 'unseeded' : `seed${seed.toString()}`;
+  // A switched-to or loaded run's seed is unknown to the client.
+  const seedPart = seed === null ? 'run' : `seed${seed.toString()}`;
   return `${seedPart}-tick${simTick.toString()}`;
 }
 
