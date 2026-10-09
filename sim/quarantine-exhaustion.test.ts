@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SimEvent } from '../protocol/types.js';
 import { deserializeSnapshot, serializeSnapshot } from '../host/snapshot-codec.js';
-import { createInitialState, restore, snapshot } from './state.js';
+import { createInitialState, restore, snapshot, type SimState } from './state.js';
 import { tick, tickN } from './step.js';
 import { LineageId, ProbeId, Seed, SimTick } from './types.js';
 
@@ -67,7 +67,7 @@ describe('quarantine maintenance exhaustion', () => {
     expect(snapshot(loaded)).toEqual(snapshot(state));
   });
 
-  it('releases a hold when its lineage goes extinct so living holds keep priority', () => {
+  function doomedHoldState(): { state: SimState; doomed: LineageId; living: LineageId } {
     const state = createInitialState(Seed(42n));
     const doomed = LineageId('L1');
     const living = LineageId('L0');
@@ -91,7 +91,11 @@ describe('quarantine maintenance exhaustion', () => {
     state.nextLineageOrdinal = 2n;
     // The doomed hold is older, so it would be funded first.
     state.quarantinedLineages = new Set([doomed, living]);
+    return { state, doomed, living };
+  }
 
+  it('releases a hold when its lineage goes extinct so living holds keep priority', () => {
+    const { state, doomed, living } = doomedHoldState();
     const events: SimEvent[] = [];
     tick(state, events);
     const extinction = events.findIndex((e) => e.kind === 'extinction' && e.lineageId === doomed);
@@ -110,5 +114,12 @@ describe('quarantine maintenance exhaustion', () => {
     expect([...state.quarantinedLineages]).toEqual([living]);
     expect(events.some((e) => e.kind === 'quarantineLifted')).toBe(false);
     expect(state.originCompute).toBe(1n);
+  });
+
+  it('releases a hold at extinction even without an event sink', () => {
+    const { state, doomed, living } = doomedHoldState();
+    tick(state);
+    expect(state.lineages.get(doomed)?.extinctionTick).toBe(1n);
+    expect([...state.quarantinedLineages]).toEqual([living]);
   });
 });
