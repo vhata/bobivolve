@@ -56,9 +56,21 @@ const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobal
 // 4Hz still feels live: population, t/s readout, and Origin compute
 // all update every 250ms. The store's rAF coalescer caps further
 // downstream, so this is the upstream throttle.
+//
+// Durability: the host appends to the run's log in memory and drains it to
+// OPFS after every command, snapshot, auto-pause and timeline operation,
+// and every LOG_FLUSH_INTERVAL_MS while the run advances. A reload, tab
+// close or crash therefore loses about the last interval of unpaused play,
+// plus any append still in flight. Chromium's OPFS append copies the file
+// into a swap file, so each flush costs time proportional to the log's
+// size; flushes run on the host's work queue, off the tick loop, and
+// coalesce so a slow append stretches the interval instead of queueing
+// more appends.
+const LOG_FLUSH_INTERVAL_MS = 1000;
 const opfsStorage = new OPFSStorage({ root: 'bobivolve' });
 const host = new NodeHost({
   heartbeatHz: 4,
+  logFlushIntervalMs: LOG_FLUSH_INTERVAL_MS,
   persistence: {
     storage: opfsStorage,
     runId: '__startup__',
