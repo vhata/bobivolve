@@ -374,6 +374,23 @@ describe('NodeHost quarantine', () => {
     expect(err).toBeDefined();
   });
 
+  it('rejects quarantine on an extinct lineage but still allows release', () => {
+    const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
+    const { events } = collectEvents(host);
+    host.send({ kind: 'newRun', commandId: '', seed: SEED_42 });
+    host.runUntil(100n);
+    const extinct = events.find((e) => e.kind === 'extinction');
+    if (extinct?.kind !== 'extinction') throw new Error('seed 42 has no extinction by tick 100');
+    events.length = 0;
+    host.send({ kind: 'quarantine', commandId: 'q-dead', lineageId: extinct.lineageId });
+    expect(events.find((e) => e.kind === 'quarantineImposed')).toBeUndefined();
+    expect(events.find((e) => e.kind === 'commandError' && e.commandId === 'q-dead')).toMatchObject(
+      { message: `lineage ${extinct.lineageId} has no extant probes` },
+    );
+    host.send({ kind: 'releaseQuarantine', commandId: 'r-dead', lineageId: extinct.lineageId });
+    expect(events.find((e) => e.kind === 'commandAck' && e.commandId === 'r-dead')).toBeDefined();
+  });
+
   it('halts further replication for the quarantined lineage during runUntil', () => {
     const host = new NodeHost({ now: makeFakeClock(), heartbeatHz: 0 });
     const { events } = collectEvents(host);

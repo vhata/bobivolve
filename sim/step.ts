@@ -149,7 +149,8 @@ export function tick(state: SimState, events?: SimEvent[]): void {
   }
 
   // Phase 4: extinction events. A lineage that just lost members AND
-  // now has zero extant probes triggers ExtinctionEvent. We walk every
+  // now has zero extant probes triggers ExtinctionEvent and loses any
+  // quarantine hold. We walk every
   // surviving probe once to build a per-lineage tally, then check only
   // the lineages that lost a member this tick — most ticks have no
   // deaths and skip this phase entirely. The walk is O(survivors) not
@@ -182,6 +183,18 @@ export function tick(state: SimState, events?: SimEvent[]): void {
             lineageId,
           } satisfies ExtinctionEvent & { simTick: bigint };
           events.push(extinction);
+        }
+        // A hold on an extinct lineage has nothing left to suspend.
+        // Release it now so it stops drawing maintenance and stops
+        // outranking holds on living lineages from the next tick's
+        // funding pass. The event carries no reason; the extinction
+        // event immediately before it explains the release.
+        if (state.quarantinedLineages.delete(lineageId)) {
+          events?.push({
+            kind: 'quarantineLifted',
+            simTick: state.simTick,
+            lineageId,
+          });
         }
       }
     }

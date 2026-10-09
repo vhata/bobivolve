@@ -54,11 +54,12 @@ export interface SimState {
   // probe whose lineageId is in this set skips replication entirely —
   // no energy cost, no PRNG draws, no offspring. Other directives
   // (gather, explore) run normally; the lineage simply stops
-  // propagating until released manually or by compute exhaustion. Set
-  // insertion order is maintenance priority (oldest first), preserved by
-  // snapshot arrays. Reimposing a released hold gives it new priority. Mutating in
-  // place is intentional: the set is small and the cost of recopying
-  // a Set on every command would be silly.
+  // propagating until released manually, by compute exhaustion, or by
+  // the lineage's extinction. Set insertion order is maintenance
+  // priority (oldest first), preserved by snapshot arrays. Reimposing a
+  // released hold gives it new priority. Mutating in place is
+  // intentional: the set is small and the cost of recopying a Set on
+  // every command would be silly.
   quarantinedLineages: Set<LineageId>;
   // Origin compute. The meta-game budget that gates every player
   // intervention (SPEC.md "Player Intervention (R2+)"). Regenerates

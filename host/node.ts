@@ -980,6 +980,20 @@ export class NodeHost {
       return;
     }
     if (quarantine) {
+      // An extinct lineage has nothing to suspend; a hold would only
+      // draw maintenance. Releases stay allowed so a hold restored from
+      // an older save can still be cleared.
+      let extant = false;
+      for (const probe of this.state.probes.values()) {
+        if (probe.lineageId === id) {
+          extant = true;
+          break;
+        }
+      }
+      if (!extant) {
+        this.error(commandId, `lineage ${lineageId} has no extant probes`);
+        return;
+      }
       set.add(id);
       const event: QuarantineImposedEvent & { simTick: bigint } = {
         kind: 'quarantineImposed',
