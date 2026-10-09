@@ -28,7 +28,7 @@ All three full-state comparisons passed. The 30,000-tick log is 44.09 MiB and re
 
 Reload at 30,000 benefits from an exact cadence snapshot; rewind to 29,999 cannot use it and replays from tick zero. At 5,000 both reload and rewind reconstruct from zero. The large difference is consistent with replay distance, while the raw file operations are much shorter. These observations justify focusing on replay anchors and reconstruction cost before changing storage adapters.
 
-Fixture generation uses an unpaced host without live dashboard event/render traffic and periodically flushes for measurement. Production normally flushes on pause and persistence operations. Consequently forward throughput, memory pressure, durability between pauses, and crash-loss windows are not measured. The rewind and reload paths do use the real dashboard and browser worker. This is Chromium-only, with warm OS/browser caches, one seed, no explicit disk sync, no quota-pressure test, and no mobile-hardware claim.
+Fixture generation uses an unpaced host without live dashboard event/render traffic and periodically flushes for measurement. At the time of measurement, production flushed only on pause and persistence operations; it now also flushes once a second during play and after each command, which this probe does not measure. Consequently forward throughput, memory pressure, durability between pauses, and crash-loss windows are not measured. The rewind and reload paths do use the real dashboard and browser worker. This is Chromium-only, with warm OS/browser caches, one seed, no explicit disk sync, no quota-pressure test, and no mobile-hardware claim.
 
 ## Decisions for the next supported-session pass
 
