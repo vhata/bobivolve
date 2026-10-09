@@ -36,3 +36,11 @@ export const INTERVENTIONS: readonly ScheduledCommand[] = [
     },
   },
 ];
+
+// Encodes scheduled commands as a host/command-script.ts document for the
+// CLI's --commands option. uint64 fields become decimal strings.
+export function serializeCommandScript(commands: readonly ScheduledCommand[]): string {
+  return JSON.stringify(commands, (_key, value: unknown) =>
+    typeof value === 'bigint' ? value.toString() : value,
+  );
+}
