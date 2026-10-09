@@ -88,7 +88,12 @@ fi
 src_files="$(echo "$list" | grep -Ev '(^|/)(docs|review|plans|\.github)/|\.md$|\.lock$|lock\.(json|yaml)$|\.sum$|\.svg$|\.png$|\.jpg$' || true)"
 src_lines=0
 if [ -n "$src_files" ]; then
-  src_lines="$(echo "$src_files" | tr '\n' '\0' | xargs -0 cat 2>/dev/null | wc -l | tr -d ' ')"
+  # Count only files present in the working tree: a tracked file deleted or
+  # replaced locally must not abort the report (cat failing under pipefail).
+  missing="$(echo "$src_files" | while IFS= read -r f; do if [ ! -f "$f" ]; then echo x; fi; done | wc -l | tr -d ' ')"
+  [ "$missing" -eq 0 ] || echo "note: $missing tracked source file(s) are missing from the working tree; current source lines count only the files present"
+  src_lines="$(echo "$src_files" | while IFS= read -r f; do if [ -f "$f" ]; then printf '%s\0' "$f"; fi; done \
+    | { xargs -0 cat 2>/dev/null || true; } | wc -l | tr -d ' ')"
 fi
 churn_since() {
   {

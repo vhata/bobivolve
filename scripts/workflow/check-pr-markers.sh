@@ -18,7 +18,8 @@
 # or pass refs explicitly. In CI on a pull_request event use --base
 # "origin/$GITHUB_BASE_REF" and --head HEAD (the merge commit).
 #
-# Marker vocabulary (one per line, no backticks, no trailing punctuation):
+# Marker vocabulary (one per line, at the start of the line rather than in a
+# list or quote; no backticks, no trailing punctuation):
 #   Claims TODO: <slug>                    Resolves TODO: <slug>
 #   Partially resolves TODO: <slug>        Remaining TODO: <slug>
 #   Files TODO: <slug>                     (a discovery captured by this PR)
@@ -46,7 +47,7 @@ while [ $# -gt 0 ]; do
     --todo) todo="$2"; shift 2 ;;
     --backlog) backlog="$2"; shift 2 ;;
     --branch) branch="$2"; shift 2 ;;
-    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "check-pr-markers: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -119,9 +120,19 @@ fi
 
 # Exact markers.
 grep -E '^(Claims|Resolves|Partially resolves|Remaining|Files) (TODO|review backlog|review finding|roadmap): [a-z0-9][a-z0-9-]*$' "$tmp/body.clean" > "$tmp/markers" || true
+# Markers written as list items, task-list items or quotes ("- Resolves TODO: x",
+# "- [ ] ...", "1. ...", "> ..."): rejected, not ignored, so the PR cannot
+# silently lose its claim.
+# The colon after the namespace keeps prose list items out of this rule.
+listed_re='^[[:space:]]*(([-+*]|[0-9]+[.)])[[:space:]]+(\[[ xX]\][[:space:]]+)?|>[[:space:]]*)+[*_`]*(claims|resolves|partially resolves|remaining|files)[*_` ]+(todo|review backlog|review finding|roadmap)[*_` ]*:'
+grep -Ei "$listed_re" "$tmp/body.clean" > "$tmp/listed" || true
+while IFS= read -r line; do
+  [ -n "$line" ] && err "marker \"$line\" is written as a list item or quote; markers start the line with no bullet, number or \">\" (exact form: \"Resolves TODO: my-slug\")"
+done < "$tmp/listed"
 # Near misses: looks like a marker but is not exact (backticks, bold, case, punctuation, several slugs).
 grep -Ei '^[*_ ]*(claims|resolves|partially resolves|remaining|files)[*_ ]*(todo|review backlog|review finding|roadmap)' "$tmp/body.clean" \
-  | grep -Ev '^(Claims|Resolves|Partially resolves|Remaining|Files) (TODO|review backlog|review finding|roadmap): [a-z0-9][a-z0-9-]*$' > "$tmp/nearmiss" || true
+  | grep -Ev '^(Claims|Resolves|Partially resolves|Remaining|Files) (TODO|review backlog|review finding|roadmap): [a-z0-9][a-z0-9-]*$' \
+  | { grep -Eiv "$listed_re" || true; } > "$tmp/nearmiss" || true
 while IFS= read -r line; do
   [ -n "$line" ] && err "malformed marker \"$line\" (exact form: \"Resolves TODO: my-slug\"; one slug per line, nothing after the slug, no backticks or bold; put explanations in the prose above)"
 done < "$tmp/nearmiss"
