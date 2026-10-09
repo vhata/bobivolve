@@ -26,6 +26,9 @@ jobs:
   extended:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,12 +51,19 @@ jobs:
       - name: Functional browser tests
         run: scripts/e2e.sh --grep-invert @diagnostic
       - name: Deterministic headless probes
+        if: ${{ !cancelled() }}
         run: |
           evidence="test-results/determinism-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "$evidence"
           for seed in 0 42 2026; do
-            scripts/sim.sh --seed "$seed" --ticks 1000 --no-heartbeat > "$evidence/seed-$seed-first.ndjson"
-            scripts/sim.sh --seed "$seed" --ticks 1000 --no-heartbeat > "$evidence/seed-$seed-second.ndjson"
+            for pass in first second; do
+              out="$evidence/seed-$seed-$pass.ndjson"
+              scripts/sim.sh --seed "$seed" --ticks 1000 --no-heartbeat > "$out"
+              if [ "$(wc -l < "$out")" -lt 2 ]; then
+                echo "::error::seed $seed $pass probe emitted no simulation events"
+                exit 1
+              fi
+            done
             diff -u "$evidence/seed-$seed-first.ndjson" "$evidence/seed-$seed-second.ndjson" > "$evidence/seed-$seed.diff"
           done
       - name: Review drift
