@@ -1,25 +1,35 @@
 // Fully populated sample of every protocol message kind, for tests only.
 //
 // Each table is keyed by `kind` and typed so that adding a kind to a
-// protocol union without a sample here is a type error. Every field,
-// including optional ones, is populated so the schema parity test can
-// compare field sets in both directions. Bigint values exceed 2^53 where
-// the field is u64, so a lossy JSON round trip shows up as a mismatch.
+// protocol union without a sample here is a type error. Samples are typed
+// through DeepRequired, so every field, including optional ones at any
+// depth, must be populated; a new optional field is a type error until a
+// sample covers it. That lets the schema parity test compare field sets in
+// both directions. Bigint values exceed 2^53 where the field is u64, so a
+// lossy JSON round trip shows up as a mismatch.
 //
 // Used by `protocol/schema-parity.test.ts` and
 // `transport/ndjson-codec.test.ts`.
 
 import type { Command, DirectiveSpec, Query, QueryResult, SimEvent } from './types.js';
 
+// Makes every optional property required, recursively. Unions distribute,
+// so nullable fields (`T | null`) stay nullable but must still be written.
+type DeepRequired<T> = T extends bigint | string | number | boolean | null
+  ? T
+  : T extends readonly (infer E)[]
+    ? readonly DeepRequired<E>[]
+    : { readonly [K in keyof T]-?: DeepRequired<Exclude<T[K], undefined>> };
+
 type ByKind<U extends { readonly kind: string }> = {
-  readonly [K in U['kind']]: Extract<U, { readonly kind: K }>;
+  readonly [K in U['kind']]: DeepRequired<Extract<U, { readonly kind: K }>>;
 };
 
 // Larger than Number.MAX_SAFE_INTEGER, so a number-typed decode loses it.
 const BIG = 9_007_199_254_740_993n;
 const U64_MAX = 18_446_744_073_709_551_615n;
 
-const FIRMWARE: readonly DirectiveSpec[] = [
+const FIRMWARE: DeepRequired<readonly DirectiveSpec[]> = [
   { kind: 'replicate', params: { threshold: '18446744073709551615' } },
   { kind: 'gather', params: { rate: '2' } },
 ];
