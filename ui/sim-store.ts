@@ -205,6 +205,22 @@ export interface SimStoreState {
   readonly rehydrateAfterLoad: () => Promise<void>;
 }
 
+// Modal-on-action pause: pause unless the player already had, and return
+// the matching close action. Closing resumes only if this call paused and
+// the connection and timeline are unchanged; a run change or reconnect
+// sets its own paused state, which a late resume must not override.
+export function pauseWhileOpen(): () => void {
+  const opened = useSimStore.getState();
+  if (opened.paused || opened.transport === null) return () => {};
+  opened.pause();
+  const { transport, timelineEpoch } = useSimStore.getState();
+  return () => {
+    const closing = useSimStore.getState();
+    if (closing.transport === transport && closing.timelineEpoch === timelineEpoch)
+      closing.resume();
+  };
+}
+
 let nextCommandOrdinal = 0;
 function mintCommandId(prefix: string): string {
   const id = `${prefix}-${nextCommandOrdinal.toString()}`;
@@ -342,13 +358,15 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     interventionReplies.clear();
   };
 
-  // Optimistic writes the host can still reject: quarantine toggles and
-  // auto-pause triggers. Each slot holds the value the host last accepted
-  // and the writes still awaiting a reply, oldest first. The projection
-  // shows the newest write; when the host rejects a write and none
-  // remain, the projection falls back to the accepted value. Slots tied
-  // to a timeline (`epoch`) are dropped silently once the timeline
-  // changes, because rehydration replaces their projection.
+  // Optimistic writes the host can still reject: pause / resume, speed,
+  // quarantine toggles and auto-pause triggers. Each slot holds the value
+  // the host last accepted and the writes still awaiting a reply, oldest
+  // first. The projection shows the newest write; once every write has a
+  // reply, it shows the last accepted value, so a rejection rolls back to
+  // what the host actually holds. The host answers commands in order, so
+  // a reply to one write means any older write still waiting was lost.
+  // Slots tied to a timeline (`epoch`) are dropped silently once the
+  // timeline changes, because the change resets their projection.
   interface OptimisticSlot {
     confirmed: unknown;
     readonly epoch: number | null;
@@ -390,18 +408,19 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     optimisticCommands.delete(commandId);
     const slot = optimisticSlots.get(slotKey);
     if (slot === undefined || !slot.values.has(commandId)) return;
-    const value = slot.values.get(commandId);
-    slot.values.delete(commandId);
-    slot.writes.splice(slot.writes.indexOf(commandId), 1);
-    if (accepted) slot.confirmed = value;
+    if (accepted) slot.confirmed = slot.values.get(commandId);
+    for (const answered of slot.writes.splice(0, slot.writes.indexOf(commandId) + 1)) {
+      slot.values.delete(answered);
+      optimisticCommands.delete(answered);
+    }
     if (slot.writes.length > 0) return;
     optimisticSlots.delete(slotKey);
     if (slot.epoch !== null && slot.epoch !== get().timelineEpoch) return;
-    if (!accepted) slot.show(slot.confirmed);
+    slot.show(slot.confirmed);
   }
 
-  // Host-originated changes (QuarantineImposed / Lifted) move the accepted
-  // value of a slot that still has writes in flight.
+  // Host-originated changes (QuarantineImposed / Lifted, AutoPaused) move
+  // the accepted value of a slot that still has writes in flight.
   function confirmOptimistic(slotKey: string, value: unknown): void {
     const slot = optimisticSlots.get(slotKey);
     if (slot !== undefined) slot.confirmed = value;
@@ -419,6 +438,17 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     if (quarantined) next.add(lineageId);
     else next.delete(lineageId);
     set({ quarantinedLineages: next });
+  }
+
+  // actualSpeed reads the last Tick heartbeat; once paused, no more
+  // heartbeats fire and the lingering value reads as if the sim were
+  // still running. Reset it explicitly.
+  function showPaused(paused: boolean): void {
+    set(paused ? { paused, actualSpeed: 0 } : { paused });
+  }
+
+  function writePaused(commandId: string, paused: boolean): void {
+    writeOptimistic('paused', commandId, get().paused, paused, get().timelineEpoch, showPaused);
   }
 
   function retryStalePending(): void {
@@ -615,6 +645,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         return;
       }
       case 'autoPaused':
+        confirmOptimistic('paused', true);
         set({
           simTick: event.simTick,
           paused: true,
@@ -714,10 +745,6 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             cancelPendingTick();
             set({ ...previous, pendingCommands: pending, paused: true, actualSpeed: 0 });
             void get().rehydrateAfterLoad();
-          } else if (entry.projection?.paused === true) {
-            set({ pendingCommands: pending, paused: false });
-          } else if (entry.projection?.paused === false) {
-            set({ pendingCommands: pending, paused: true });
           } else if (entry.kind === 'deleteRun') {
             // The row was dropped optimistically; the listing restores it.
             set({ pendingCommands: pending });
@@ -937,10 +964,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { paused: true },
       });
-      // actualSpeed reads the last Tick heartbeat; once paused, no more
-      // heartbeats fire and the lingering value reads as if the sim were
-      // still running. Reset it explicitly.
-      set({ paused: true, actualSpeed: 0, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      writePaused(commandId, true);
       transport.send({ kind: 'pause', commandId });
     },
     resume: () => {
@@ -956,7 +981,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { paused: false },
       });
-      set({ paused: false, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      writePaused(commandId, false);
       transport.send({ kind: 'resume', commandId });
     },
     setSpeed: (speed) => {
@@ -972,7 +998,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { speed },
       });
-      set({ speed, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      // Speed is host-wide rather than per timeline.
+      writeOptimistic('speed', commandId, get().speed, speed, null, (value) =>
+        set({ speed: value }),
+      );
       transport.send({ kind: 'setSpeed', commandId, speed });
     },
     save: (slot = 'default') => {

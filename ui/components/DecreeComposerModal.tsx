@@ -8,11 +8,11 @@
 // Like the patch editor, this is modal-on-action: the sim pauses while
 // the modal is open and resumes on close.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DECREE_AUTHORING_COST } from '../../sim/compute.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
 import { parseUint64Decimal } from '../../protocol/uint64.js';
-import { useSimStore } from '../sim-store.js';
+import { pauseWhileOpen, useSimStore } from '../sim-store.js';
 
 interface DecreeComposerModalProps {
   readonly defaultTriggerLineageId: string;
@@ -58,8 +58,6 @@ export function DecreeComposerModal({
   initialFirmware,
   onClose,
 }: DecreeComposerModalProps): React.JSX.Element {
-  const pause = useSimStore((s) => s.pause);
-  const resume = useSimStore((s) => s.resume);
   const queueDecree = useSimStore((s) => s.queueDecree);
   const originCompute = useSimStore((s) => s.originCompute);
   const lineages = useSimStore((s) => s.lineages);
@@ -75,20 +73,7 @@ export function DecreeComposerModal({
   // paused. Same fix as PatchEditorModal; without the guard, closing
   // the composer would un-pause whatever the player had explicitly
   // paused.
-  const pausedByMeRef = useRef(false);
-  useEffect(() => {
-    const wasPausedAtOpen = useSimStore.getState().paused;
-    if (!wasPausedAtOpen) {
-      pause();
-      pausedByMeRef.current = true;
-    }
-    return () => {
-      if (pausedByMeRef.current) {
-        resume();
-        pausedByMeRef.current = false;
-      }
-    };
-  }, [pause, resume]);
+  useEffect(() => pauseWhileOpen(), []);
 
   const lineageOptions = [...lineages.values()].map((l) => ({
     id: l.id,

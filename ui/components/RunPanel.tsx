@@ -19,9 +19,11 @@ function parseSeed(input: string): bigint | null {
   }
 }
 
-function defaultSlotName(seed: bigint | null, simTick: bigint): string {
-  // A switched-to or loaded run's seed is unknown to the client.
-  const seedPart = seed === null ? 'run' : `seed${seed.toString()}`;
+function defaultSlotName(seed: bigint | null, activeRunId: string, simTick: bigint): string {
+  // A switched-to or loaded run's seed is unknown to the client; name the
+  // run instead, as the header does.
+  const seedPart =
+    seed !== null ? `seed${seed.toString()}` : activeRunId === '' ? 'run' : `run-${activeRunId}`;
   return `${seedPart}-tick${simTick.toString()}`;
 }
 
@@ -59,7 +61,7 @@ export function RunPanel(): React.JSX.Element {
 
   function handleSaveClick(): void {
     if (!paused) pause();
-    const suggested = defaultSlotName(seed, simTick);
+    const suggested = defaultSlotName(seed, activeRunId, simTick);
     const entered = window.prompt('Save slot name', suggested);
     if (entered === null) return;
     const slot = entered.trim();
