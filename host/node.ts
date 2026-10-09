@@ -106,6 +106,14 @@ export interface NodeHostOptions {
   // through the on-disk format. When absent, Save/Load fail with a
   // commandError and the run is in-memory only.
   readonly persistence?: PersistenceOptions;
+  // Automatic event-log flushing. When set (and persistence is configured),
+  // the host drains buffered log entries to storage at most this many
+  // wall-clock milliseconds apart while the run advances, and also after
+  // every command, scheduled snapshot, auto-pause and timeline operation.
+  // When absent, buffered entries reach storage only on an explicit
+  // flush() or a timeline operation; the headless CLI relies on its
+  // flush before close.
+  readonly logFlushIntervalMs?: number;
 }
 
 function logKey(runId: string): string {
@@ -349,6 +357,13 @@ export class NodeHost {
   private replaying = false;
   private transitionCommandId: string | null = null;
   private backgroundFailure: unknown = null;
+  // Automatic log flushing (NodeHostOptions.logFlushIntervalMs). At most one
+  // flush job waits in the work queue at a time; it records the writer it
+  // was scheduled for, so a writer replaced by newRun or a timeline
+  // operation is never flushed into the replacement's file.
+  private readonly logFlushIntervalMs: number | undefined;
+  private lastLogFlushRequestAtMs = Number.NEGATIVE_INFINITY;
+  private queuedLogFlushWriter: EventLogWriter | null = null;
 
   // Run-loop state. Null until the first newRun command lands.
   private state: SimState | null = null;
@@ -376,6 +391,7 @@ export class NodeHost {
     this.persistence = options.persistence;
     this.snapshotCadenceTicks =
       options.persistence?.snapshotCadenceTicks ?? DEFAULT_SNAPSHOT_CADENCE_TICKS;
+    this.logFlushIntervalMs = options.logFlushIntervalMs;
     this.logWriter =
       this.persistence !== undefined
         ? new EventLogWriter(this.persistence.storage, logKey(this.persistence.runId))
@@ -704,6 +720,14 @@ export class NodeHost {
     ) {
       this.logWriter.appendCommand(this.state?.simTick ?? 0n, cmd);
     }
+    this.dispatch(cmd);
+    // Persist the command and whatever it emitted. Queued behind any work
+    // the command enqueued (newRun's log reset, a save, a timeline
+    // operation), so it never lands in a file that work is about to drop.
+    this.requestLogFlush();
+  }
+
+  private dispatch(cmd: Command): void {
     switch (cmd.kind) {
       case 'newRun':
         this.handleNewRun(cmd.commandId, cmd.seed);
@@ -1027,6 +1051,7 @@ export class NodeHost {
         remaining > BigInt(MAX_TICKS_PER_SLICE) ? BigInt(MAX_TICKS_PER_SLICE) : remaining;
       this.advanceUnpaused(slice);
       this.maybeEmitHeartbeat();
+      this.maybeFlushLog();
       if (wallClockBudgetMs !== undefined && performance.now() - start >= wallClockBudgetMs) {
         break;
       }
@@ -1158,6 +1183,9 @@ export class NodeHost {
         // Publish the committed budget/population before it goes idle.
         if (this.heartbeatIntervalMs !== Number.POSITIVE_INFINITY) this.emitHeartbeat();
         this.emit({ kind: 'autoPaused', simTick: state.simTick, trigger: pauseTrigger });
+        // The worker keeps no record of auto-pauses, so nothing else would
+        // flush the run's last stretch until the player acts.
+        this.requestLogFlush();
         return;
       }
     }
@@ -1201,6 +1229,37 @@ export class NodeHost {
     const storage = this.persistence.storage;
     this.enqueue(async () => {
       await storage.write(key, serializeSnapshot(snap));
+    });
+    // Queued after the file write, so the snap entry never reaches the log
+    // before the snapshot it references.
+    this.requestLogFlush();
+  }
+
+  // Periodic half of the automatic flush policy: request a flush once the
+  // interval has elapsed since the previous request.
+  private maybeFlushLog(): void {
+    if (this.logFlushIntervalMs === undefined) return;
+    if (this.now() - this.lastLogFlushRequestAtMs < this.logFlushIntervalMs) return;
+    this.requestLogFlush();
+  }
+
+  // Queue a drain of the active writer behind any pending storage work.
+  // No-op unless automatic flushing is enabled and entries are buffered.
+  // Coalesces: a job already waiting for this writer will drain whatever
+  // is buffered when it runs. A job whose writer has since been replaced
+  // does nothing; the replaced writer's history was either written by the
+  // operation that replaced it or deliberately discarded (newRun).
+  private requestLogFlush(): void {
+    if (this.logFlushIntervalMs === undefined || this.replaying) return;
+    const writer = this.logWriter;
+    if (writer === null || writer.pendingCount() === 0) return;
+    if (this.queuedLogFlushWriter === writer) return;
+    this.queuedLogFlushWriter = writer;
+    this.lastLogFlushRequestAtMs = this.now();
+    this.enqueue(async () => {
+      if (this.queuedLogFlushWriter === writer) this.queuedLogFlushWriter = null;
+      if (writer !== this.logWriter) return;
+      await writer.flush();
     });
   }
 
@@ -1929,6 +1988,10 @@ export class NodeHost {
       } finally {
         if (this.transitionCommandId === commandId) this.transitionCommandId = null;
       }
+      // The operation may have installed a new writer holding its
+      // acknowledgement; the flush requested when the command arrived
+      // was for the old one.
+      this.requestLogFlush();
     }, commandId);
   }
 
@@ -1936,6 +1999,7 @@ export class NodeHost {
     this.workQueue = this.workQueue.then(work).catch((error: unknown) => {
       if (commandId !== undefined) {
         this.error(commandId, error instanceof Error ? error.message : String(error));
+        this.requestLogFlush();
       } else {
         this.backgroundFailure = error;
       }
