@@ -17,9 +17,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 ## Unprioritized
 
-- [UI] `confirm-run-replacement` — **Confirm before Start replaces the active run.** Start deletes the active slot's log and snapshots with one click, unlike every other destructive action.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `run-start-overwrites-without-confirm`
 - [HOST] `fresh-browser-run-autostart` — **Start the default seed-42 run on a first visit, as documented.** The startup `switchRun` acknowledgement is written to the empty slot's log, so the dashboard restores an empty run instead of starting one.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `fresh-browser-run-never-starts`
