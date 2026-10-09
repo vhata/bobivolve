@@ -4,7 +4,7 @@
 // updating projection of the run state, since that surface is only
 // consulted at the moment the player decides to act.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSimStore } from '../sim-store.js';
 import { SwitchRunModal } from './SwitchRunModal.js';
 
@@ -50,6 +50,23 @@ export function RunPanel(): React.JSX.Element {
   const [loadMode, setLoadMode] = useState(false);
   const [switchRunMode, setSwitchRunMode] = useState(false);
   const activeRunId = useSimStore((s) => s.activeRunId);
+  const populationTotal = useSimStore((s) => s.populationTotal);
+  const [confirmingSeed, setConfirmingSeed] = useState<bigint | null>(null);
+
+  // Start replaces the active slot: the host deletes its log and reaps its
+  // snapshots. Ask first, like rewind and the delete actions, unless the
+  // slot is known to hold no simulation at all (a resolved slot at tick 0
+  // with no population, such as one just created from Switch run). A run
+  // that has only been seeded still shows its founder, so it confirms too.
+  function handleStartSubmit(): void {
+    if (parsedSeed === null) return;
+    if (activeRunId !== '' && simTick === 0n && populationTotal === 0n) {
+      startRun(parsedSeed);
+      return;
+    }
+    if (!paused) pause();
+    setConfirmingSeed(parsedSeed);
+  }
 
   function handleSwitchRunClick(): void {
     if (!paused) pause();
@@ -99,8 +116,7 @@ export function RunPanel(): React.JSX.Element {
           className="run-form"
           onSubmit={(e) => {
             e.preventDefault();
-            if (parsedSeed === null) return;
-            startRun(parsedSeed);
+            handleStartSubmit();
           }}
         >
           <label className="run-label">
@@ -187,6 +203,83 @@ export function RunPanel(): React.JSX.Element {
         ) : null}
       </div>
       {switchRunMode ? <SwitchRunModal onClose={() => setSwitchRunMode(false)} /> : null}
+      {confirmingSeed !== null ? (
+        <StartRunConfirmModal
+          runId={activeRunId}
+          tick={simTick}
+          seed={confirmingSeed}
+          onCancel={() => {
+            setConfirmingSeed(null);
+          }}
+          onConfirm={() => {
+            const next = confirmingSeed;
+            setConfirmingSeed(null);
+            startRun(next);
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+// Same modal-on-action shape as the rewind confirmation: click-to-cancel
+// backdrop, Cancel focused by default so a repeated Enter in the seed field
+// cannot replace the run, and Escape cancels.
+function StartRunConfirmModal({
+  runId,
+  tick,
+  seed,
+  onCancel,
+  onConfirm,
+}: {
+  runId: string;
+  tick: bigint;
+  seed: bigint;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): React.JSX.Element {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+    };
+  }, [onCancel]);
+
+  const runLabel = runId === '' ? 'the active run' : `run "${runId}"`;
+  return (
+    <div
+      className="rewind-confirm-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm run replacement"
+      onClick={onCancel}
+    >
+      <div
+        className="rewind-confirm"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <h3 className="rewind-confirm-title">
+          {runId === '' ? 'Replace the active run?' : `Replace run "${runId}"?`}
+        </h3>
+        <p className="rewind-confirm-body">
+          Starting seed {seed.toString()} discards {runLabel} at tick {tick.toString()}, including
+          its history and snapshots. Named saves and other runs are kept. Save first if this run is
+          worth keeping, or use Switch run… to start the new seed in a separate run.
+        </p>
+        <div className="rewind-confirm-actions">
+          <button type="button" className="rewind-confirm-cancel" onClick={onCancel} autoFocus>
+            Cancel
+          </button>
+          <button type="button" className="rewind-confirm-go" onClick={onConfirm}>
+            Replace run
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
