@@ -4,10 +4,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 ## P0 Critical
 
-- [HOST] `browser-run-log-durability` — **Persist the browser run's event log during play, so a reload, tab close or crash does not lose the run.** The worker flushes the log only on an explicit Pause, startup or timeline operations. Play that is never paused, commands issued while paused before the next pause, and play after an auto-pause are lost on reload.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `browser-log-only-persisted-on-pause`
-  - Starting point: `host/worker.ts:82,217`, `host/node.ts` (`scheduleSnapshot`, auto-pause at 1155-1161, the startup `switchRun` acknowledgement), `host/event-log.ts` (`EventLogWriter`). Add a reload-while-running browser test; the existing reload tests pause first.
 
 ## P1 High
 
@@ -23,7 +19,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [HOST] `fresh-browser-run-autostart` — **Start the default seed-42 run on a first visit, as documented.** The startup `switchRun` acknowledgement is written to the empty slot's log, so the dashboard restores an empty run instead of starting one.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `fresh-browser-run-never-starts`
-  - Related: `browser-run-log-durability`
   - Starting point: `host/node.ts` (`handleSwitchRun` acknowledgement), `ui/sim-store.ts` (`bootstrapRun`). Add a browser test that starts from cleared OPFS without clicking Start.
 - [HOST] `event-log-replay-fidelity` — **Make logged commands replay exactly as they executed live.** Rejected commands are logged and revived by field name. Their replay diverges or poisons the log, `step` replays differently from live play, and `logSlice` can race a new run's log reset.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
