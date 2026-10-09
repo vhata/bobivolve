@@ -446,6 +446,9 @@ describe('automatic event-log flushing', () => {
     );
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([background, explicit]);
+    // The CLI prints only the message, so it must carry both causes.
+    expect((failure as AggregateError).message).toContain('automatic append failed');
+    expect((failure as AggregateError).message).toContain('explicit append failed');
     await expect(host.flush()).resolves.toBeUndefined();
     expect(storage.log('default').some((e) => e.type === 'cmd' && e.command.kind === 'step')).toBe(
       true,

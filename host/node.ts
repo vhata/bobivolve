@@ -323,6 +323,10 @@ function inspectorToDirective(spec: DirectiveSpec): Directive | null {
 // not depend on the transport layer.
 export type HostEventListener = (event: SimEvent) => void;
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class NodeHost {
   private readonly listeners = new Set<HostEventListener>();
   private readonly now: () => number;
@@ -694,7 +698,7 @@ export class NodeHost {
     if (background !== null && writeFailure !== null) {
       throw new AggregateError(
         [background, writeFailure],
-        'background storage work and the log flush both failed',
+        `background storage work and the log flush both failed: ${errorMessage(background)}; ${errorMessage(writeFailure)}`,
       );
     }
     if (background !== null) throw background;
