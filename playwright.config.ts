@@ -21,8 +21,8 @@ import { defineConfig } from '@playwright/test';
 const E2E_PORT_BASE = 20_000;
 const E2E_PORT_SPAN = 10_000;
 
-function e2ePort(): number {
-  const override = process.env['E2E_PORT'];
+export function e2ePort(env: NodeJS.ProcessEnv, checkoutRoot: string): number {
+  const override = env['E2E_PORT'];
   if (override !== undefined && override !== '') {
     const port = /^\d+$/.test(override) ? Number(override) : NaN;
     if (!(port >= 1 && port <= 65_535)) {
@@ -32,13 +32,12 @@ function e2ePort(): number {
     }
     return port;
   }
-  if (process.env['CI']) return 5173;
-  const root = realpathSync(fileURLToPath(new URL('.', import.meta.url)));
-  const digest = createHash('sha256').update(root).digest();
+  if (env['CI']) return 5173;
+  const digest = createHash('sha256').update(checkoutRoot).digest();
   return E2E_PORT_BASE + (digest.readUInt32BE(0) % E2E_PORT_SPAN);
 }
 
-const port = e2ePort();
+const port = e2ePort(process.env, realpathSync(fileURLToPath(new URL('.', import.meta.url))));
 const origin = `http://127.0.0.1:${port}`;
 // Stderr, once from the runner process, so reporters writing to stdout
 // stay parseable.
