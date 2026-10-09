@@ -15,7 +15,7 @@ import { firmwareDiverged, type Lineage } from './lineage.js';
 import { lineageName } from './lineage-names.js';
 import { maybeMutate } from './mutation.js';
 import { applyPatch, checkPatchSaturation } from './patch.js';
-import type { Probe, SimState } from './state.js';
+import { lineageHasExtantProbes, type Probe, type SimState } from './state.js';
 import {
   LATTICE_CELL_COUNT,
   LATTICE_SIDE,
@@ -220,20 +220,22 @@ export function tick(state: SimState, events?: SimEvent[]): void {
         remaining.push(decree);
         continue;
       }
-      // Trigger condition met: apply the patch. The target lineage
-      // may have gone extinct since queue time — applyPatch throws
-      // in that case, which we catch and treat as a quiet drop with
-      // a DecreeFired event recording that the patch could not land.
-      // This preserves the player's authorship in the event log
-      // even when timing left the patch homeless.
+      // Trigger condition met. The target lineage may have gone
+      // extinct since queue time; the decree is still consumed and
+      // its DecreeFired event records that the patch could not land,
+      // preserving the player's authorship in the event log. No patch
+      // id is minted and no patch record is written, because nothing
+      // could ever carry it. An unknown target lineage is a broken
+      // invariant (the host validates targets and lineages are never
+      // removed), so it throws instead of being reported as a miss.
       let landed = false;
       let probesAffected = 0;
-      try {
+      if (lineageHasExtantProbes(state, decree.patchTargetLineageId)) {
         const result = applyPatch(state, decree.patchTargetLineageId, decree.patchFirmware);
         landed = true;
         probesAffected = result.probesAffected;
-      } catch {
-        landed = false;
+      } else if (!state.lineages.has(decree.patchTargetLineageId)) {
+        throw new Error(`decree ${decree.id}: unknown lineage ${decree.patchTargetLineageId}`);
       }
       if (events !== undefined) {
         const event: SimEvent = {

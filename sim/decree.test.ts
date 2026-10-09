@@ -93,4 +93,48 @@ describe('decree firing through tick', () => {
     expect(events.find((e) => e.kind === 'decreeFired')).toBeUndefined();
     expect(state.queuedDecrees).toHaveLength(1);
   });
+
+  it('consumes a decree on an extinct target without landing or recording a patch', () => {
+    const state = createInitialState(Seed(42n), FIRMWARE);
+    state.probes.clear();
+    const before = state.lineages.get(LineageId('L0'));
+    state.queuedDecrees.push({
+      id: 'D0',
+      queuedAtTick: 0n,
+      trigger: { kind: 'populationBelow', lineageId: LineageId('L0'), threshold: 1n },
+      patchTargetLineageId: LineageId('L0'),
+      patchFirmware: [{ kind: 'gather', rate: 9n }],
+    });
+    state.nextDecreeOrdinal = 1n;
+
+    const events: SimEvent[] = [];
+    tickN(state, 1n, events);
+
+    expect(events.filter((e) => e.kind === 'decreeFired')).toEqual([
+      {
+        kind: 'decreeFired',
+        simTick: 1n,
+        decreeId: 'D0',
+        patchTargetLineageId: 'L0',
+        landed: false,
+        probesAffected: 0n,
+      },
+    ]);
+    expect(state.queuedDecrees).toHaveLength(0);
+    expect(state.appliedPatches.size).toBe(0);
+    expect(state.nextPatchOrdinal).toBe(0n);
+    expect(state.lineages.get(LineageId('L0'))).toEqual(before);
+  });
+
+  it('throws rather than hiding a decree whose target lineage is unknown', () => {
+    const state = createInitialState(Seed(42n), FIRMWARE);
+    state.queuedDecrees.push({
+      id: 'D0',
+      queuedAtTick: 0n,
+      trigger: { kind: 'populationBelow', lineageId: LineageId('L0'), threshold: 100n },
+      patchTargetLineageId: LineageId('L99'),
+      patchFirmware: [{ kind: 'gather', rate: 9n }],
+    });
+    expect(() => tickN(state, 1n, [])).toThrow(/unknown lineage L99/);
+  });
 });
