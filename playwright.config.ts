@@ -40,8 +40,8 @@ export function e2ePort(env: NodeJS.ProcessEnv, checkoutRoot: string): number {
 const port = e2ePort(process.env, realpathSync(fileURLToPath(new URL('.', import.meta.url))));
 const origin = `http://127.0.0.1:${port}`;
 // Stderr, once from the runner process, so reporters writing to stdout
-// stay parseable.
-if (process.env['TEST_WORKER_INDEX'] === undefined) {
+// stay parseable. Silent when Vitest imports the config to test it.
+if (process.env['TEST_WORKER_INDEX'] === undefined && process.env['VITEST'] === undefined) {
   process.stderr.write(`Browser server: ${origin}\n`);
 }
 

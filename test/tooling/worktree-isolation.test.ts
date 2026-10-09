@@ -1,6 +1,7 @@
 // Lint and browser tooling must stay inside the checkout that runs it; see
 // ARCHITECTURE.md "Agent worktree isolation" and docs/QUALITY.md.
 
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
@@ -54,10 +55,21 @@ describe('e2e server port', () => {
 describe('Playwright web server', () => {
   const server = config.webServer;
   if (server === undefined || Array.isArray(server)) throw new Error('expected one webServer');
-  const port = new URL(config.use?.baseURL ?? '').port;
+  const baseURL = new URL(config.use?.baseURL ?? '');
+  const port = baseURL.port;
 
   it('never reuses a server it did not start', () => {
     expect(server.reuseExistingServer).toBe(false);
+  });
+
+  it('tests the port selected for this checkout', () => {
+    expect(port).toBe(String(e2ePort(process.env, realpathSync(root))));
+  });
+
+  it('tests the host the server binds', () => {
+    expect(baseURL.hostname).toBe('127.0.0.1');
+    expect(server.command).toMatch(/--host (\S+)/);
+    expect(server.command?.match(/--host (\S+)/)?.[1]).toBe(baseURL.hostname);
   });
 
   it('binds the tested port strictly', () => {
