@@ -679,20 +679,26 @@ export class NodeHost {
     } while (pending !== this.workQueue);
     // Write the log first, so an earlier background failure (for example
     // a failed automatic flush) cannot stop this explicit flush from
-    // persisting the buffer. The earlier failure is reported afterwards.
-    let failure: unknown = null;
+    // persisting the buffer. The earlier failure is reported afterwards;
+    // if the write fails too, both are reported together.
+    let writeFailure: unknown = null;
     if (this.logWriter !== null) {
       try {
         await this.logWriter.flush();
       } catch (error) {
-        failure = error;
+        writeFailure = error;
       }
     }
-    if (this.backgroundFailure !== null) {
-      failure = this.backgroundFailure;
-      this.backgroundFailure = null;
+    const background = this.backgroundFailure;
+    this.backgroundFailure = null;
+    if (background !== null && writeFailure !== null) {
+      throw new AggregateError(
+        [background, writeFailure],
+        'background storage work and the log flush both failed',
+      );
     }
-    if (failure !== null) throw failure;
+    if (background !== null) throw background;
+    if (writeFailure !== null) throw writeFailure;
   }
 
   // Subscribe to events. Returns an unsubscribe function.

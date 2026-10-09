@@ -380,6 +380,78 @@ describe('automatic event-log flushing', () => {
     await expect(host.flush()).resolves.toBeUndefined();
   });
 
+  it('releases a snapshot fence when the snapshot write fails', async () => {
+    const storage = new MemoryStorage();
+    const host = await startWorkerHost(storage, {
+      now: () => 0,
+      logFlushIntervalMs: 1000,
+      snapshotCadenceTicks: 20n,
+    });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    await settle();
+    const write = storage.write.bind(storage);
+    vi.spyOn(storage, 'write').mockImplementation(async (key, data) => {
+      if (key.endsWith('/20.snap')) throw new Error('snapshot write failed');
+      return write(key, data);
+    });
+    host.runUntil(22n);
+    await settle();
+    host.send({ kind: 'step', commandId: 'after', ticks: 3n });
+    await settle();
+    const entries = storage.log('default');
+    expect(entries.some((e) => e.type === 'cmd' && e.command.commandId === 'after')).toBe(true);
+    expect(maxTick(entries)).toBe(25n);
+    await expect(host.flush()).rejects.toThrow('snapshot write failed');
+  });
+
+  it('keeps a logSlice query from writing a snap entry before its file', async () => {
+    const storage = new MemoryStorage();
+    const host = await startWorkerHost(storage, {
+      now: () => 0,
+      logFlushIntervalMs: 1000,
+      snapshotCadenceTicks: 20n,
+    });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    await settle();
+    const held = gate();
+    storage.gate = { match: (key) => key.endsWith('/20.snap'), open: held.open };
+    host.runUntil(30n);
+    await settle();
+    // logSlice drains the writer directly, without waiting for the queue.
+    await host.executeQuery({ kind: 'logSlice', queryId: 'q', fromTick: 0n, toTick: 30n });
+    expect(storage.log('default').some((e) => e.type === 'ev' && e.tick > 0n)).toBe(true);
+    expect(missingSnapshots(storage, 'default')).toEqual([]);
+    storage.gate = null;
+    held.release();
+    await settle();
+    expect(storage.log('default').some((e) => e.type === 'snap' && e.tick === 20n)).toBe(true);
+    expect(missingSnapshots(storage, 'default')).toEqual([]);
+  });
+
+  it('reports both failures when an explicit flush fails after a background failure', async () => {
+    const storage = new MemoryStorage();
+    const host = await startWorkerHost(storage, { now: () => 0, logFlushIntervalMs: 1000 });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    host.send({ kind: 'pause', commandId: 'pause' });
+    await settle();
+    const background = new Error('automatic append failed');
+    const explicit = new Error('explicit append failed');
+    vi.spyOn(storage, 'append').mockRejectedValueOnce(background).mockRejectedValueOnce(explicit);
+    host.send({ kind: 'step', commandId: 'step', ticks: 1n });
+    await settle();
+
+    const failure: unknown = await host.flush().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([background, explicit]);
+    await expect(host.flush()).resolves.toBeUndefined();
+    expect(storage.log('default').some((e) => e.type === 'cmd' && e.command.kind === 'step')).toBe(
+      true,
+    );
+  });
+
   it('leaves logging to explicit flushes when no interval is configured', async () => {
     const storage = new MemoryStorage();
     const host = await startWorkerHost(storage, { now: () => 0 });
