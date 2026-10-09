@@ -44,10 +44,10 @@ For a red main push or scheduled run, the same day revert the responsible change
 
 ## Hosting settings
 
-Verified on 2026-10-07 after the user authorized protection: main has branch protection with these settings. Repository merging remains squash-only, with landed head branches deleted automatically. Changes to hosting settings require explicit user authorization.
+Verified on 2026-10-08: main has branch protection with these settings. Repository merging remains squash-only, with landed head branches deleted automatically. Changes to hosting settings require explicit user authorization.
 
-- Require GitHub Actions checks named `check` and `browser` on the current base (`strict: true`); both checks are bound to the GitHub Actions app.
-- Require linear history and resolved conversations. Main deletion and force pushes are blocked, and rules are enforced for administrators; there are no direct-to-main exceptions.
+- Require a pull request and the GitHub Actions checks named `check` and `browser`. Branches need not be up to date with `main` before merging (`strict: false`); the push-to-main CI run and the red-main policy above catch the rare bad combination.
+- Require linear history. Conversation resolution is not required. Force pushes and deletions on `main` are allowed for the owner and never used by agents. The rule is not enforced for administrators, which is what permits the direct-to-main exceptions in [AGENTS.md](../AGENTS.md).
 - Use squash-only merging and deletion of landed head branches, with the PR title as the squash subject and PR body as the commit body.
 - Zero GitHub approving reviews is acceptable with agent review recorded in `## Review`; the user retains final review and landing authority.
 
