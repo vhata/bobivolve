@@ -62,8 +62,9 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ### Unprioritized
 
-- [UI] `patched-parent-promotion` — **Promote events for patched parents.** Patched-parent promotion in the rewindable-events filter. The forward-looking promotion path currently checks parent-quarantined OR parent-big; the brainstorm also called for parent-patched as a third axis. The store doesn't project per-lineage patch status today (would need a small additional reducer fed from `patchApplied` events). Logged for follow-up; today's promotion list still catches every patched lineage indirectly via the `patchApplied` stratum-1 event. #r2-stretch #ui
-  - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
+- [TOOLING] `worktree-git-hooks` — **Install git hooks from linked worktrees.** `scripts/setup.sh` runs `simple-git-hooks`, which fails in a linked worktree (`ENOTDIR ... .git/hooks`, because `.git` is a file there) yet exits 0, so pre-commit and pre-push hooks are silently missing for every agent and Conductor workspace.
+  - Source: `todo/patched-parent-promotion` writer report, reproduced by the coordinator 2026-10-08; the shared hooks directory held only `.sample` files.
+  - Starting point: `scripts/setup.sh`, the `simple-git-hooks` block in `package.json`, docs/QUALITY.md hook section. Install into the hooks directory under `git rev-parse --git-common-dir` (or set `core.hooksPath` to a tracked directory) and fail loudly when installation fails.
 
 - [DOCS] `full-codebase-review` — **Establish the first current full-review baseline.** The historical project-direction review is preserved; it does not establish current full-codebase coverage.
   - Source: Workflow audit of `67839b2` and live GitHub records, 2026-10-06.
