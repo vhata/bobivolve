@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 
 test('unfunded quarantine releases on the next tick and explains why', async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem('bobivolve:nux-seen', '1'));
@@ -6,7 +7,7 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
   const autoPauseMeta = page.locator('.autopause-panel .panel-meta');
   // Settle whatever run the page bootstrapped into a paused run, so no
   // stale auto-pause can arrive once the trigger below is enabled.
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
@@ -18,7 +19,7 @@ test('unfunded quarantine releases on the next tick and explains why', async ({ 
   // runner, while the founder still holds most of the population, so
   // the patch below saturates on the first tick after Resume.
   await page.getByRole('checkbox', { name: 'Significant drift', exact: true }).check();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(autoPauseMeta).toHaveText('last: speciation');
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Significant drift', exact: true }).uncheck();

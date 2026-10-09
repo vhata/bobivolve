@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import type { SimStoreState } from '../ui/sim-store.js';
 
 test('replacement waits for coherent telemetry before showing provenance', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('bobivolve:nux-seen', '1'));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
@@ -82,7 +83,7 @@ test('patch ancestry and exact retention remain distinct after replacement and s
     window.localStorage.setItem('bobivolve:nux-seen', '1');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.locator('.lineage-tree button[aria-pressed]').first().click();
