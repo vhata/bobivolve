@@ -171,11 +171,21 @@ describe('named save deletion', () => {
     ['ẞ', 'ß'],
     ['ſ', 's'],
   ])(
-    'refuses potentially aliased names %s / %s without deleting either save',
+    'refuses potentially aliased legacy names %s / %s without deleting either save',
     async (first, second) => {
-      host.send({ kind: 'save', commandId: 'first-alias', slot: first });
-      host.send({ kind: 'save', commandId: 'second-alias', slot: second });
-      await host.flush();
+      // Save now refuses aliases, so build the legacy index an older
+      // build could have written: both names listed, both files present.
+      const snapshotBytes = await storage.read('saves/keep.save');
+      if (snapshotBytes === null) throw new Error('keep save missing');
+      const legacy = JSON.parse(
+        new TextDecoder().decode((await storage.read('saves/index.json')) ?? undefined),
+      ) as { saves: { slot: string; tick: string; savedAtMs: number }[] };
+      for (const slot of [first, second]) {
+        await storage.write(`saves/${slot}.save`, snapshotBytes);
+        if (!legacy.saves.some((entry) => entry.slot === slot))
+          legacy.saves.push({ slot, tick: '10', savedAtMs: 0 });
+      }
+      await storage.write('saves/index.json', new TextEncoder().encode(JSON.stringify(legacy)));
       const index = await storage.read('saves/index.json');
       const firstBytes = await storage.read(`saves/${first}.save`);
       const secondBytes = await storage.read(`saves/${second}.save`);
