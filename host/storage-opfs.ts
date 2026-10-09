@@ -19,6 +19,7 @@
 // load-bearing for R0. We can revisit when a profiler tells us to.
 
 import type { Storage } from '../sim/ports.js';
+import { splitStorageKey } from './storage-key.js';
 
 export interface OPFSStorageOptions {
   // Optional sub-directory under the OPFS origin root. When omitted, the
@@ -327,60 +328,18 @@ export class OPFSStorage implements Storage {
   }
 
   // Validate a key and split it into directory segments plus a terminal
-  // file name. Refuses keys that escape the root or contain segments
-  // OPFS would reject anyway. Semantics mirror NodeStorage.resolveKey:
-  //
-  // - Empty key → invalid.
-  // - NUL byte in the key → invalid (NodeStorage rejects this; OPFS
-  //   implementations diverge, so we reject up-front for parity).
-  // - Leading `/` → invalid (would mean "absolute path", which is the
-  //   Node-side escape vector).
-  // - Any segment of `..` or `.` → escapes (or no-ops, which we still
-  //   refuse for parity with the Node side, where `normalize()` collapses
-  //   them and any net-upward result is rejected).
-  // - Trailing `/` (i.e. last segment empty) → invalid: we need a file
-  //   name, not a directory.
+  // file name. The rule is shared with NodeStorage (storage-key.ts):
+  // empty keys, NUL, backslash, a leading `/`, empty segments, and any
+  // `.` or `..` segment are refused, so neither adapter resolves a key to
+  // a different directory than the one it names.
   private parseKey(key: string): KeyPath {
-    if (key === '' || key.includes('\0')) {
-      throw new Error(`OPFSStorage: invalid key ${JSON.stringify(key)}`);
-    }
-    if (key.startsWith('/')) {
-      throw new Error(`OPFSStorage: key ${JSON.stringify(key)} escapes root`);
-    }
-    const segments = key.split('/');
-    let depth = 0;
-    for (const segment of segments) {
-      if (segment === '' || segment === '.') {
-        throw new Error(`OPFSStorage: invalid key ${JSON.stringify(key)}`);
-      }
-      if (segment === '..') {
-        if (depth === 0) {
-          throw new Error(`OPFSStorage: key ${JSON.stringify(key)} escapes root`);
-        }
-        depth -= 1;
-        continue;
-      }
-      depth += 1;
-    }
-    // Re-walk to materialise the normalised path. Any `..` we accepted
-    // above must cancel a prior segment; we rebuild the resolved list.
-    const resolved: string[] = [];
-    for (const segment of segments) {
-      if (segment === '..') {
-        resolved.pop();
-        continue;
-      }
-      resolved.push(segment);
-    }
-    if (resolved.length === 0) {
-      throw new Error(`OPFSStorage: key ${JSON.stringify(key)} escapes root`);
-    }
-    const file = resolved[resolved.length - 1];
+    const segments = splitStorageKey('OPFSStorage', key);
+    const file = segments[segments.length - 1];
     // Defensive: noUncheckedIndexedAccess makes this a string | undefined.
     if (file === undefined) {
       throw new Error(`OPFSStorage: invalid key ${JSON.stringify(key)}`);
     }
-    return { dirs: resolved.slice(0, -1), file };
+    return { dirs: segments.slice(0, -1), file };
   }
 }
 
