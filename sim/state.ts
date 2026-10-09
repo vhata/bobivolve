@@ -264,3 +264,15 @@ export function restore(snap: SimStateSnapshot): SimState {
     nextDecreeOrdinal: snap.nextDecreeOrdinal ?? 0n,
   };
 }
+
+// True when at least one extant probe belongs to `lineageId`. Extinction
+// is permanent, so a false result means no intervention can reach the
+// lineage again. Counts live probes rather than reading extinctionTick
+// because snapshots that predate that field restore extinct lineages
+// with a null tick.
+export function lineageHasExtantProbes(state: SimState, lineageId: LineageId): boolean {
+  for (const probe of state.probes.values()) {
+    if (probe.lineageId === lineageId) return true;
+  }
+  return false;
+}
