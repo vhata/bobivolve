@@ -56,6 +56,17 @@ printf 'Requested work without a heading.\n' > body.md
 reject 'missing heading' 'description has no' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
 printf '## Why\n\nWrong namespace.\n\nClaims roadmap: claimed-task\n' > body.md
 reject 'wrong namespace' 'no marker claims or resolves' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch todo/claimed-task
+# Markers written as list items or quotes are rejected rather than ignored.
+printf '## Why\n\nListed marker.\n\n- Claims TODO: claimed-task\n' > body.md
+reject 'dash list marker' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
+printf '## Why\n\nListed marker.\n\n1. Resolves review backlog: claimed-task\n' > body.md
+reject 'numbered list marker' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
+printf '## Why\n\nQuoted marker.\n\n> Claims TODO: claimed-task\n' > body.md
+reject 'quoted marker' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
+printf '## Why\n\nListed marker beside a valid one.\n\nClaims TODO: claimed-task\n+ Files TODO: claimed-task\n' > body.md
+reject 'list marker beside a valid one' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch todo/claimed-task
+printf '## Why\n\nProse lists that mention the queues.\n\n- Files TODO entries for later discoveries\n- Resolves the TODO about naming\n\nClaims TODO: claimed-task\n' > body.md
+pass 'prose list items' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch todo/claimed-task
 
 printf '# TODO\n\n## Needs triage\n\n### P2 Normal\n' > TODO.md
 git add TODO.md
@@ -135,4 +146,5 @@ pass 'unclaimed hosted work' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=none 
 head="$(git rev-parse HEAD)"
 printf '| Date | Type | Commit |\n| 2026-10-06 | full | `%s` |\n' "$head" > review-index.md
 pass 'zero review churn' bash scripts/workflow/review-due.sh --index review-index.md --base "$head"
+
 echo 'workflow-test: ownership and queue regression checks passed'
