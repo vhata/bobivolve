@@ -12,7 +12,7 @@
 // the dashboard's primary inspector is lineage-shaped.
 
 import { useEffect, useRef, useState } from 'react';
-import type { DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.js';
+import type { DirectiveSpec, DriftTelemetry, DriftTelemetryResult } from '../../protocol/types.js';
 import { useSimStore } from '../sim-store.js';
 import { DecreeComposerModal } from './DecreeComposerModal.js';
 import { PatchEditorModal } from './PatchEditorModal.js';
@@ -221,6 +221,29 @@ function DriftLegend(): React.JSX.Element {
 // switches lineages.
 type SparkBuffer = Map<string, number[]>;
 
+// A telemetry reply tagged with the timeline and lineage it was queried
+// for. Until the reply for the current selection arrives, the panel shows
+// no telemetry rather than the previous lineage's.
+interface TelemetryReading {
+  readonly key: string;
+  readonly drift: DriftTelemetry | null;
+  readonly error: string | null;
+}
+
+function readingKey(timelineEpoch: number, lineageId: string): string {
+  return `${timelineEpoch.toString()}:${lineageId}`;
+}
+
+// What a patch editor or decree composer was opened for. Captured at
+// click time so a later selection change cannot retarget the open editor
+// or swap its firmware.
+interface InterventionTarget {
+  readonly lineageId: string;
+  readonly lineageName: string;
+  readonly firmware: readonly DirectiveSpec[];
+  readonly timelineEpoch: number;
+}
+
 function pushSample(buffer: SparkBuffer, key: string, value: number): void {
   const existing = buffer.get(key) ?? [];
   const next = existing.length >= SPARK_HISTORY ? existing.slice(1) : existing.slice();
@@ -238,12 +261,14 @@ export function LineageInspectorPanel(): React.JSX.Element {
   const quarantine = useSimStore((s) => s.quarantine);
   const releaseQuarantine = useSimStore((s) => s.releaseQuarantine);
 
-  const [drift, setDrift] = useState<DriftTelemetry | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [patchEditorOpen, setPatchEditorOpen] = useState(false);
+  const [reading, setReading] = useState<TelemetryReading | null>(null);
+  const currentKey = readingKey(timelineEpoch, selectedLineageId);
+  const drift = reading?.key === currentKey ? reading.drift : null;
+  const error = reading?.key === currentKey ? reading.error : null;
+  const [patchTarget, setPatchTarget] = useState<InterventionTarget | null>(null);
   const referenceRevision = useRef(0);
   const [patchRevision, setPatchRevision] = useState(0);
-  const [decreeComposerOpen, setDecreeComposerOpen] = useState(false);
+  const [decreeTarget, setDecreeTarget] = useState<InterventionTarget | null>(null);
   // Per-lineage sparkline buffers. Held in a ref so a render does not
   // discard the history; we surface a render counter to push samples
   // through to the children.
@@ -258,6 +283,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
     sparkBufferRef.current = new Map();
     setSparkVersion((v) => v + 1);
     let cancelled = false;
+    const key = readingKey(timelineEpoch, selectedLineageId);
     const fetch = async (): Promise<void> => {
       const revision = referenceRevision.current;
       try {
@@ -267,8 +293,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
           lineageId: selectedLineageId,
         })) as DriftTelemetryResult & { queryId: string };
         if (cancelled || revision !== referenceRevision.current) return;
-        setDrift(result.drift);
-        setError(null);
+        setReading({ key, drift: result.drift, error: null });
         if (result.drift !== null) {
           for (const [paramKey, p] of Object.entries(result.drift.parameters)) {
             const ref = BigInt(p.reference);
@@ -282,8 +307,14 @@ export function LineageInspectorPanel(): React.JSX.Element {
           setSparkVersion((v) => v + 1);
         }
       } catch (e) {
-        if (!cancelled && revision === referenceRevision.current)
-          setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled && revision === referenceRevision.current) {
+          const message = e instanceof Error ? e.message : String(e);
+          setReading((previous) => ({
+            key,
+            drift: previous?.key === key ? previous.drift : null,
+            error: message,
+          }));
+        }
       }
     };
     void fetch();
@@ -312,6 +343,15 @@ export function LineageInspectorPanel(): React.JSX.Element {
     if (isQuarantined) releaseQuarantine(selectedLineageId);
     else quarantine(selectedLineageId);
   };
+  const currentTarget = (): InterventionTarget | null =>
+    lineage === undefined || drift === null
+      ? null
+      : {
+          lineageId: lineage.id,
+          lineageName: lineage.name,
+          firmware: drift.referenceFirmware,
+          timelineEpoch,
+        };
   // Plain-language firmware summary, one bullet per parameter the
   // lineage's reference firmware carries.
   const firmwareLines: readonly string[] =
@@ -354,7 +394,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
             type="button"
             className="lineage-action lineage-action-primary"
             onClick={() => {
-              setPatchEditorOpen(true);
+              setPatchTarget(currentTarget());
             }}
             disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
             title="Author firmware modifications. Pauses the sim while editing; descendants inherit and drift."
@@ -365,7 +405,7 @@ export function LineageInspectorPanel(): React.JSX.Element {
             type="button"
             className="lineage-action lineage-action-primary"
             onClick={() => {
-              setDecreeComposerOpen(true);
+              setDecreeTarget(currentTarget());
             }}
             disabled={!isLineageKnown || drift === null || drift.referenceFirmware.length === 0}
             title="Queue a conditional patch that fires when its trigger condition holds."
@@ -483,15 +523,15 @@ export function LineageInspectorPanel(): React.JSX.Element {
           </>
         )}
       </div>
-      {patchEditorOpen && lineage !== undefined && drift !== null ? (
+      {patchTarget !== null && patchTarget.timelineEpoch === timelineEpoch ? (
         <PatchEditorModal
-          lineageId={lineage.id}
-          lineageName={lineage.name}
-          initialFirmware={drift.referenceFirmware}
+          lineageId={patchTarget.lineageId}
+          lineageName={patchTarget.lineageName}
+          initialFirmware={patchTarget.firmware}
           onApplied={() => {
             const currentState = useSimStore.getState();
             if (
-              currentState.selectedLineageId !== lineage.id ||
+              currentState.selectedLineageId !== patchTarget.lineageId ||
               currentState.timelineEpoch !== timelineEpoch ||
               currentState.transport !== transport
             )
@@ -501,20 +541,20 @@ export function LineageInspectorPanel(): React.JSX.Element {
             // together. Ignore polls started before this acknowledgement.
             referenceRevision.current += 1;
             setPatchRevision((revision) => revision + 1);
-            setDrift(null);
+            setReading(null);
           }}
           onClose={() => {
-            setPatchEditorOpen(false);
+            setPatchTarget(null);
           }}
         />
       ) : null}
-      {decreeComposerOpen && lineage !== undefined && drift !== null ? (
+      {decreeTarget !== null && decreeTarget.timelineEpoch === timelineEpoch ? (
         <DecreeComposerModal
-          defaultTriggerLineageId={lineage.id}
-          defaultPatchTargetLineageId={lineage.id}
-          initialFirmware={drift.referenceFirmware}
+          defaultTriggerLineageId={decreeTarget.lineageId}
+          defaultPatchTargetLineageId={decreeTarget.lineageId}
+          initialFirmware={decreeTarget.firmware}
           onClose={() => {
-            setDecreeComposerOpen(false);
+            setDecreeTarget(null);
           }}
         />
       ) : null}
