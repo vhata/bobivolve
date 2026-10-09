@@ -51,7 +51,11 @@ describe('determinism goldens', () => {
   });
 
   it('has exactly one checked-in golden per case', () => {
-    const files = readdirSync(GOLDEN_DIR).sort();
+    // Only .ndjson files are goldens; ignore editor and OS litter such as
+    // .DS_Store.
+    const files = readdirSync(GOLDEN_DIR)
+      .filter((file) => file.endsWith('.ndjson'))
+      .sort();
     const expected = GOLDEN_CASES.map((spec) => `${spec.name}.ndjson`).sort();
     expect(files).toEqual(expected);
   });
