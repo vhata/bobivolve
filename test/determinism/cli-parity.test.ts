@@ -54,19 +54,20 @@ function cliArgs(spec: GoldenCase, scriptDir: string): string[] {
   return args;
 }
 
-// First differing line, so a mismatch reports something readable instead of
-// a multi-megabyte string diff.
+// First differing line, numbered as in the golden file (the ack is line 1),
+// so a mismatch reports something readable instead of a multi-megabyte
+// string diff.
 function firstDifference(
   actual: string,
   expected: string,
-): { line: number; actual: string; expected: string } | null {
+): { goldenLine: number; actual: string; expected: string } | null {
   if (actual === expected) return null;
   const a = actual.split('\n');
   const e = expected.split('\n');
   for (let i = 0; i < Math.max(a.length, e.length); i++) {
     if (a[i] !== e[i]) {
       return {
-        line: i + 1,
+        goldenLine: i + 2,
         actual: a[i] ?? '<end of output>',
         expected: e[i] ?? '<end of golden>',
       };
