@@ -441,6 +441,47 @@ describe('OPFSStorage', () => {
     });
   });
 
+  describe('dot-segment and separator keys', () => {
+    const unsafe = [
+      '.',
+      '..',
+      'runs/.',
+      'runs/..',
+      'runs/./active',
+      'runs/x/../active',
+      'runs\\active',
+      'runs//active',
+      'runs/',
+      '/absolute',
+    ];
+
+    it.each(unsafe)('rejects %j for every operation', async (key) => {
+      const bytes = new TextEncoder().encode('x');
+      await expect(storage.write(key, bytes)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.append(key, bytes)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.read(key)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.delete(key)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.exists(key)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.removeDirectory(key)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.reapDirectory(key)).rejects.toThrow(/invalid key|escapes root/);
+      await expect(storage.listEntries(key)).rejects.toThrow(/invalid key|escapes root/);
+    });
+
+    it('removeDirectory on runs/. or runs/.. leaves every run in place', async () => {
+      await storage.write('runs/active/log.ndjson', new TextEncoder().encode('log'));
+      await storage.write('runs/.active', new TextEncoder().encode('active'));
+      await expect(storage.removeDirectory('runs/.')).rejects.toThrow();
+      await expect(storage.removeDirectory('runs/active/..')).rejects.toThrow();
+      expect(await storage.exists('runs/active/log.ndjson')).toBe(true);
+      expect(await storage.exists('runs/.active')).toBe(true);
+    });
+
+    it('accepts names that merely start with dots', async () => {
+      await storage.write('runs/..name/.log', new TextEncoder().encode('x'));
+      expect(await storage.exists('runs/..name/.log')).toBe(true);
+    });
+  });
+
   describe('removeDirectory', () => {
     it('is idempotent on a missing directory', async () => {
       await expect(storage.removeDirectory('runs/no-such-run')).resolves.toBeUndefined();

@@ -20,8 +20,9 @@ import {
   appendFile,
   rename,
 } from 'node:fs/promises';
-import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Storage } from '../sim/ports.js';
+import { splitStorageKey } from './storage-key.js';
 
 export interface NodeStorageOptions {
   // Filesystem directory under which all keys are resolved. Created on
@@ -90,16 +91,16 @@ export class NodeStorage implements Storage {
     }
   }
 
-  // Map a Storage key to a filesystem path under root. Refuses keys that
-  // resolve outside root — protection against `../`-laden keys, a precaution
-  // for a host that may eventually load keys from external sources.
+  // Map a Storage key to a filesystem path under root. Keys are validated
+  // segment by segment (storage-key.ts) rather than normalised, so `.`,
+  // `..`, empty segments and separators other than `/` are refused before
+  // any IO. The containment check below is a second guard in case the
+  // platform resolves a validated key outside root.
   private resolveKey(key: string): string {
-    if (key === '' || key.includes('\0')) {
-      throw new Error(`NodeStorage: invalid key ${JSON.stringify(key)}`);
-    }
-    const resolved = resolve(this.root, normalize(key));
+    const segments = splitStorageKey('NodeStorage', key);
+    const resolved = resolve(this.root, ...segments);
     const rel = relative(this.root, resolved);
-    if (rel.startsWith('..') || rel.startsWith(sep) || resolved === this.root) {
+    if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
       throw new Error(`NodeStorage: key ${JSON.stringify(key)} escapes root`);
     }
     return resolved;
@@ -208,10 +209,10 @@ export class NodeStorage implements Storage {
   }
 
   // Helper for hosts that compose keys for slots and event-log files.
-  // Joins under the storage root semantics — pure string manipulation, no
-  // filesystem hit.
+  // Pure string manipulation, no filesystem hit. Joins with `/` on every
+  // platform, matching OPFSStorage.joinKey and the key rule.
   static joinKey(...parts: readonly string[]): string {
-    return join(...parts);
+    return parts.filter((p) => p.length > 0).join('/');
   }
 }
 
