@@ -4,7 +4,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 ## P0 Critical
 
-
 ## P1 High
 
 ## P2 Normal
