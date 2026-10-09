@@ -677,12 +677,22 @@ export class NodeHost {
       pending = this.workQueue;
       await pending;
     } while (pending !== this.workQueue);
-    if (this.backgroundFailure !== null) {
-      const failure = this.backgroundFailure;
-      this.backgroundFailure = null;
-      throw failure;
+    // Write the log first, so an earlier background failure (for example
+    // a failed automatic flush) cannot stop this explicit flush from
+    // persisting the buffer. The earlier failure is reported afterwards.
+    let failure: unknown = null;
+    if (this.logWriter !== null) {
+      try {
+        await this.logWriter.flush();
+      } catch (error) {
+        failure = error;
+      }
     }
-    if (this.logWriter !== null) await this.logWriter.flush();
+    if (this.backgroundFailure !== null) {
+      failure = this.backgroundFailure;
+      this.backgroundFailure = null;
+    }
+    if (failure !== null) throw failure;
   }
 
   // Subscribe to events. Returns an unsubscribe function.
@@ -1225,14 +1235,21 @@ export class NodeHost {
     const snap = snapshot(state);
     const key = snapshotKey(this.persistence.runId, tickAt);
     this.lastSnapAtTick = tickAt;
+    // Fence the snap entry: a flush already queued ahead of the file write
+    // drains only the entries before it, so the log never references a
+    // snapshot that is not on disk yet. A failed write still releases the
+    // fence; restore skips snapshot files it cannot read.
+    const release = this.logWriter.fence();
     this.logWriter.appendSnap(tickAt, key);
     const storage = this.persistence.storage;
     this.enqueue(async () => {
-      await storage.write(key, serializeSnapshot(snap));
+      try {
+        await storage.write(key, serializeSnapshot(snap));
+      } finally {
+        release();
+        this.requestLogFlush();
+      }
     });
-    // Queued after the file write, so the snap entry never reaches the log
-    // before the snapshot it references.
-    this.requestLogFlush();
   }
 
   // Periodic half of the automatic flush policy: request a flush once the
