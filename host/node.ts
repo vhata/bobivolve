@@ -246,6 +246,10 @@ interface SavesIndex {
   readonly saves: readonly SaveSlotEntry[];
 }
 
+// Tolerant reader for listing only. A corrupt index lists as empty rather
+// than failing the query; the saves on disk are still loadable by name.
+// Commands that rewrite the index use readSavesIndexForUpdate instead, so
+// they can never replace unreadable listings with a partial one.
 async function readSavesIndex(storage: Storage): Promise<SavesIndex> {
   const bytes = await storage.read(SAVES_INDEX_KEY);
   if (bytes === null) return { saves: [] };
@@ -255,11 +259,54 @@ async function readSavesIndex(storage: Storage): Promise<SavesIndex> {
     if (!Array.isArray(parsed.saves)) return { saves: [] };
     return { saves: parsed.saves };
   } catch {
-    // A corrupt index is treated as empty rather than throwing — the
-    // saves on disk are still recoverable by name; the player just
-    // can't browse them. Future polish: surface a warning.
     return { saves: [] };
   }
+}
+
+function isSavesIndex(value: unknown): value is SavesIndex {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'saves' in value &&
+    Array.isArray(value.saves) &&
+    value.saves.every(
+      (entry: unknown) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        'slot' in entry &&
+        typeof entry.slot === 'string' &&
+        'tick' in entry &&
+        typeof entry.tick === 'string' &&
+        'savedAtMs' in entry &&
+        typeof entry.savedAtMs === 'number',
+    )
+  );
+}
+
+// Strict reader for Save and DeleteSave. A missing index is empty; a read
+// failure propagates; an index that does not parse or has malformed
+// entries throws `refusal` so the caller changes nothing on disk.
+async function readSavesIndexForUpdate(storage: Storage, refusal: string): Promise<SavesIndex> {
+  const bytes = await storage.read(SAVES_INDEX_KEY);
+  if (bytes === null) return { saves: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error(refusal);
+  }
+  if (!isSavesIndex(parsed)) throw new Error(refusal);
+  return parsed;
+}
+
+// Some filesystem adapters fold case or canonically equivalent Unicode
+// names, so two listed slots could share one file. Returns a listed slot,
+// other than `slot` itself, whose name may resolve to the same file.
+function findAliasedSave(index: SavesIndex, slot: string): SaveSlotEntry | undefined {
+  const foldName = (name: string): string =>
+    name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
+  const foldedSlot = foldName(slot);
+  return index.saves.find((entry) => entry.slot !== slot && foldName(entry.slot) === foldedSlot);
 }
 
 function directiveToInspector(directive: Directive): ProbeInspectorDirective {
@@ -1352,17 +1399,29 @@ export class NodeHost {
     const snap = snapshot(this.state);
     const tickAt = this.state.simTick;
     const persistence = this.persistence;
+    const savedAtMs = this.now();
     this.enqueue(async () => {
+      // Validate the index before writing anything. An unreadable or
+      // malformed index is refused rather than replaced, since rewriting
+      // it would drop every other listing; a name that may alias another
+      // listed save is refused because the write could overwrite its bytes.
+      const existing = await readSavesIndexForUpdate(
+        persistence.storage,
+        'Cannot save: save index is invalid; no files were written.',
+      );
+      if (findAliasedSave(existing, slot) !== undefined) {
+        throw new Error(
+          `Cannot save "${slot}": another listed save has a name differing only by case or Unicode normalization. No files were written.`,
+        );
+      }
       const bytes = serializeSnapshot(snap);
       await persistence.storage.write(key, bytes);
-      // Update the index — read existing, replace any same-named slot,
-      // write back. The whole thing is small so atomicity isn't a
-      // concern at R0 scales.
-      const existing = await readSavesIndex(persistence.storage);
+      // Replace any same-named slot and write the index back. The whole
+      // thing is small so atomicity isn't a concern at R0 scales.
       const updated: SavesIndex = {
         saves: [
           ...existing.saves.filter((s) => s.slot !== slot),
-          { slot, tick: tickAt.toString(), savedAtMs: Date.now() },
+          { slot, tick: tickAt.toString(), savedAtMs },
         ],
       };
       await persistence.storage.write(
@@ -1389,35 +1448,13 @@ export class NodeHost {
     this.enqueue(async () => {
       // Unlike listing, destructive maintenance must not treat a corrupt
       // index as empty and silently discard the other entries.
-      const bytes = await storage.read(SAVES_INDEX_KEY);
-      const parsed: unknown =
-        bytes === null ? { saves: [] } : JSON.parse(new TextDecoder().decode(bytes));
-      if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        !('saves' in parsed) ||
-        !Array.isArray(parsed.saves) ||
-        !parsed.saves.every(
-          (entry: unknown) =>
-            typeof entry === 'object' &&
-            entry !== null &&
-            'slot' in entry &&
-            typeof entry.slot === 'string' &&
-            'tick' in entry &&
-            typeof entry.tick === 'string' &&
-            'savedAtMs' in entry &&
-            typeof entry.savedAtMs === 'number',
-        )
-      )
-        throw new Error('Cannot delete save: save index is invalid; no files were removed.');
-      const index = parsed as SavesIndex;
-      // Some filesystem adapters fold case or canonically equivalent
-      // Unicode names. Never remove bytes that another listed slot may
-      // reference, including legacy aliases created before this guard.
-      const foldName = (name: string): string =>
-        name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
-      const foldedSlot = foldName(slot);
-      if (index.saves.some((entry) => entry.slot !== slot && foldName(entry.slot) === foldedSlot)) {
+      const index = await readSavesIndexForUpdate(
+        storage,
+        'Cannot delete save: save index is invalid; no files were removed.',
+      );
+      // Never remove bytes that another listed slot may reference,
+      // including legacy aliases created before Save refused them.
+      if (findAliasedSave(index, slot) !== undefined) {
         throw new Error(
           `Cannot delete save "${slot}": another listed save has a name differing only by case or Unicode normalization. No files were removed.`,
         );
