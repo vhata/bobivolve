@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventLogReader } from './event-log.js';
 import { NodeHost } from './node.js';
 import { NodeStorage } from './storage-node.js';
+import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
+import { LineageId } from '../sim/types.js';
 import type {
   Command,
   PopulationSummaryResult,
@@ -389,6 +391,54 @@ describe('NodeHost quarantine', () => {
     );
     host.send({ kind: 'releaseQuarantine', commandId: 'r-dead', lineageId: extinct.lineageId });
     expect(events.find((e) => e.kind === 'commandAck' && e.commandId === 'r-dead')).toBeDefined();
+  });
+
+  it('releases a hold on an extinct lineage restored from an older save', async () => {
+    // Saves written before extinction released holds can carry one.
+    const root = mkdtempSync(join(tmpdir(), 'bobivolve-dead-hold-'));
+    try {
+      const storage = new NodeStorage({ root });
+      const host = new NodeHost({
+        now: makeFakeClock(),
+        heartbeatHz: 0,
+        persistence: { storage, runId: 'dead-hold' },
+      });
+      const { events } = collectEvents(host);
+      host.send({ kind: 'newRun', commandId: 'new', seed: SEED_42 });
+      host.runUntil(100n);
+      const extinct = events.find((e) => e.kind === 'extinction');
+      if (extinct?.kind !== 'extinction') throw new Error('seed 42 has no extinction by tick 100');
+      host.send({ kind: 'save', commandId: 'save', slot: 'legacy' });
+      await host.flush();
+      const key = 'saves/legacy.save';
+      const saved = await storage.read(key);
+      if (saved === null) throw new Error('save was not written');
+      const legacy = deserializeSnapshot(saved);
+      await storage.write(
+        key,
+        serializeSnapshot({
+          ...legacy,
+          quarantinedLineages: [LineageId(extinct.lineageId)],
+        }),
+      );
+      host.send({ kind: 'load', commandId: 'load', slot: 'legacy' });
+      await host.flush();
+      expect(events.find((e) => e.kind === 'commandAck' && e.commandId === 'load')).toBeDefined();
+      events.length = 0;
+
+      host.send({ kind: 'releaseQuarantine', commandId: 'r-dead', lineageId: extinct.lineageId });
+      expect(events.filter((e) => e.kind === 'quarantineLifted')).toEqual([
+        { kind: 'quarantineLifted', simTick: 100n, lineageId: extinct.lineageId },
+      ]);
+      expect(events.find((e) => e.kind === 'commandAck' && e.commandId === 'r-dead')).toBeDefined();
+      host.send({ kind: 'save', commandId: 'resave', slot: 'released' });
+      await host.flush();
+      const released = await storage.read('saves/released.save');
+      if (released === null) throw new Error('save was not written');
+      expect(deserializeSnapshot(released).quarantinedLineages).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('halts further replication for the quarantined lineage during runUntil', () => {
