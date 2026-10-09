@@ -43,7 +43,7 @@ Honour product design gates: R3 implementation requires the user design pass and
 
 ## Markers
 
-One per line in the PR body, at the start of the line (not a list item, numbered item or quote), exact text, no backticks, nothing after the slug:
+One per line in the PR body, at the start of the line (not a list item, task-list item, numbered item or quote), exact text, no backticks, nothing after the slug:
 
 ```text
 Claims TODO: <slug>                      Claims review backlog: <slug>

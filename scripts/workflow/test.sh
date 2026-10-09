@@ -75,7 +75,11 @@ printf '## Why\n\nQuoted marker.\n\n> Claims TODO: claimed-task\n' > body.md
 reject 'quoted marker' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
 printf '## Why\n\nListed marker beside a valid one.\n\nClaims TODO: claimed-task\n+ Files TODO: claimed-task\n' > body.md
 reject 'list marker beside a valid one' 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch todo/claimed-task
-printf '## Why\n\nProse lists that mention the queues.\n\n- Files TODO entries for later discoveries\n- Resolves the TODO about naming\n\nClaims TODO: claimed-task\n' > body.md
+for item in '- [ ] Claims TODO: claimed-task' '- [x] Resolves TODO: claimed-task' '* [X] Claims TODO: claimed-task' '1. [ ] Claims TODO: claimed-task'; do
+  printf '## Why\n\nTask-list marker.\n\n%s\n' "$item" > body.md
+  reject "task-list marker $item" 'written as a list item or quote' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch task/direct
+done
+printf '## Why\n\nProse lists that mention the queues.\n\n- Files TODO entries for later discoveries\n- Resolves the TODO about naming\n- [ ] Files TODO entries once the spike lands\n\nClaims TODO: claimed-task\n' > body.md
 pass 'prose list items' bash scripts/workflow/check-pr-markers.sh --body body.md --base "$base" --head HEAD --branch todo/claimed-task
 
 printf '# TODO\n\n## Needs triage\n\n### P2 Normal\n' > TODO.md

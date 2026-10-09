@@ -120,10 +120,11 @@ fi
 
 # Exact markers.
 grep -E '^(Claims|Resolves|Partially resolves|Remaining|Files) (TODO|review backlog|review finding|roadmap): [a-z0-9][a-z0-9-]*$' "$tmp/body.clean" > "$tmp/markers" || true
-# Markers written as list items or quotes ("- Resolves TODO: x", "1. ...",
-# "> ..."): rejected, not ignored, so the PR cannot silently lose its claim.
+# Markers written as list items, task-list items or quotes ("- Resolves TODO: x",
+# "- [ ] ...", "1. ...", "> ..."): rejected, not ignored, so the PR cannot
+# silently lose its claim.
 # The colon after the namespace keeps prose list items out of this rule.
-listed_re='^[[:space:]]*(([-+*]|[0-9]+[.)])[[:space:]]+|>[[:space:]]*)+[*_`]*(claims|resolves|partially resolves|remaining|files)[*_` ]+(todo|review backlog|review finding|roadmap)[*_` ]*:'
+listed_re='^[[:space:]]*(([-+*]|[0-9]+[.)])[[:space:]]+(\[[ xX]\][[:space:]]+)?|>[[:space:]]*)+[*_`]*(claims|resolves|partially resolves|remaining|files)[*_` ]+(todo|review backlog|review finding|roadmap)[*_` ]*:'
 grep -Ei "$listed_re" "$tmp/body.clean" > "$tmp/listed" || true
 while IFS= read -r line; do
   [ -n "$line" ] && err "marker \"$line\" is written as a list item or quote; markers start the line with no bullet, number or \">\" (exact form: \"Resolves TODO: my-slug\")"
