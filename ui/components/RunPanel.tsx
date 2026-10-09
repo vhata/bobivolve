@@ -50,20 +50,15 @@ export function RunPanel(): React.JSX.Element {
   const [loadMode, setLoadMode] = useState(false);
   const [switchRunMode, setSwitchRunMode] = useState(false);
   const activeRunId = useSimStore((s) => s.activeRunId);
-  const populationTotal = useSimStore((s) => s.populationTotal);
   const [confirmingSeed, setConfirmingSeed] = useState<bigint | null>(null);
 
   // Start replaces the active slot: the host deletes its log and reaps its
-  // snapshots. Ask first, like rewind and the delete actions, unless the
-  // slot is known to hold no simulation at all (a resolved slot at tick 0
-  // with no population, such as one just created from Switch run). A run
-  // that has only been seeded still shows its founder, so it confirms too.
+  // snapshots. Always ask first, like rewind and the delete actions. The
+  // dashboard's projected tick and population lag the host (heartbeats are
+  // sampled and applied on the next animation frame), so they cannot prove
+  // that a slot is empty.
   function handleStartSubmit(): void {
     if (parsedSeed === null) return;
-    if (activeRunId !== '' && simTick === 0n && populationTotal === 0n) {
-      startRun(parsedSeed);
-      return;
-    }
     if (!paused) pause();
     setConfirmingSeed(parsedSeed);
   }
@@ -222,9 +217,10 @@ export function RunPanel(): React.JSX.Element {
   );
 }
 
-// Same modal-on-action shape as the rewind confirmation: click-to-cancel
-// backdrop, Cancel focused by default so a repeated Enter in the seed field
-// cannot replace the run, and Escape cancels.
+// Same modal-on-action shape as the rewind confirmation (click-to-cancel
+// backdrop, Cancel and confirm buttons). Unlike that modal, Cancel takes
+// focus so a repeated Enter in the seed field cannot replace the run, and
+// Escape cancels.
 function StartRunConfirmModal({
   runId,
   tick,
@@ -267,9 +263,9 @@ function StartRunConfirmModal({
           {runId === '' ? 'Replace the active run?' : `Replace run "${runId}"?`}
         </h3>
         <p className="rewind-confirm-body">
-          Starting seed {seed.toString()} discards {runLabel} at tick {tick.toString()}, including
-          its history and snapshots. Named saves and other runs are kept. Save first if this run is
-          worth keeping, or use Switch run… to start the new seed in a separate run.
+          Starting seed {seed.toString()} replaces {runLabel}, currently at tick {tick.toString()}.
+          Its history and snapshots are deleted; named saves and other runs are kept. Save first if
+          this run is worth keeping, or use Switch run… to start the new seed in a separate run.
         </p>
         <div className="rewind-confirm-actions">
           <button type="button" className="rewind-confirm-cancel" onClick={onCancel} autoFocus>
