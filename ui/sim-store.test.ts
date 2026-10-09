@@ -1086,6 +1086,26 @@ describe('rejected pause, resume and speed', () => {
     expect(useSimStore.getState().paused).toBe(true);
   });
 
+  it('keeps an auto-pause when the toggles pending around it are rejected', () => {
+    const transport = attached();
+    useSimStore.setState({ paused: false });
+    useSimStore.getState().pause();
+    useSimStore.getState().resume();
+    const [pause, resume] = transport.sent;
+    transport.emit({ kind: 'autoPaused', simTick: 5n, trigger: 'speciation' });
+    reject(transport, pause!);
+    reject(transport, resume!);
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('clears the ticks-per-second reading on a manual pause', () => {
+    attached();
+    useSimStore.setState({ paused: false, actualSpeed: 120 });
+    useSimStore.getState().pause();
+    expect(useSimStore.getState().paused).toBe(true);
+    expect(useSimStore.getState().actualSpeed).toBe(0);
+  });
+
   it('rolls a rejected speed back to the last accepted speed', () => {
     const transport = attached();
     useSimStore.getState().setSpeed(16);
