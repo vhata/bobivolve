@@ -26,9 +26,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [HOST] `worker-failure-and-pacing` — **Report worker query and startup failures, and keep worker pacing in step with the host.** Failed queries never reply and leave the dashboard hanging; a failed startup restore strands the session; pacing changes before validation; and Start leaves the worker at the old speed.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `worker-errors-unobserved`, `startup-restore-failure-strands-session`, `worker-pacing-before-validation`, `newrun-speed-desync`
-- [TOOLING] `determinism-gate-integrity` — **Make the determinism checks fail when they compare nothing.** The CLI silently exits 0 from encoded paths, CLI output is never compared with the goldens, regeneration passes unconditionally, and the scheduled probes can be skipped.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `cli-ismain-url-mismatch`, `cli-golden-parity-unverified`, `golden-harness-silent-pass`, `main-validation-probe-gaps`
 - [UI] `timeline-retroactive-ordering` — **Keep promoted timeline events in event-time order before retaining and plotting them.** Retroactively promoted speciations are appended after newer milestones. The default view can show an old event as newest, draw it left of the SVG, and retain entries by promotion order rather than tick.
   - Source: [full review](2026-10-24-0252-full.md), 2026-10-24
   - Findings: `timeline-retroactive-ordering`
