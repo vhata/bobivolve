@@ -110,6 +110,10 @@ export function parseEntry(line: string): LogEntry {
 // cadence while the run advances.
 export class EventLogWriter {
   private buffer: LogEntry[] = [];
+  // Entries already drained to storage; buffer[0] has this absolute index.
+  private drained = 0;
+  // Absolute indexes flushes may not reach yet (see fence()).
+  private fences: number[] = [];
   private currentTick: bigint | null = null;
   private nextSeq = 0;
   private flushing: Promise<void> = Promise.resolve();
@@ -131,16 +135,34 @@ export class EventLogWriter {
     this.buffer.push({ type: 'snap', tick, seq: this.advanceSeq(tick), snapshotKey });
   }
 
-  // Drain all buffered entries to storage. Idempotent on an empty buffer.
+  // Hold back the next appended entry, and everything after it, from
+  // flushes until the returned release is called. The host fences a snap
+  // entry until its snapshot file is written, so the log never references
+  // a file that does not exist yet. Release is idempotent.
+  fence(): () => void {
+    const position = this.drained + this.buffer.length;
+    this.fences.push(position);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.fences.splice(this.fences.indexOf(position), 1);
+    };
+  }
+
+  // Drain buffered entries to storage, up to the earliest fence. Idempotent
+  // on an empty buffer.
   flush(): Promise<void> {
     const operation = this.flushing
       .catch(() => {})
       .then(async () => {
-        if (this.buffer.length === 0) return;
-        const count = this.buffer.length;
+        const limit = this.fences.reduce((min, fence) => Math.min(min, fence), Infinity);
+        const count = Math.min(this.buffer.length, limit - this.drained);
+        if (count <= 0) return;
         const text = this.buffer.slice(0, count).map(serializeEntry).join('');
         await this.storage.append(this.key, new TextEncoder().encode(text));
         this.buffer.splice(0, count);
+        this.drained += count;
       });
     this.flushing = operation;
     return operation;
@@ -154,8 +176,8 @@ export class EventLogWriter {
     this.nextSeq = nextSeq;
   }
 
-  // Number of entries currently buffered but not yet flushed. Surface for
-  // tests; not part of the public contract.
+  // Number of entries currently buffered but not yet flushed, including any
+  // held behind a fence. Surface for tests; not part of the public contract.
   pendingCount(): number {
     return this.buffer.length;
   }

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Storage } from '../sim/ports.js';
 import type { SimEvent } from '../protocol/types.js';
-import { parseEntry, type LogEntry } from './event-log.js';
+import { EventLogWriter, parseEntry, type LogEntry } from './event-log.js';
 import { NodeHost } from './node.js';
 
 // Automatic event-log flushing (NodeHostOptions.logFlushIntervalMs), the
@@ -77,11 +77,17 @@ async function settle(): Promise<void> {
 // default slot, exactly as host/worker.ts does at startup.
 async function startWorkerHost(
   storage: Storage,
-  options: { now?: () => number; logFlushIntervalMs?: number } = {},
+  options: { now?: () => number; logFlushIntervalMs?: number; snapshotCadenceTicks?: bigint } = {},
 ): Promise<NodeHost> {
   const host = new NodeHost({
     heartbeatHz: 0,
-    persistence: { storage, runId: '__startup__' },
+    persistence: {
+      storage,
+      runId: '__startup__',
+      ...(options.snapshotCadenceTicks !== undefined
+        ? { snapshotCadenceTicks: options.snapshotCadenceTicks }
+        : {}),
+    },
     ...(options.now !== undefined ? { now: options.now } : {}),
     ...(options.logFlushIntervalMs !== undefined
       ? { logFlushIntervalMs: options.logFlushIntervalMs }
@@ -96,7 +102,20 @@ function maxTick(entries: readonly LogEntry[]): bigint {
   return entries.reduce((max, entry) => (entry.tick > max ? entry.tick : max), -1n);
 }
 
+// Every snap entry in the log must point at a snapshot file on disk.
+function missingSnapshots(storage: MemoryStorage, runId: string): string[] {
+  return storage
+    .log(runId)
+    .flatMap((e) =>
+      e.type === 'snap' && !storage.files.has(e.snapshotKey) ? [e.snapshotKey] : [],
+    );
+}
+
 describe('automatic event-log flushing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('persists unpaused play so a restarted host restores it', async () => {
     const storage = new MemoryStorage();
     let clock = 0;
@@ -243,6 +262,122 @@ describe('automatic event-log flushing', () => {
         (e) => e.type === 'ev' && e.event.kind === 'commandAck' && e.event.commandId === 'rewind',
       ),
     ).toBe(true);
+  });
+
+  it('never writes a snap entry before its snapshot file', async () => {
+    const storage = new MemoryStorage();
+    let clock = 0;
+    // Every slice is due a periodic flush, so a flush job is always queued
+    // ahead of the cadence snapshot's file write.
+    const host = await startWorkerHost(storage, {
+      now: () => (clock += 1000),
+      logFlushIntervalMs: 1000,
+      snapshotCadenceTicks: 20n,
+    });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    await settle();
+    const held = gate();
+    storage.gate = { match: (key) => key.endsWith('/20.snap'), open: held.open };
+    host.runUntil(40n);
+    await settle();
+    expect(storage.files.has('runs/default/snapshots/20.snap')).toBe(false);
+    expect(storage.log('default').length).toBeGreaterThan(0);
+    expect(missingSnapshots(storage, 'default')).toEqual([]);
+
+    storage.gate = null;
+    held.release();
+    await settle();
+    const snaps = storage.log('default').filter((e) => e.type === 'snap');
+    expect(snaps.map((e) => e.tick)).toEqual([0n, 20n, 40n]);
+    expect(missingSnapshots(storage, 'default')).toEqual([]);
+  });
+
+  it('flushes a cadence snapshot entry once its file is written', async () => {
+    const storage = new MemoryStorage();
+    // A frozen clock: no periodic flush is due, so only the snapshot's own
+    // request can write its entry.
+    const host = await startWorkerHost(storage, {
+      now: () => 0,
+      logFlushIntervalMs: 1000,
+      snapshotCadenceTicks: 20n,
+    });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    await settle();
+    host.runUntil(20n);
+    await settle();
+    expect(storage.log('default').some((e) => e.type === 'snap' && e.tick === 20n)).toBe(true);
+  });
+
+  it('flushes the error of a failed queued command', async () => {
+    const storage = new MemoryStorage();
+    let clock = 0;
+    const host = await startWorkerHost(storage, {
+      now: () => clock,
+      logFlushIntervalMs: 1000,
+    });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'pause', commandId: 'pause' });
+    await settle();
+    const write = storage.write.bind(storage);
+    vi.spyOn(storage, 'write').mockImplementation(async (key, data) => {
+      if (key.startsWith('saves/')) throw new Error('disk full');
+      return write(key, data);
+    });
+    // A due periodic flush is queued ahead of the save, so the save's own
+    // flush request coalesces into it and runs before the save fails.
+    clock += 1000;
+    host.send({ kind: 'step', commandId: 'step', ticks: 1n });
+    host.send({ kind: 'save', commandId: 'failing', slot: 'failing' });
+    await settle();
+    expect(
+      storage
+        .log('default')
+        .some(
+          (e) =>
+            e.type === 'ev' && e.event.kind === 'commandError' && e.event.commandId === 'failing',
+        ),
+    ).toBe(true);
+  });
+
+  it('queues at most one flush per writer while one is waiting', async () => {
+    const storage = new MemoryStorage();
+    const host = await startWorkerHost(storage, { now: () => 0, logFlushIntervalMs: 1000 });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    host.send({ kind: 'pause', commandId: 'pause' });
+    await settle();
+    const flushes = vi.spyOn(EventLogWriter.prototype, 'flush');
+    for (let i = 0; i < 5; i += 1) {
+      host.send({ kind: 'setSpeed', commandId: `speed-${i}`, speed: 4 });
+    }
+    await settle();
+    expect(flushes).toHaveBeenCalledTimes(1);
+    expect(
+      storage.log('default').filter((e) => e.type === 'cmd' && e.command.kind === 'setSpeed'),
+    ).toHaveLength(5);
+  });
+
+  it('writes the buffer on an explicit flush after an automatic flush failed', async () => {
+    const storage = new MemoryStorage();
+    const host = await startWorkerHost(storage, { now: () => 0, logFlushIntervalMs: 1000 });
+    host.send({ kind: 'newRun', commandId: 'start', seed: 42n });
+    host.runUntil(10n);
+    host.send({ kind: 'pause', commandId: 'pause' });
+    await settle();
+    vi.spyOn(storage, 'append').mockRejectedValueOnce(new Error('append failed'));
+    host.send({ kind: 'step', commandId: 'step', ticks: 2n });
+    await settle();
+    expect(storage.log('default').some((e) => e.type === 'cmd' && e.command.kind === 'step')).toBe(
+      false,
+    );
+
+    // An explicit flush (the worker's Pause flush) still persists the
+    // buffer, then reports the earlier failure once.
+    await expect(host.flush()).rejects.toThrow('append failed');
+    const entries = storage.log('default');
+    expect(entries.some((e) => e.type === 'cmd' && e.command.kind === 'step')).toBe(true);
+    expect(maxTick(entries)).toBe(12n);
+    await expect(host.flush()).resolves.toBeUndefined();
   });
 
   it('leaves logging to explicit flushes when no interval is configured', async () => {
