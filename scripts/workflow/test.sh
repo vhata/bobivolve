@@ -18,6 +18,7 @@ cp "$root/scripts/workflow/"*.sh "$fixture/scripts/workflow/"
 cp "$root/.github/pull_request_template.md" "$fixture/template.md"
 cd "$fixture"
 git init --quiet
+git symbolic-ref HEAD refs/heads/main
 git config user.name 'Workflow fixture'
 git config user.email 'workflow-fixture@example.invalid'
 git config core.hooksPath /dev/null
@@ -152,48 +153,79 @@ reject 'fresh body remote claim' 'open PR #43' env PATH="$fixture/bin:$PATH" FIX
 reject 'branch-only merged work' 'merged PR #44' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=merged bash scripts/workflow/claim-check.sh fixture-unclaimed-task
 pass 'unclaimed hosted work' env PATH="$fixture/bin:$PATH" FIXTURE_PR_KIND=none bash scripts/workflow/claim-check.sh fixture-unclaimed-task
 
-# Claim recheck from inside the claimed worktree: --self excludes only the
-# worker's own branch, its remote-tracking copy, its worktree and its own PR.
+# Claim recheck from inside the claimed worktree, created the way workers
+# create it. --self ignores the local own branch and its worktree always, and
+# a remote copy or open PR of that branch only when its tip is the worker's
+# own pushed work; same-named claims from other workers are still reported.
 mkdir -p "$fixture/nogh"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$fixture/nogh/gh"
 chmod +x "$fixture/nogh/gh"
 nogh="$fixture/nogh:$PATH"
 in_dir() { d="$1"; shift; (cd "$d" && "$@"); }
 claim="$fixture/scripts/workflow/claim-check.sh"
-git worktree add --quiet -b todo/fixture-self-task "$fixture/wt-self" HEAD
-git update-ref refs/remotes/origin/todo/fixture-self-task HEAD
-reject 'own claim without --self' 'branch: todo/fixture-self-task' in_dir "$fixture/wt-self" env PATH="$nogh" bash "$claim" fixture-self-task
-pass 'own claim with --self' in_dir "$fixture/wt-self" env PATH="$nogh" bash "$claim" --self fixture-self-task
+wt="$fixture/.worktrees/todo-fixture-self-task"
+pass 'start-work on a free slug' env PATH="$nogh" bash scripts/workflow/start-work.sh todo fixture-self-task --base main
+[ -d "$wt" ] || { echo 'workflow-test: start-work created no worktree' >&2; exit 1; }
+git -C "$wt" commit --quiet --allow-empty -m 'Own fixture work'
+own_sha="$(git -C "$wt" rev-parse HEAD)"
+foreign_sha="$(git commit-tree -p main -m 'Another worker' "$(git rev-parse 'main^{tree}')")"
+base_sha="$(git rev-parse main)"
+git update-ref refs/remotes/origin/todo/fixture-self-task "$own_sha"
+reject 'own claim without --self' 'branch: todo/fixture-self-task' in_dir "$wt" env PATH="$nogh" bash "$claim" fixture-self-task
+pass 'own claim with --self' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
 pass 'own claim excluded by name' env PATH="$nogh" bash "$claim" --exclude-branch todo/fixture-self-task fixture-self-task
-git branch --quiet fix/fixture-self-task HEAD
-reject 'other branch with --self' 'branch: fix/fixture-self-task' in_dir "$fixture/wt-self" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git update-ref refs/remotes/origin/todo/fixture-self-task "$foreign_sha"
+reject 'foreign remote commit with --self' 'branch: origin/todo/fixture-self-task' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git update-ref refs/remotes/origin/todo/fixture-self-task "$base_sha"
+reject 'remote at base with --self' 'branch: origin/todo/fixture-self-task' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git update-ref refs/remotes/origin/todo/fixture-self-task "$own_sha"
+git branch --quiet fix/fixture-self-task main
+reject 'other branch with --self' 'branch: fix/fixture-self-task' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
 git branch --quiet -D fix/fixture-self-task
-git worktree add --quiet --detach "$fixture/wt-fixture-self-task-other" HEAD
-reject 'other worktree with --self' 'wt-fixture-self-task-other' in_dir "$fixture/wt-self" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git worktree add --quiet -b todo/fixture-self-task-v2 "$fixture/wt-v2" main
+reject 'longer-named worktree with --self' '[todo/fixture-self-task-v2]' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git worktree remove --force "$fixture/wt-v2"
+git branch --quiet -D todo/fixture-self-task-v2
+git worktree add --quiet --detach "$fixture/wt-fixture-self-task-other" main
+reject 'other worktree with --self' 'wt-fixture-self-task-other' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
 git worktree remove --force "$fixture/wt-fixture-self-task-other"
-git -C "$fixture/wt-self" checkout --quiet --detach
-reject 'detached --self' 'no branch is checked out' in_dir "$fixture/wt-self" env PATH="$nogh" bash "$claim" --self fixture-self-task
-git -C "$fixture/wt-self" checkout --quiet todo/fixture-self-task
+git -C "$wt" checkout --quiet --detach
+reject 'detached --self' 'no branch is checked out' in_dir "$wt" env PATH="$nogh" bash "$claim" --self fixture-self-task
+git -C "$wt" checkout --quiet todo/fixture-self-task
 cat > bin/gh <<'GH'
 #!/usr/bin/env bash
-# One open draft PR on the worker's own branch; the claim query must exclude it.
+# Simulates the jq output for one open PR on the branch todo/fixture-self-task.
+# FIXTURE_PR picks its source: own (this repository, the worker's pushed tip),
+# fork (another repository) or foreign (this repository, another worker's tip).
 case "$1 $2" in
-  'auth status'|'repo view') exit 0 ;;
+  'auth status') exit 0 ;;
+  'repo view') [ "${3:-}" = --json ] && echo 'fixture/repo'; exit 0 ;;
   'api --paginate')
     case "$3" in
       *'state=open&per_page=100')
         case "$5" in *'note: open PR'*) exit 0 ;; esac
-        case "$5" in *'.head.ref != "todo/fixture-self-task"'*) exit 0 ;; esac
-        echo '  open PR #45 [draft] todo/fixture-self-task: Own draft' ;;
+        case "$FIXTURE_PR" in
+          own) n=45; repo=fixture/repo; sha="$FIXTURE_OWN_SHA" ;;
+          fork) n=77; repo=fork/repo; sha="$FIXTURE_OWN_SHA" ;;
+          foreign) n=78; repo=fixture/repo; sha="$FIXTURE_FOREIGN_SHA" ;;
+        esac
+        text="  open PR #$n [draft] todo/fixture-self-task: Claims TODO: fixture-self-task"
+        case "$5" in
+          *'"own\t'*) printf 'own\t%s\t%s\t%s\n' "$sha" "$repo" "$text" ;;
+          *) printf '%s\n' "$text" ;;
+        esac ;;
       *'state=closed&per_page=100') exit 0 ;;
       *) exit 2 ;;
     esac ;;
   *) exit 2 ;;
 esac
 GH
-reject 'own hosted PR without --self' 'open PR #45' in_dir "$fixture/wt-self" env PATH="$fixture/bin:$PATH" bash "$claim" fixture-self-task
-pass 'own hosted PR with --self' in_dir "$fixture/wt-self" env PATH="$fixture/bin:$PATH" bash "$claim" --self fixture-self-task
-git worktree remove --force "$fixture/wt-self"
+ghpr() { kind="$1"; shift; env PATH="$fixture/bin:$PATH" FIXTURE_OWN_SHA="$own_sha" FIXTURE_FOREIGN_SHA="$foreign_sha" FIXTURE_PR="$kind" "$@"; }
+reject 'own hosted PR without --self' 'open PR #45' in_dir "$wt" ghpr own bash "$claim" fixture-self-task
+pass 'own hosted PR with --self' in_dir "$wt" ghpr own bash "$claim" --self fixture-self-task
+reject 'fork PR with --self' 'open PR #77' in_dir "$wt" ghpr fork bash "$claim" --self fixture-self-task
+reject 'foreign-tip PR with --self' 'open PR #78' in_dir "$wt" ghpr foreign bash "$claim" --self fixture-self-task
+git worktree remove --force "$wt"
 git branch --quiet -D todo/fixture-self-task
 git update-ref -d refs/remotes/origin/todo/fixture-self-task
 
