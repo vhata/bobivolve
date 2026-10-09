@@ -20,7 +20,7 @@ Commands, events, queries, and query results cross as plain data. Use stable str
 
 ### Protocol and IDL
 
-`protocol/schema.proto` defines the intended schema; `protocol/types.ts` is its hand-written TypeScript counterpart used by the application. Keep both in sync. Code generation is deferred, not part of the build.
+`protocol/schema.proto` defines the intended schema; `protocol/types.ts` is its hand-written TypeScript counterpart used by the application. Keep both in sync; `protocol/schema-parity.test.ts` fails when their message kinds, fields or broad field types differ. Code generation is deferred, not part of the build.
 
 Worker messages use structured clone, including native bigints. The stdio transport uses NDJSON with decimal strings for bigint fields and hand-written revival in `transport/ndjson-codec.ts`. This is the current application encoding, not generated protobuf serialization. Evolve the schema additively; do not reuse field numbers or silently change existing field semantics.
 
