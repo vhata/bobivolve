@@ -6,7 +6,22 @@ import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['node_modules', 'dist', 'build', 'out', 'coverage', 'protocol/generated'],
+    // ESLint does not read .gitignore. Nested agent worktrees are separate
+    // checkouts with their own lint runs, so linting them from this one
+    // reports other writers' work in progress; see ARCHITECTURE.md
+    // "Agent worktree isolation".
+    ignores: [
+      'node_modules',
+      'dist',
+      'build',
+      'out',
+      'coverage',
+      'protocol/generated',
+      '.worktrees/',
+      '.claude/worktrees/',
+      'test-results/',
+      'playwright-report/',
+    ],
   },
 
   js.configs.recommended,
