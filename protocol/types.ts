@@ -15,9 +15,11 @@
 //   - `oneof` bodies are encoded as discriminated unions tagged with `kind`.
 //     The Command / SimEvent / Query / QueryResult envelopes are intersection
 //     types: a header (commandId / simTick / queryId) plus the union body.
-//   - Optional proto3 fields are TypeScript-optional. Required scalars get
-//     their proto3 defaults at the seam (empty string, 0n) — the wire shape
-//     is unchanged but reading code may need to handle absent fields.
+//   - Optional proto3 fields are TypeScript-optional. Every other field is
+//     always present. The stdio NDJSON seam (`transport/ndjson-codec.ts`) is
+//     strict and not proto3-JSON-conformant: zero-valued fields must still be
+//     written, u64 fields must be decimal strings, and the codec rejects a
+//     message with a missing or malformed u64 rather than defaulting it.
 //
 // Field numbers from the proto are not encoded here; they matter to wire-format
 // codegen, not to the in-process transport this file enables.
