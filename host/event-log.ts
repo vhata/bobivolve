@@ -103,9 +103,11 @@ export function parseEntry(line: string): LogEntry {
 
 // Append-only writer over a Storage key. Buffers entries in memory; flush()
 // drains the buffer to storage in a single append. Sync appends compose with
-// the NodeHost run-loop, which is itself synchronous; the host calls flush()
-// at points where durability matters (after a Save command, before close,
-// during Load setup).
+// the NodeHost run-loop, which is itself synchronous. The host drains the
+// buffer on an explicit host flush and during timeline operations; with
+// NodeHostOptions.logFlushIntervalMs set (the browser worker), it also
+// drains after every command, snapshot and auto-pause and on a wall-clock
+// cadence while the run advances.
 export class EventLogWriter {
   private buffer: LogEntry[] = [];
   private currentTick: bigint | null = null;
