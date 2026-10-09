@@ -13,7 +13,7 @@ import { REPLICATION_COST_ENERGY } from '../../sim/energy.js';
 import { formatMovementAttemptChance } from '../firmware-format.js';
 import type { DirectiveSpec } from '../../protocol/types.js';
 import { parseUint64Decimal } from '../../protocol/uint64.js';
-import { useSimStore } from '../sim-store.js';
+import { pauseWhileOpen, useSimStore } from '../sim-store.js';
 
 interface PatchEditorModalProps {
   readonly lineageId: string;
@@ -74,8 +74,6 @@ export function PatchEditorModal({
   onClose,
   onApplied,
 }: PatchEditorModalProps): React.JSX.Element {
-  const pause = useSimStore((s) => s.pause);
-  const resume = useSimStore((s) => s.resume);
   const applyPatch = useSimStore((s) => s.applyPatch);
   const originCompute = useSimStore((s) => s.originCompute);
 
@@ -84,30 +82,20 @@ export function PatchEditorModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Modal-on-action: pause on open, resume on close — but only if WE
-  // paused. If the player had paused the sim before opening the modal,
-  // we leave it paused on close. Without this guard, closing the modal
-  // would un-pause whatever the player had explicitly paused, which is
-  // the bug that prompted this fix. The ref survives renders within
-  // this component instance; in StrictMode dev the mount→unmount→mount
-  // cycle still produces a transient resume→pause flicker, which
-  // production builds don't see.
-  const pausedByMeRef = useRef(false);
+  // paused, and only on the same connection and timeline. If the player
+  // had paused the sim before opening the modal, we leave it paused on
+  // close. In StrictMode dev the mount→unmount→mount cycle still
+  // produces a transient resume→pause flicker, which production builds
+  // don't see.
   const mountedRef = useRef(false);
   useEffect(() => {
     mountedRef.current = true;
-    const wasPausedAtOpen = useSimStore.getState().paused;
-    if (!wasPausedAtOpen) {
-      pause();
-      pausedByMeRef.current = true;
-    }
+    const close = pauseWhileOpen();
     return () => {
       mountedRef.current = false;
-      if (pausedByMeRef.current) {
-        resume();
-        pausedByMeRef.current = false;
-      }
+      close();
     };
-  }, [pause, resume]);
+  }, []);
 
   // Live validation: every param must parse as a non-negative integer.
   const allValid = draft.every((row) =>
