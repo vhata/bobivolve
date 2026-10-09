@@ -28,9 +28,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [HOST] `event-log-replay-fidelity` — **Make logged commands replay exactly as they executed live.** Rejected commands are logged and revived by field name. Their replay diverges or poisons the log, `step` replays differently from live play, and `logSlice` can race a new run's log reset.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `event-log-reviver-revives-string-params`, `step-pause-and-replay-semantics`, `logslice-flush-races-newrun-delete`
-- [HOST] `host-storage-input-hardening` — **Reject unsafe run IDs and never discard save listings on an unreadable index.** `deleteRun('.')` removes every run on Node storage, and Save rewrites a corrupt index with only the new entry.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `runid-dot-segment-unsafe`, `save-overwrites-corrupt-index`
 - [HOST] `worker-failure-and-pacing` — **Report worker query and startup failures, and keep worker pacing in step with the host.** Failed queries never reply and leave the dashboard hanging; a failed startup restore strands the session; pacing changes before validation; and Start leaves the worker at the old speed.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `worker-errors-unobserved`, `startup-restore-failure-strands-session`, `worker-pacing-before-validation`, `newrun-speed-desync`
