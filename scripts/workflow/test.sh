@@ -248,6 +248,7 @@ printf '| Date | Type | Commit |\n| 2026-10-06 | full | `%s` |\n' "$head" > revi
 rm src/deleted.sh
 pass 'deleted tracked source' bash scripts/workflow/review-due.sh --index review-index.md --base "$head"
 grep -Fq 'verdict: no review due' "$fixture/result.log" || { echo 'workflow-test: deleted tracked source gave no verdict' >&2; cat "$fixture/result.log" >&2; exit 1; }
+grep -Fq 'note: 1 tracked source file(s) are missing' "$fixture/result.log" || { echo 'workflow-test: deleted tracked source was not reported' >&2; cat "$fixture/result.log" >&2; exit 1; }
 grep -Fq 'against 2 current source lines' "$fixture/result.log" || { echo 'workflow-test: deleted tracked source miscounted lines' >&2; cat "$fixture/result.log" >&2; exit 1; }
 git checkout --quiet -- src/deleted.sh
 echo 'workflow-test: ownership and queue regression checks passed'
