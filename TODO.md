@@ -40,6 +40,47 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
   - Depends on: `r2-engineer-loop`, `browser-session-budgets`
   - Blocked by: User review of the proposed mechanics and design pass before implementation.
 
+- [HOST] `saves-index-repair` — **Let the player recover from an unreadable saves index.** Once PR #43 lands, a corrupt `saves/index.json` makes Save and Delete refuse with no in-app recovery, and an unparsable index lists no saves, so a browser player cannot get unstuck. Options: rebuild the index from `saves/*.save`, or move the corrupt index aside and start a fresh one while keeping the files. #host
+  - Source: `review/host-storage-input-hardening` writer report and independent review (PR #43), 2026-10-09.
+  - Blocked by: PR #43 must land; choose rebuild versus move-aside.
+
+- [HOST] `nodehost-runid-validation` — **Validate the run ID passed to the NodeHost constructor.** Only the CLI validates its `--run-id`; the worker hard-codes its IDs, so the storage key rule is the only guard on `persistence.runId`. #host
+  - Source: `review/host-storage-input-hardening` writer report (PR #43), 2026-10-09.
+  - Blocked by: PR #43 must land (it adds the shared run-ID validator).
+
+- [HOST] `reject-decree-on-extinct-target` — **Reject decrees whose patch target is already extinct when they are queued.** After PR #42 such a decree fires with `landed: false`, which is correct, but the host still accepts it and charges compute at queue time. #host #sim
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
+  - Blocked by: PR #42 must land.
+
+- [UI] `decree-composer-threshold-floor` — **Stop the decree composer offering a threshold of 0.** `ui/components/DecreeComposerModal.tsx` accepts 0, which the host rejects after PR #42. The comment at `ui/components/LineageInspectorPanel.tsx:304` about extinct-lineage quarantine is also stale once the host returns an error. #ui
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
+  - Blocked by: PR #42 must land.
+
+- [PROTOCOL] `quarantine-lift-extinct-reason` — **Give extinction-released quarantine holds their own lift reason.** After PR #42 a hold on a lineage that dies is lifted with no reason, so the timeline shows it as a manual release just after the extinction event. A `lineageExtinct` reason needs `protocol/types.ts`, `schema.proto`, the codec and the timeline label. #protocol #ui
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
+  - Blocked by: PR #42 must land.
+
+- [HOST] `logslice-map-value-revival` — **Return the same value types from logSlice on every transport.** In-process and worker `logSlice` results carry tick `populationByLineage` values as strings, because `bigintReviver` in `host/event-log.ts` skips map values; the stdio codec revives them to `bigint` after PR #39. #host #protocol
+  - Source: independent review of `review/protocol-contract-parity` (PR #39), reproduced 2026-10-09.
+  - Related: `event-log-replay-fidelity`
+
+- [PERFORMANCE] `opfs-sync-append` — **Append to OPFS logs without rewriting the whole file.** Chromium's `OPFSStorage.append` path copies the whole file per append (measured once locally: about 2 ms at 1 MiB, 10–34 ms at 8 MiB, about 50 ms at 44 MiB). With PR #44's 1 s flush that is a whole-file rewrite each second on long runs; `createSyncAccessHandle` in the worker would make appends proportional to new data. #host #performance
+  - Source: `review/browser-run-log-durability` writer report (PR #44), 2026-10-09.
+  - Related: `browser-session-budgets`
+  - Blocked by: Decide whether long-run log sizes justify it, after PR #44 lands.
+
+- [UI] `quarantine-set-reload-race` — **Keep a quarantine sent during the post-run-change reload visible.** Reloading lineage state after a run change replaces the quarantine set wholesale, so a quarantine sent during that reload can briefly vanish. #ui
+  - Source: `review/ui-projection-consistency` writer report (PR #45), 2026-10-09.
+  - Blocked by: Confirm against PR #45 once it lands.
+
+- [UI] `run-panel-seed-input-sync` — **Keep the Start form's seed field in step with the run's seed.** The RunPanel seed input takes its initial value once at mount and does not follow later seed changes. #ui
+  - Source: `review/ui-projection-consistency` writer report (PR #45), 2026-10-09.
+  - Blocked by: Decide whether the field should follow the current run's seed or keep the player's typed value.
+
+- [TOOLING] `tsx-register-deprecation` — **Silence or fix tsx's `module.register()` deprecation warning.** Running the CLI through a path outside the checkout prints `DEP0205` on Node 26 with tsx 4.21. The repository pins Node 22 in `.nvmrc`, so this may only affect off-pin local runs. #toolchain
+  - Source: `review/determinism-gate-integrity` writer report, 2026-10-09.
+  - Blocked by: Confirm on the pinned Node 22 before acting.
+
 ## Needs proof of concept
 
 ### Unprioritized
