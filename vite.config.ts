@@ -17,6 +17,8 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
   },
+  // The default for `scripts/dev.sh`. Browser tests pass their own
+  // --port and --strictPort (see playwright.config.ts).
   server: {
     port: 5173,
     strictPort: false,
