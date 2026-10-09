@@ -80,21 +80,25 @@ describe('named save index preservation', () => {
     expect(result.saves.map((entry) => [entry.slot, entry.tick])).toEqual([['a', '20']]);
   });
 
-  it.each(['invalid json', '{"saves":null}', '{"saves":[{}]}', 'null'])(
-    'refuses to save over malformed index %s and leaves every file untouched',
-    async (index) => {
-      await storage.write('saves/index.json', new TextEncoder().encode(index));
-      const aBytes = await storage.read('saves/a.save');
-      await save('b');
-      expect(response('save-b')).toMatchObject({
-        kind: 'commandError',
-        message: expect.stringContaining('save index is invalid'),
-      });
-      expect(await indexText()).toBe(index);
-      expect(await storage.exists('saves/b.save')).toBe(false);
-      expect(await storage.read('saves/a.save')).toEqual(aBytes);
-    },
-  );
+  it.each([
+    'invalid json',
+    '{"saves":null}',
+    '{"saves":[{}]}',
+    'null',
+    '{"saves":[{"slot":"a","tick":"10"}]}',
+    '{"saves":[{"slot":"a","tick":"10","savedAtMs":"1"}]}',
+  ])('refuses to save over malformed index %s and leaves every file untouched', async (index) => {
+    await storage.write('saves/index.json', new TextEncoder().encode(index));
+    const aBytes = await storage.read('saves/a.save');
+    await save('b');
+    expect(response('save-b')).toMatchObject({
+      kind: 'commandError',
+      message: expect.stringContaining('save index is invalid'),
+    });
+    expect(await indexText()).toBe(index);
+    expect(await storage.exists('saves/b.save')).toBe(false);
+    expect(await storage.read('saves/a.save')).toEqual(aBytes);
+  });
 
   it('refuses to save when the index cannot be read', async () => {
     const index = await indexText();

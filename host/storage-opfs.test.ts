@@ -479,6 +479,11 @@ describe('OPFSStorage', () => {
     it('accepts names that merely start with dots', async () => {
       await storage.write('runs/..name/.log', new TextEncoder().encode('x'));
       expect(await storage.exists('runs/..name/.log')).toBe(true);
+      // A first segment starting with `..` is a name, not an escape.
+      await storage.write('..name', new TextEncoder().encode('x'));
+      expect(await storage.exists('..name')).toBe(true);
+      await storage.write('..name2/log', new TextEncoder().encode('x'));
+      expect(await storage.exists('..name2/log')).toBe(true);
     });
   });
 

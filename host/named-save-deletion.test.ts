@@ -126,19 +126,23 @@ describe('named save deletion', () => {
     expect(await slots()).toEqual(['keep']);
   });
 
-  it.each(['invalid json', '{"saves":null}', '{"saves":[{}]}', 'null'])(
-    'rejects malformed index %s before deleting any bytes',
-    async (index) => {
-      await storage.write('saves/index.json', new TextEncoder().encode(index));
-      await remove();
-      expect(response()).toMatchObject({ kind: 'commandError' });
-      expect(await storage.exists('saves/remove.save')).toBe(true);
-      expect(await storage.exists('saves/keep.save')).toBe(true);
-      expect(new TextDecoder().decode((await storage.read('saves/index.json')) ?? undefined)).toBe(
-        index,
-      );
-    },
-  );
+  it.each([
+    'invalid json',
+    '{"saves":null}',
+    '{"saves":[{}]}',
+    'null',
+    '{"saves":[{"slot":"a","tick":"10"}]}',
+    '{"saves":[{"slot":"a","tick":"10","savedAtMs":"1"}]}',
+  ])('rejects malformed index %s before deleting any bytes', async (index) => {
+    await storage.write('saves/index.json', new TextEncoder().encode(index));
+    await remove();
+    expect(response()).toMatchObject({ kind: 'commandError' });
+    expect(await storage.exists('saves/remove.save')).toBe(true);
+    expect(await storage.exists('saves/keep.save')).toBe(true);
+    expect(new TextDecoder().decode((await storage.read('saves/index.json')) ?? undefined)).toBe(
+      index,
+    );
+  });
 
   it('unreadable index prevents deletion', async () => {
     storage.failIndexRead = true;
