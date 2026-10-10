@@ -40,9 +40,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [UI] `ui-projection-consistency` — **Keep the dashboard's projected state consistent with the host after retries, rejections and selection or run changes.** Retries can reorder pause and resume, optimistic toggles never roll back, and several indicators show stale values.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `pause-resume-retry-reorders`, `autopause-leaves-actual-speed`, `stale-seed-and-save-indicator`, `optimistic-commands-no-rollback`, `inspector-stale-drift-on-select`
-- [PROTOCOL] `protocol-contract-parity` — **Bring `schema.proto` and the stdio codec back in line with `protocol/types.ts`.** The schema lacks run-slot messages and several fields, mistypes u64 fields as strings, and the codec leaves two query results unrevived.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `schema-proto-drift`, `ndjson-codec-missing-result-revival`
 - [TOOLING] `worktree-safe-dev-tooling` — **Keep lint and browser tests scoped to their own worktree.** ESLint in the primary checkout lints nested worktrees, and Playwright can reuse another worktree's dev server on the fixed port.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `eslint-lints-nested-worktrees`, `playwright-reuses-foreign-dev-server`
