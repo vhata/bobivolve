@@ -50,6 +50,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [TOOLING] `determinism-gate-integrity` — **Make the determinism checks fail when they compare nothing.** The CLI silently exits 0 from encoded paths, CLI output is never compared with the goldens, regeneration passes unconditionally, and the scheduled probes can be skipped.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `cli-ismain-url-mismatch`, `cli-golden-parity-unverified`, `golden-harness-silent-pass`, `main-validation-probe-gaps`
-- [TOOLING] `workflow-script-fixes` — **Fix the workflow script defects found by the full review.** The recommended claim recheck always hits itself, `review-due.sh` can abort without a verdict, and markers written as list items are ignored.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `claim-check-recheck-self-hit`, `review-due-aborts-on-missing-file`, `markers-in-lists-ignored`
