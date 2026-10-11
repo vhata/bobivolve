@@ -10,7 +10,7 @@ Read when changing code or validating a pull request. Protect simulation correct
 - UI: command acknowledgements, run changes and subscriptions keep the dashboard's projected state consistent with the host in the affected player flow.
 - Deliberately manual: visual verification of cosmetic changes, and judgement about whether an emergent outcome is desirable; neither is a correctness assertion.
 
-The invariants behind these are in [ARCHITECTURE.md](../ARCHITECTURE.md).
+The determinism and isolation invariants behind these are in [ARCHITECTURE.md](../ARCHITECTURE.md); conservation is asserted by the simulation step's tests.
 
 ## Existing gates
 
@@ -44,7 +44,7 @@ Record commands and results under `## Validation` in the PR, with enough detail 
 
 ## Workflow validation
 
-The workflow validators are vendored under [docket/scripts/](../docket/scripts/) and never edited here; `bash ~/.claude/skills/docket/install.sh --check` reports drift and `bash ~/.claude/skills/docket/install.sh` resyncs (see [docket/README.md](../docket/README.md)). `scripts/check.sh` runs `docket/scripts/check-queues.sh --strict` and `docket/scripts/check-links.sh`. In CI the `check` job also runs `docket/scripts/ci.sh`, which repeats both and, on pull requests, validates the PR markers against the queues at the event's base and head, using the PR body fetched through `gh` as data. The regression harness for the scripts themselves (`tests/scripts.sh`) lives in the skill repository and runs in its CI, not here. Start the PR body with `## Why` and use exact markers from [docket/TODO_GUIDE.md](../docket/TODO_GUIDE.md#markers). Document independent review under `## Review`; successful CI does not establish that review occurred.
+The workflow validators are vendored under [docket/scripts/](../docket/scripts/) and never edited here; `bash ~/.claude/skills/docket/install.sh --check` reports drift and `bash ~/.claude/skills/docket/install.sh` resyncs (see [docket/README.md](../docket/README.md)). `scripts/check.sh` runs `docket/scripts/check-queues.sh --strict` and `docket/scripts/check-links.sh`. In CI the `check` job also runs `docket/scripts/ci.sh`, which repeats both and, on pull requests, validates the PR markers against the queues at the base branch tip and the checked-out merge commit, using the PR body fetched through `gh` as data. The regression harness for the scripts themselves (`tests/scripts.sh`) lives in the skill repository and runs in its CI, not here. Start the PR body with `## Why` and use exact markers from [docket/TODO_GUIDE.md](../docket/TODO_GUIDE.md#markers). Document independent review under `## Review`; successful CI does not establish that review occurred.
 
 The [CI workflow](../.github/workflows/ci.yml) cancels superseded PR runs, while main runs are not cancelled by this concurrency policy. Node's major version is pinned in `.nvmrc`; CI reads it, and local workers should use Node 22. `package.json` and the lockfile pin the package-manager/dependency setup.
 
