@@ -6,6 +6,9 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.
 
 ### Unprioritized
 
+- [TOOLING] `e2e-pause-window-browser-closed` — **Make the dashboard pause-window browser test survive a closed page.** `e2e/dashboard.spec.ts` "pause clears the ... within a reasonable window" failed once with `expect.toBeVisible: Target page, context or browser has been closed` on a documentation-only commit, and passed on the three preceding runs of the same branch and on the re-run.
+  - Source: main-validation run 38164550848 on PR #46, 2026-10-11; attempt 2 passed.
+  - Starting point: the test's page lifetime around the pause assertion; the run's `error-context.md` artifact.
 - [PERFORMANCE] `browser-session-budgets` — **Validate browser session budgets and retention.** Implement and validate the [proposed browser session/storage budgets and retention policy](docs/BROWSER_PERSISTENCE_BUDGET.md): wider seed/device/repeat measurements, cadence/anchor comparison, and quota warnings. Chromium OPFS and rendered rewinds are measured through 30,000 ticks; 5,000 ticks is the initial local playtest envelope. No budget or pruning is enforced yet. #host #performance
   - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
   - Blocked by: Browser measurements, retention choices, and human playtest evidence are incomplete.
