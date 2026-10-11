@@ -1,3 +1,5 @@
+<img src="assets/bobivolve.svg" alt="Bobivolve space probe icon" width="80" height="80">
+
 # Bobivolve
 
 [![Main validation](https://github.com/vhata/bobivolve/actions/workflows/main-validation.yml/badge.svg)](https://github.com/vhata/bobivolve/actions/workflows/main-validation.yml)
