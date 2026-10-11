@@ -8,6 +8,7 @@ on:
     paths:
       - .github/workflows/main-validation.yml
       - scripts/**
+      - docket/scripts/**
       - .nvmrc
       - package.json
       - pnpm-lock.yaml
@@ -59,7 +60,7 @@ jobs:
         if: always()
         run: |
           mkdir -p test-results
-          bash scripts/workflow/review-due.sh --paths 'sim host transport protocol ui test e2e' | tee "test-results/review-due-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
+          bash docket/scripts/review-due.sh --paths 'sim host transport protocol ui test e2e' | tee "test-results/review-due-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4

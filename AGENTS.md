@@ -1,37 +1,29 @@
 # Bobivolve: agent contract
 
-A real-time evolutionary simulation: the player authors inheritable firmware for self-replicating probes and watches lineages evolve.
+A real-time evolutionary simulation: the player authors inheritable firmware for self-replicating probes and watches lineages evolve. Product intent and the release roadmap are in [SPEC.md](SPEC.md); the release gates are in [ACCEPTANCE.md](ACCEPTANCE.md).
 
-## Workflow
+<!-- docket:begin -->
 
-- Every unit of work uses a focused branch, isolated worktree, and PR. Use `<queue>/<slug>` (`todo/`, `review/`, `roadmap/`) for queued work, `fix/` or `task/` for direct requests. Worktrees live in ignored `.worktrees/` or the harness's own location.
-- Two things go straight to `main` without a branch or PR. Documentation that records work to be done: adding or triaging `TODO.md` entries, and plans (`plans/YYYY-MM-DD-<slug>.md`); a plan is planning for work, not work, and everything it describes still goes through branches, PRs and review. Housekeeping metadata files such as `.git-blame-ignore-revs`, only when the user says so for that case. Extrapolate with common sense and say so in the commit; everything else, including all code and any documentation that describes behaviour, goes through a PR.
-- Before claiming, run `bash scripts/workflow/claim-check.sh <slug>`; create the branch and worktree immediately with `bash scripts/workflow/start-work.sh <queue> <slug>`. Open a draft PR after the first meaningful commit. Its body starts with `## Why`; exact claims and resolution markers follow the [TODO guide](docs/TODO_GUIDE.md).
-- Parallelize independent work through sub-agents in separate writer worktrees with disjoint ownership. Coordinate shared interfaces and sequence dependent work. The coordinator owns integration and serializes queue edits. Run at most two heavy builds, simulations, or browser suites concurrently; mutable dependencies, caches, ports, profiles, and evidence belong to each worktree.
-- Pair every code-writing agent, including the coordinator and integration changes, with a separate reviewer. Authors fix findings; reviewers verify fixes. Record reviewer, reviewed commit, disposition, checks, and limits in `## Review` in the PR body. Keep incomplete work or unresolved actionable findings draft; mark ready once implementation, required checks, and independent review are complete. Follow the [review procedure](docs/CODE_REVIEW_GUIDE.md#agent-workflow).
-- Keep changes scoped to the requested outcome. Capture separately shippable ideas immediately with a source and `Files TODO: <slug>`, then continue. Report an unrelated P0 immediately and pause for direction.
-- Use the standalone entrypoints in `scripts/`; run `scripts/check.sh` before presenting or updating a PR, plus checks required by [QUALITY.md](docs/QUALITY.md). Report actual results and limitations. Empty suites fail.
-- The user merges unless explicitly delegated. Rebase rather than merging main into a work branch; force-push only a rebased PR branch with `--force-with-lease`. Ready and eligible to land are separate: landing also requires main as base, current-base green required checks, and landed parents. Release tags, deployment, and publishing require explicit sign-off in the current or preceding turn.
-- Commit completed work in focused commits. After landing, inspect `bash scripts/workflow/cleanup-landed.sh` before applying cleanup; never remove dirty worktrees or unmerged work without permission.
-- Unattended autonomy does not authorize pushes, merges, or tags. Without push authority save PR bodies in ignored `.feral/`, record load-bearing decisions with undo lines in `AUDIT.md`, and report local-only claims.
-- Update documentation when a change makes it inaccurate. Each rule has one authoritative home; link rather than restating it. Keep plans separate from implemented behaviour.
+## Docket
 
-## Process guides
+This project is run with docket. Read [docket/CONTRACT.md](docket/CONTRACT.md) before any work; it is the authoritative workflow, and this section records only this project's settings. The installer keeps this section current: the text above the list is rewritten on every run, the list keeps the values this project has set, and the section may sit anywhere in this file.
 
-Read only the guide and sections relevant to the task; there is no mandatory whole-repository reading pass.
+- Queue areas: `[SIM]` (sim/), `[HOST]` (host/: simulation host, persistence, worker and CLI), `[UI]` (ui/), `[PROTOCOL]` (protocol/ and transport/: the message contract and codecs), `[DESIGN]` (product and simulation design), `[PERFORMANCE]`, `[TOOLING]` (scripts, CI, hooks, dependencies), `[DOCS]`.
+- Concurrency cap: 2 heavy builds, simulations or browser suites at once. Mutable dependencies, caches, ports, profiles and evidence belong to each worktree.
+- Merging and releases: the user merges unless they delegate it in that turn; there is no standing delegation. A release is prepared against the gates in [ACCEPTANCE.md](ACCEPTANCE.md), and release tags, deployment and publishing need the user's explicit sign-off in the current or preceding turn, even under a broad autonomy grant.
+- Optional pieces in force: the review ledger, stacked PRs and the scheduled validation of main. No roadmap queue: [SPEC.md](SPEC.md) is the roadmap in prose, not a claimable queue.
+- Environment: Node 22 from `.nvmrc` and the pnpm version pinned in `package.json`; `scripts/install.sh` installs dependencies and `scripts/setup.sh` the hooks. Run tools through the standalone entrypoints in `scripts/` (`check.sh`, `build.sh`, `e2e.sh`, `sim.sh`), not through ad hoc tool invocations. Browser probes tagged `@diagnostic` are local and opt-in.
+- Design gates: R3 implementation needs the user's design pass and an assessment of the R2 experiment and the browser session budgets first; the gates are in [ACCEPTANCE.md](ACCEPTANCE.md).
 
-- **Changing code or validating a PR:** [quality and test policy](docs/QUALITY.md).
-- **Capturing, selecting, claiming, or completing deferred work:** [TODO guide](docs/TODO_GUIDE.md). TODO and review backlog are separate queues; never switch queues when the requested one has nothing ready.
-- **Delegating work or reviewing a change:** [code review guide](docs/CODE_REVIEW_GUIDE.md). Review depth follows risk.
-- **Preparing a release:** [acceptance criteria](ACCEPTANCE.md). Release tags require explicit user sign-off in the current or immediately preceding turns, even under a broad autonomy grant.
+<!-- docket:end -->
 
 ## Where to find what
 
 - [README.md](README.md): running the app and current release.
 - [ARCHITECTURE.md](ARCHITECTURE.md): current structure, protocol boundary, determinism, and persistence. Read the relevant sections before changing those areas.
 - [docs/DECISIONS.md](docs/DECISIONS.md): design rationale and established UI preferences. Read before changing those choices.
+- [docs/QUALITY.md](docs/QUALITY.md): the gates, the test policy and the review inputs.
 - [SPEC.md](SPEC.md): product intent and release roadmap, including unbuilt features. Read when making product or simulation-design changes.
 - [FEATURES.md](FEATURES.md): shipped capabilities.
-- [TODO.md](TODO.md): staged deferred work and unresolved decisions. [review/](review/README.md): codebase review snapshots and the separate promoted backlog. All five workflow pillars are in force; SPEC remains a roadmap, not a claimable third queue.
-
-Keep this entrypoint short. Add guidance only when it prevents a concrete recurring mistake; put detailed instructions in the relevant guide.
+- [ACCEPTANCE.md](ACCEPTANCE.md): release-by-release acceptance gates. Read when preparing a release.
+- [TODO.md](TODO.md): staged deferred work and unresolved decisions. [review/](review/README.md): codebase review snapshots and the separate promoted backlog.

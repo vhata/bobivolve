@@ -76,4 +76,4 @@ No Rust runtime or Tauri transport exists here. If TypeScript becomes a demonstr
 
 ## Agent worktree isolation
 
-Each worktree owns its dependency installation and mutable caches, run storage, browser profile, and test evidence. Do not symlink another writer's `node_modules` or reuse player saves for tests. Concurrent dev servers need distinct ports; browser checks normally run serially in a worktree. The coordinator limits heavy concurrent checks through [AGENTS.md](AGENTS.md#workflow).
+Each worktree owns its dependency installation and mutable caches, run storage, browser profile, and test evidence. Do not symlink another writer's `node_modules` or reuse player saves for tests. Concurrent dev servers need distinct ports; browser checks normally run serially in a worktree. The coordinator limits heavy concurrent checks through the concurrency cap in the Docket section of [AGENTS.md](AGENTS.md#docket).

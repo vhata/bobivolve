@@ -34,7 +34,7 @@ Release verdicts below are historical shipping decisions, not evidence of a fres
 - `✓` Save / load — headless CLI (`pnpm sim --save-dir … --run-id … --resume`) and dashboard buttons; both back the same on-disk shape via `Storage`
 - `✓` Headless capability — `pnpm sim` runs the same simulation without any UI attached
 - `✓` Automated gates — CI runs format, lint, typecheck, Vitest and build, plus functional Chromium workflows. Local diagnostic browser probes are excluded from CI; see [validation policy](docs/QUALITY.md)
-- `✓` Review discipline — ESLint enforces sim-side determinism rules; human/agent review follows the [code review guide](docs/CODE_REVIEW_GUIDE.md). The former `/bobivolve-review` skill has been retired.
+- `✓` Review discipline — ESLint enforces sim-side determinism rules; human/agent review follows the [code review guide](docket/CODE_REVIEW_GUIDE.md). The former `/bobivolve-review` skill has been retired.
 
 ### Acceptance test (manual)
 

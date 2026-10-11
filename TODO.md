@@ -1,6 +1,6 @@
 # TODO
 
-Deferred work and unresolved decisions. Follow [the TODO guide](docs/TODO_GUIDE.md). Ready entries are unblocked; live claims are found in branches, worktrees, and draft PRs. Migration preserves existing outcomes and design gates without approving a redesign.
+Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUIDE.md). Ready entries are unblocked; live claims are found in branches, worktrees, and draft PRs. Migration preserves existing outcomes and design gates without approving a redesign.
 
 ## Needs triage
 

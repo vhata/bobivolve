@@ -89,4 +89,4 @@ For example, `scripts/test.sh sim/rng.test.ts` runs one test file. Existing pnpm
 
 MIT. See [`LICENSE`](LICENSE).
 
-Agent coordination and claims follow [AGENTS.md](AGENTS.md) and the [TODO guide](docs/TODO_GUIDE.md). Codebase review history is indexed in [review/README.md](review/README.md).
+Agent coordination and claims follow [AGENTS.md](AGENTS.md), [docket/CONTRACT.md](docket/CONTRACT.md) and the [TODO guide](docket/TODO_GUIDE.md). Codebase review history is indexed in [review/README.md](review/README.md).

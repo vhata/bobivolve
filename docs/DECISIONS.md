@@ -23,3 +23,11 @@ When a view gets crowded, hide what the player does not need before flattening t
 ## Full agent workflow — 2026-10-06
 
 The user selected the full repo-workflow model after the workflow audit. Staged TODO entries, exact PR claims, a separate promoted review backlog, immutable review snapshots, and scheduled validation replace the previous one-queue/no-marker/no-ledger policy. Explicit ownership and readiness make concurrent work and handoffs inspectable. Existing task rationale and design gates are preserved; historical review findings are not asserted to remain open or to have current coverage. Hosting protection remains a user-applied proposal.
+
+## Vendored docket workflow — 2026-10-11
+
+The generic workflow (contract, queue and review guides, validators) is vendored under `docket/` by the docket skill's `install.sh` and is never edited here. `AGENTS.md` keeps only this project's settings in its marked Docket section, and the review focus areas, baseline commands and drift checks live in [QUALITY.md](QUALITY.md). One command installs or resyncs the whole directory and `--check` reports any drift, so a fix to a validator reaches this project without a hand merge. The cost is that a project-specific rule can no longer be written into a guide; it goes in the Docket section or the quality doc, which the guides point to.
+
+The regression harness for the workflow scripts (previously this project's own `test.sh` beside them) moved to the skill as `tests/scripts.sh`, where it runs in the skill's CI against the copies vendored here, so `scripts/check.sh` no longer runs it. Running it here would test files this project cannot change; `install.sh --check` is the check that the vendored copies are the tested ones.
+
+`docket/` is listed in `.prettierignore` because the pre-commit hook formats staged Markdown and the vendored files are compared byte for byte, so a formatter rewrite would be reported as drift. The installer-owned Docket section in `AGENTS.md` is written in the shape Prettier produces, so `AGENTS.md` stays formatted. `CLAUDE.md` is a symlink to `AGENTS.md`; the installer recognises it as the import and leaves it alone.

@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read # docket/scripts/ci.sh reads the PR body with gh
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -33,20 +34,16 @@ jobs:
         run: scripts/install.sh --frozen-lockfile
       - name: Shared checks
         run: scripts/check.sh
-      - name: Validate PR markers
-        if: github.event_name == 'pull_request'
+      # Queue validation, link check and, on pull requests, the marker check
+      # against the queues at base and head. The PR variables are empty on
+      # pushes, which skips the marker check.
+      - name: Queue and PR hygiene
         env:
-          PR_BODY_FILE: ${{ runner.temp }}/pr-body.md
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-          fs.writeFileSync(process.env.PR_BODY_FILE, event.pull_request.body ?? '');
-          JS
-          bash scripts/workflow/check-pr-markers.sh --body "$PR_BODY_FILE" --base "$PR_BASE" --head "$PR_HEAD" --branch "$PR_BRANCH"
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: bash docket/scripts/ci.sh
       - name: Build
         run: scripts/build.sh
 
