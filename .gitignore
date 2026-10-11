@@ -58,8 +58,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-AUDIT.md
 
-# Agent workflow worktrees and local-only PR bodies
+# Agent workflow worktrees and local docket state (audit log, prepared PR bodies)
 .worktrees/
-.feral/
+.docket/

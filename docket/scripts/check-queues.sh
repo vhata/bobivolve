@@ -4,7 +4,7 @@
 # lines, resolvable cross-references, explicit dependencies, and the
 # one-finding-one-backlog-entry rule.
 #
-# Usage: check-queues.sh [--todo PATH] [--backlog PATH] [--strict]
+# Usage: docket/scripts/check-queues.sh [--todo PATH] [--backlog PATH] [--strict]
 #   Defaults: TODO.md and review/BACKLOG.md relative to the repo root when
 #   they exist. --strict turns warnings into errors.
 #
@@ -37,11 +37,11 @@ if [ -z "$todo" ] && [ -z "$backlog" ]; then
   exit 2
 fi
 
-files=""
-[ -n "$todo" ] && files="$files $todo"
-[ -n "$backlog" ] && files="$files $backlog"
+# Pass the queue files as separate arguments so paths with spaces survive.
+set --
+[ -n "$todo" ] && set -- "$@" "$todo"
+[ -n "$backlog" ] && set -- "$@" "$backlog"
 
-# shellcheck disable=SC2086
 awk -v strict="$strict" -v backlog_path="$backlog" '
 function report(level, file, line, msg) {
   if (level == "warning" && strict) level = "error"
@@ -63,9 +63,13 @@ function is_priority(h) {
 function is_stage(h) {
   return h ~ /^(Needs triage|Needs proof of concept|Ready for separate work)$/
 }
-# The review backlog contains promoted, ready work under priority headings.
-function is_ready(slug) {
-  return is_backlog[slug] || estage[slug] ~ /^Ready/
+# Ready entries may not carry blockers or unresolved dependencies. The review
+# backlog has no stages: every entry there is ready by construction.
+function is_ready(s) {
+  return estage[s] ~ /^Ready/ || is_backlog[s]
+}
+function where(s) {
+  return is_backlog[s] ? "is in the review backlog, which is ready by construction," : "is in Ready for separate work"
 }
 function finish_entry() {
   if (cur == "") return
@@ -130,7 +134,7 @@ FNR == 1 { finish_entry(); stage = ""; priority = ""; file_is_backlog = (FILENAM
     # A decision, a person or an external condition, in prose; any `slug` in it is also a dependency.
     if (val == "" || val ~ /^[Nn]one\.?$/) ;
     else {
-      if (is_ready(cur)) report("error", FILENAME, FNR, "`" cur "` is marked ready but is Blocked by: " val "; move it out of ready work until the blocker clears")
+      if (is_ready(cur)) report("error", FILENAME, FNR, "`" cur "` " where(cur) " but is Blocked by: " val "; " (is_backlog[cur] ? "clear the blocker before promoting it (the backlog holds only ready work)" : "move it out of Ready until the blocker clears"))
       n = slugs_in(val, tmp)
       for (i = 1; i <= n; i++) { nd++; dep_from[nd] = cur; dep_to[nd] = tmp[i]; dep_file[nd] = FILENAME; dep_line[nd] = FNR }
     }
@@ -143,7 +147,6 @@ FNR == 1 { finish_entry(); stage = ""; priority = ""; file_is_backlog = (FILENAM
   next
 }
 /^  - / && cur != "" { next }  # free-form supporting context is allowed
-/^- \[/ { next }
 END {
   finish_entry()
   for (i = 1; i <= nr; i++) if (!(rel_to[i] in efile))
@@ -152,11 +155,11 @@ END {
     if (!(dep_to[i] in efile)) {
       report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` depends on `" dep_to[i] "` which is not in any queue; if it landed, drop the line and reassess the stage")
     } else if (is_ready(dep_from[i])) {
-      report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` is marked ready but depends on unresolved `" dep_to[i] "`; move it out of ready work until the dependency lands")
+      report("error", dep_file[i], dep_line[i], "`" dep_from[i] "` " where(dep_from[i]) " but depends on unresolved `" dep_to[i] "`; " (is_backlog[dep_from[i]] ? "land the dependency before promoting it (the backlog holds only ready work)" : "move it out of Ready until the dependency lands"))
     }
   }
   n = 0; for (s in efile) n++
   if (errors) exit 1
   printf "check-queues: %d entries across %s, no errors\n", n, FILENAMES
 }
-' $files
+' "$@"
