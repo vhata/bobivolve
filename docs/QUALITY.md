@@ -10,7 +10,7 @@ Read when changing code or validating a pull request. Protect simulation correct
 - UI: command acknowledgements, run changes and subscriptions keep the dashboard's projected state consistent with the host in the affected player flow.
 - Deliberately manual: visual verification of cosmetic changes, and judgement about whether an emergent outcome is desirable; neither is a correctness assertion.
 
-The determinism and isolation invariants behind these are in [ARCHITECTURE.md](../ARCHITECTURE.md); conservation is asserted by the simulation step's tests.
+The determinism and isolation invariants behind these are in [ARCHITECTURE.md](../ARCHITECTURE.md); the substrate and conservation tests assert that diffusion conserves resources; energy conservation is not asserted.
 
 ## Existing gates
 
