@@ -2,6 +2,8 @@
 
 Describe the problem and resulting behaviour.
 
+Type: <feature | fix | refactor | perf | docs | test | tooling | review>
+
 ## Validation
 
 Record commands actually run, results, and any limitations.
