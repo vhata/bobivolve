@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Command, Query, QueryResult, SimEvent } from '../protocol/types.js';
 import type { SimTransport } from '../transport/types.js';
-import { useSimStore } from './sim-store.js';
+import { pauseWhileOpen, useSimStore } from './sim-store.js';
 import type { LineageNode } from './sim-store.js';
 import { readAncestryPins, writeAncestryPins } from './ancestry-groups.js';
 
@@ -795,5 +795,400 @@ describe('patched lineage projection', () => {
       message: 'no such save',
     });
     expect([...useSimStore.getState().patchedLineages]).toEqual(['L0']);
+  });
+});
+
+describe('pause, resume and speed retries', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function attachedWithFakeTimers(): StubTransport {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const transport = new StubTransport();
+    useSimStore.getState().attach(transport);
+    return transport;
+  }
+  const kinds = (transport: StubTransport): string[] => transport.sent.map((c) => c.kind);
+
+  it('never re-sends an older pause or resume after a newer one', () => {
+    const transport = attachedWithFakeTimers();
+    useSimStore.getState().resume();
+    vi.advanceTimersByTime(500);
+    useSimStore.getState().pause();
+    vi.advanceTimersByTime(600);
+    vi.advanceTimersByTime(1_500);
+    expect(kinds(transport)[0]).toBe('resume');
+    expect(
+      kinds(transport)
+        .slice(1)
+        .every((kind) => kind === 'pause'),
+    ).toBe(true);
+    expect(kinds(transport).length).toBeGreaterThan(2);
+    expect(useSimStore.getState().paused).toBe(true);
+    const pending = [...useSimStore.getState().pendingCommands.values()];
+    expect(pending.map((command) => command.kind)).toEqual(['pause']);
+  });
+
+  it('retries only the newest speed', () => {
+    const transport = attachedWithFakeTimers();
+    useSimStore.getState().setSpeed(4);
+    useSimStore.getState().setSpeed(16);
+    vi.advanceTimersByTime(1_500);
+    const retried = transport.sent.slice(2);
+    expect(retried.length).toBeGreaterThan(0);
+    expect(retried.every((command) => command.kind === 'setSpeed' && command.speed === 16)).toBe(
+      true,
+    );
+  });
+
+  it('ignores a rejection of a superseded toggle', () => {
+    const transport = attachedWithFakeTimers();
+    useSimStore.getState().pause();
+    useSimStore.getState().resume();
+    useSimStore.getState().pause();
+    const [pause] = transport.sent;
+    transport.emit({
+      kind: 'commandError',
+      commandId: pause!.commandId,
+      simTick: 1n,
+      message: 'timeline operation in progress; retry after completion',
+    });
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('stops showing a command as pending once retries are exhausted', () => {
+    const transport = attachedWithFakeTimers();
+    useSimStore.getState().pause();
+    vi.advanceTimersByTime(10_000);
+    expect(transport.sent.filter((command) => command.kind === 'pause')).toHaveLength(6);
+    expect(useSimStore.getState().pendingCommands.size).toBe(0);
+    expect(useSimStore.getState().commandError).toMatch(/did not acknowledge pause/);
+  });
+});
+
+describe('auto-pause projection', () => {
+  it('clears the ticks-per-second reading when the host auto-pauses', () => {
+    const transport = new StubTransport();
+    useSimStore.getState().attach(transport);
+    useSimStore.setState({ paused: false, actualSpeed: 120 });
+    transport.emit({ kind: 'autoPaused', simTick: 50n, trigger: 'speciation' });
+    expect(useSimStore.getState().paused).toBe(true);
+    expect(useSimStore.getState().actualSpeed).toBe(0);
+  });
+});
+
+describe('seed and save indicators across run changes', () => {
+  function savedRun(): ReturnType<typeof ancestryFixture> {
+    const fixture = ancestryFixture();
+    useSimStore.getState().startRun(7n);
+    fixture.complete(true, 0n);
+    useSimStore.getState().save('first');
+    fixture.complete(true, 30n);
+    expect(useSimStore.getState().seed).toBe(7n);
+    expect(useSimStore.getState().lastSaveAtTick).toBe(30n);
+    return fixture;
+  }
+
+  it.each(['switchRun', 'load'] as const)('clears the seed and saved tick on %s', (action) => {
+    savedRun();
+    if (action === 'switchRun') useSimStore.getState().switchRun('other');
+    else useSimStore.getState().load('first');
+    expect(useSimStore.getState().seed).toBeNull();
+    expect(useSimStore.getState().lastSaveAtTick).toBeNull();
+  });
+
+  it('clears the saved tick on a fresh run', () => {
+    const fixture = savedRun();
+    useSimStore.getState().startRun(8n);
+    expect(useSimStore.getState().lastSaveAtTick).toBeNull();
+    fixture.complete(true, 0n);
+    expect(useSimStore.getState().seed).toBe(8n);
+    expect(useSimStore.getState().lastSaveAtTick).toBeNull();
+  });
+
+  it('restores both when the run change is rejected', () => {
+    const fixture = savedRun();
+    useSimStore.getState().switchRun('other');
+    fixture.complete(false);
+    expect(useSimStore.getState().seed).toBe(7n);
+    expect(useSimStore.getState().lastSaveAtTick).toBe(30n);
+  });
+
+  it('does not label the next run with a save acknowledged after switching', () => {
+    const fixture = savedRun();
+    useSimStore.getState().save('second');
+    const save = fixture.transport.sent.at(-1)!;
+    useSimStore.getState().switchRun('other');
+    fixture.transport.emit({ kind: 'commandAck', commandId: save.commandId, simTick: 40n });
+    expect(useSimStore.getState().lastSaveAtTick).toBeNull();
+  });
+});
+
+describe('optimistic command rollback', () => {
+  function attached(): StubTransport {
+    const transport = new StubTransport();
+    useSimStore.getState().attach(transport);
+    return transport;
+  }
+  const reject = (transport: StubTransport, command: { commandId: string }): void =>
+    transport.emit({
+      kind: 'commandError',
+      commandId: command.commandId,
+      simTick: 1n,
+      message: 'timeline operation in progress; retry after completion',
+    });
+  const accept = (transport: StubTransport, command: { commandId: string }): void =>
+    transport.emit({ kind: 'commandAck', commandId: command.commandId, simTick: 1n });
+
+  it('rolls back a rejected quarantine and a rejected release', () => {
+    const transport = attached();
+    useSimStore.getState().quarantine('L0');
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(true);
+    reject(transport, transport.sent.at(-1)!);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(false);
+
+    useSimStore.setState({ quarantinedLineages: new Set(['L0']) });
+    useSimStore.getState().releaseQuarantine('L0');
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(false);
+    reject(transport, transport.sent.at(-1)!);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(true);
+  });
+
+  it('settles a chain of toggles to the last value the host accepted', () => {
+    const transport = attached();
+    useSimStore.getState().quarantine('L0');
+    useSimStore.getState().releaseQuarantine('L0');
+    const [quarantine, release] = transport.sent;
+    reject(transport, quarantine!);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(false);
+    reject(transport, release!);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(false);
+
+    useSimStore.getState().quarantine('L0');
+    useSimStore.getState().releaseQuarantine('L0');
+    const [accepted, rejected] = transport.sent.slice(2);
+    transport.emit({ kind: 'quarantineImposed', simTick: 1n, lineageId: 'L0' });
+    accept(transport, accepted!);
+    reject(transport, rejected!);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(true);
+  });
+
+  it('leaves a quarantine rejected after a run change to rehydration', () => {
+    const transport = attached();
+    transport.queryHandler = () => new Promise(() => {});
+    useSimStore.getState().quarantine('L0');
+    const quarantine = transport.sent.at(-1)!;
+    useSimStore.getState().switchRun('other');
+    useSimStore.setState({ quarantinedLineages: new Set(['L0']) });
+    reject(transport, quarantine);
+    expect(useSimStore.getState().quarantinedLineages.has('L0')).toBe(true);
+  });
+
+  it('rolls back rejected auto-pause triggers with a unique command id', () => {
+    const transport = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation']));
+    accept(transport, transport.sent.at(-1)!);
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation', 'lineageExtinction']));
+    useSimStore.getState().setAutoPauseTriggers(new Set());
+    const [, second, third] = transport.sent;
+    expect(new Set(transport.sent.map((command) => command.commandId)).size).toBe(3);
+    reject(transport, second!);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual([]);
+    reject(transport, third!);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual(['speciation']);
+  });
+
+  it('restores a run whose deletion the host rejected', async () => {
+    const transport = attached();
+    const runs = [
+      { runId: 'keep', latestTick: '10', lastModifiedMs: 1 },
+      { runId: 'other', latestTick: '20', lastModifiedMs: 2 },
+    ];
+    transport.queryHandler = async (query) => {
+      if (query.kind !== 'listRuns') throw new Error(`Unexpected ${query.kind} query`);
+      return { kind: 'listRuns', queryId: '', activeRunId: 'keep', runs };
+    };
+    useSimStore.setState({ runs });
+    useSimStore.getState().deleteRun('other');
+    expect(useSimStore.getState().runs.map((run) => run.runId)).toEqual(['keep']);
+    reject(transport, transport.sent.at(-1)!);
+    await vi.waitFor(() =>
+      expect(useSimStore.getState().runs.map((run) => run.runId)).toEqual(['keep', 'other']),
+    );
+  });
+});
+
+describe('rejected pause, resume and speed', () => {
+  const timelineRejection = 'timeline operation in progress; retry after completion';
+  function attached(): StubTransport {
+    const transport = new StubTransport();
+    transport.queryHandler = () => new Promise(() => {});
+    useSimStore.getState().attach(transport);
+    return transport;
+  }
+  const reject = (transport: StubTransport, command: { commandId: string }): void =>
+    transport.emit({
+      kind: 'commandError',
+      commandId: command.commandId,
+      simTick: 1n,
+      message: timelineRejection,
+    });
+  const accept = (transport: StubTransport, command: { commandId: string }): void =>
+    transport.emit({ kind: 'commandAck', commandId: command.commandId, simTick: 1n });
+
+  it('stays paused when resume then pause are both rejected during a run change', () => {
+    const transport = attached();
+    useSimStore.getState().switchRun('other');
+    expect(useSimStore.getState().paused).toBe(true);
+    useSimStore.getState().resume();
+    useSimStore.getState().pause();
+    const [resume, pause] = transport.sent.slice(1);
+    reject(transport, resume!);
+    reject(transport, pause!);
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('stays running when pause then resume are both rejected', () => {
+    const transport = attached();
+    useSimStore.setState({ paused: false });
+    useSimStore.getState().pause();
+    useSimStore.getState().resume();
+    const [pause, resume] = transport.sent;
+    reject(transport, pause!);
+    reject(transport, resume!);
+    expect(useSimStore.getState().paused).toBe(false);
+  });
+
+  it('rolls back a single rejected pause or resume', () => {
+    const transport = attached();
+    useSimStore.setState({ paused: false });
+    useSimStore.getState().pause();
+    expect(useSimStore.getState().paused).toBe(true);
+    reject(transport, transport.sent.at(-1)!);
+    expect(useSimStore.getState().paused).toBe(false);
+    useSimStore.setState({ paused: true });
+    useSimStore.getState().resume();
+    reject(transport, transport.sent.at(-1)!);
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('keeps the paused state a run change set when an earlier toggle is rejected', () => {
+    const transport = attached();
+    useSimStore.setState({ paused: false });
+    useSimStore.getState().pause();
+    const pause = transport.sent.at(-1)!;
+    useSimStore.getState().switchRun('other');
+    useSimStore.setState({ paused: true });
+    reject(transport, pause);
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('keeps an auto-pause when the toggles pending around it are rejected', () => {
+    const transport = attached();
+    useSimStore.setState({ paused: false });
+    useSimStore.getState().pause();
+    useSimStore.getState().resume();
+    const [pause, resume] = transport.sent;
+    transport.emit({ kind: 'autoPaused', simTick: 5n, trigger: 'speciation' });
+    reject(transport, pause!);
+    reject(transport, resume!);
+    expect(useSimStore.getState().paused).toBe(true);
+  });
+
+  it('clears the ticks-per-second reading on a manual pause', () => {
+    attached();
+    useSimStore.setState({ paused: false, actualSpeed: 120 });
+    useSimStore.getState().pause();
+    expect(useSimStore.getState().paused).toBe(true);
+    expect(useSimStore.getState().actualSpeed).toBe(0);
+  });
+
+  it('rolls a rejected speed back to the last accepted speed', () => {
+    const transport = attached();
+    useSimStore.getState().setSpeed(16);
+    reject(transport, transport.sent.at(-1)!);
+    expect(useSimStore.getState().speed).toBe(1);
+    useSimStore.getState().setSpeed(4);
+    useSimStore.getState().setSpeed(64);
+    const [four, sixtyFour] = transport.sent.slice(1);
+    accept(transport, four!);
+    reject(transport, sixtyFour!);
+    expect(useSimStore.getState().speed).toBe(4);
+  });
+
+  it('rolls auto-pause triggers back across a run change', () => {
+    const transport = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation']));
+    const configure = transport.sent.at(-1)!;
+    useSimStore.getState().switchRun('other');
+    reject(transport, configure);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual([]);
+  });
+
+  it('falls back to triggers the host accepted while a newer write was pending', () => {
+    const transport = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation']));
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation', 'lineageExtinction']));
+    const [first, second] = transport.sent;
+    accept(transport, first!);
+    reject(transport, second!);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual(['speciation']);
+  });
+
+  it('treats an older unanswered write as lost once a newer one is answered', () => {
+    const transport = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation']));
+    useSimStore.getState().setAutoPauseTriggers(new Set(['lineageExtinction']));
+    reject(transport, transport.sent.at(-1)!);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual([]);
+  });
+
+  it('does not carry unanswered writes over to a new connection', () => {
+    const first = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation']));
+    expect(first.sent).toHaveLength(1);
+    const second = attached();
+    useSimStore.getState().setAutoPauseTriggers(new Set(['speciation', 'lineageExtinction']));
+    reject(second, second.sent.at(-1)!);
+    expect([...useSimStore.getState().autoPauseTriggers]).toEqual(['speciation']);
+  });
+});
+
+describe('modal pause ownership', () => {
+  function attached(): StubTransport {
+    const transport = new StubTransport();
+    transport.queryHandler = () => new Promise(() => {});
+    useSimStore.getState().attach(transport);
+    useSimStore.setState({ paused: false });
+    return transport;
+  }
+
+  it('resumes on close only when it paused on the same connection and timeline', () => {
+    const transport = attached();
+    const close = pauseWhileOpen();
+    expect(transport.sent.map((command) => command.kind)).toEqual(['pause']);
+    close();
+    expect(transport.sent.map((command) => command.kind)).toEqual(['pause', 'resume']);
+
+    useSimStore.setState({ paused: true });
+    pauseWhileOpen()();
+    expect(transport.sent).toHaveLength(2);
+  });
+
+  it('does not resume a new connection or a changed timeline', () => {
+    const first = attached();
+    const closeAfterReconnect = pauseWhileOpen();
+    const second = attached();
+    closeAfterReconnect();
+    expect(second.sent).toHaveLength(0);
+    expect(first.sent.map((command) => command.kind)).toEqual(['pause']);
+
+    const closeAfterSwitch = pauseWhileOpen();
+    useSimStore.getState().switchRun('other');
+    closeAfterSwitch();
+    expect(second.sent.map((command) => command.kind)).toEqual(['pause', 'switchRun']);
   });
 });

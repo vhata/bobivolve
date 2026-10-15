@@ -37,9 +37,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [SIM] `extinct-lineage-interventions` — **Handle interventions on extinct lineages as documented.** Decrees report a landed patch on extinct targets, dead quarantine holds keep consuming compute ahead of living holds, and threshold-zero decrees are accepted although they can never fire. Expect intervention golden changes, which need review.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `decree-extinct-target-reports-landed`, `quarantine-survives-extinction`, `decree-threshold-zero-never-fires`
-- [UI] `ui-projection-consistency` — **Keep the dashboard's projected state consistent with the host after retries, rejections and selection or run changes.** Retries can reorder pause and resume, optimistic toggles never roll back, and several indicators show stale values.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `pause-resume-retry-reorders`, `autopause-leaves-actual-speed`, `stale-seed-and-save-indicator`, `optimistic-commands-no-rollback`, `inspector-stale-drift-on-select`
 - [PROTOCOL] `protocol-contract-parity` — **Bring `schema.proto` and the stdio codec back in line with `protocol/types.ts`.** The schema lacks run-slot messages and several fields, mistypes u64 fields as strings, and the codec leaves two query results unrevived.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `schema-proto-drift`, `ndjson-codec-missing-result-revival`
