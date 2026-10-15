@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import { writeFile } from 'node:fs/promises';
 import type { SimStoreState } from '../ui/sim-store.js';
 
@@ -24,7 +25,7 @@ async function startFreshRun(page: import('@playwright/test').Page): Promise<voi
   await page.goto('/');
   // OPFS survives page and browser-context reloads. A prior test can
   // leave the default run paused, so live-run tests must start explicitly.
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   // Start dispatches asynchronously. Wait until its founder is visible
   // before tests can pause or inspect the new run.
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
@@ -45,7 +46,7 @@ test('page loads with the header and tagline', async ({ page }) => {
 test('reload resumes the existing default run', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   const populationMeta = page.locator('.population-panel .panel-meta');
   await expect(populationMeta).toContainText(/simTick [1-9]/, { timeout: 10_000 });
   await page.getByRole('button', { name: /^Pause$/ }).click();
@@ -68,7 +69,7 @@ test('reload restores the active non-default run', async ({ page }) => {
   await page.getByRole('textbox', { name: 'name' }).fill('reload-fixture');
   await page.getByRole('button', { name: 'create & switch' }).click();
   await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   const populationMeta = page.locator('.population-panel .panel-meta');
   await expect(populationMeta).toContainText(/simTick [1-9]/, { timeout: 10_000 });
   await page.getByRole('button', { name: /^Pause$/ }).click();
@@ -153,7 +154,7 @@ test('1× speed advances slower than 16×', async ({ page }, testInfo) => {
     await slowButton.click();
     await expect(slowButton).toHaveAttribute('data-pending', 'false');
     await page.getByRole('textbox', { name: 'Seed', exact: true }).fill('42');
-    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await clickStart(page);
     await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
@@ -709,7 +710,7 @@ test('a cancelled patch editor ignores a late acknowledgement after a new run', 
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await page.getByRole('button', { name: /^Pause$/ }).click();
   await page.getByRole('button', { name: /^Apply patch$/ }).click();
   await expect(
@@ -749,7 +750,7 @@ test('quarantine toggle flips the inspector and the tree pip', async ({ page }) 
 
 test('patch editor closes after the host accepts the patch', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   const openPatch = page.getByRole('button', { name: /^Apply patch$/ });
   await expect(openPatch).toBeEnabled();
   await page.getByRole('button', { name: /^Pause$/ }).click();
