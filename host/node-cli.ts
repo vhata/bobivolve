@@ -30,6 +30,7 @@ import { readFile } from 'node:fs/promises';
 import { parseCommandScript, type ScriptCommand } from './command-script.js';
 import { parseArgs } from 'node:util';
 import { NodeHost } from './node.js';
+import { isValidRunId } from './run-id.js';
 import { NodeStorage } from './storage-node.js';
 import { NodeTransport } from '../transport/node.js';
 import type { SimEvent } from '../protocol/types.js';
@@ -80,11 +81,10 @@ function parseCliArgs(argv: readonly string[]): CliOptions {
   const saveDir = values['save-dir'] ?? null;
   const runId = values['run-id'] ?? null;
 
-  if (
-    runId !== null &&
-    (runId === '' || runId === '.' || runId === '..' || /[/\\\0]/.test(runId))
-  ) {
-    throw new Error('--run-id must be a nonempty directory name without path separators');
+  if (runId !== null && !isValidRunId(runId)) {
+    throw new Error(
+      '--run-id must be a nonempty directory name without path separators or a leading dot',
+    );
   }
   if (saveDir !== null && runId === null) {
     throw new Error('--save-dir requires --run-id');
