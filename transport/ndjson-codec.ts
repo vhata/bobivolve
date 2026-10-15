@@ -14,7 +14,17 @@
 // hand-written to match `protocol/types.ts`; when codegen lands the shapes it
 // emits will replace the manual revival paths below.
 
-import type { Command, Query, QueryResult, SimEvent } from '../protocol/types.js';
+import type {
+  Command,
+  CommandBody,
+  Query,
+  QueryBody,
+  QueryResult,
+  QueryResultBody,
+  SimEvent,
+  SimEventBody,
+} from '../protocol/types.js';
+import { parseUint64Decimal } from '../protocol/uint64.js';
 
 // JSON.stringify replacer that encodes bigints as decimal strings, mirroring
 // proto3 JSON encoding for uint64 fields. Identical to host/node-cli.ts so the
@@ -28,34 +38,70 @@ export function encodeLine(value: unknown): string {
   return JSON.stringify(value, bigintReplacer) + '\n';
 }
 
-// ─── Command revival ─────────────────────────────────────────────────────────
+// ─── Strict field parsing ────────────────────────────────────────────────────
 
-interface RawCommand {
-  readonly kind?: string;
-  readonly commandId?: string;
-  readonly seed?: string;
-  readonly ticks?: string;
-  readonly tick?: string;
-  // Catch-all so the type-checker accepts the rest of the body verbatim.
-  readonly [k: string]: unknown;
+// Every u64 field must arrive as a decimal string within u64 range. A
+// missing, numeric, signed, hex or out-of-range value is a malformed
+// message, not a proto3 default: the emitters on both sides always write
+// these fields, so absence means a broken or foreign peer.
+function u64(value: unknown, field: string, message: string): bigint {
+  if (typeof value === 'string') {
+    const parsed = parseUint64Decimal(value);
+    if (parsed !== null) return parsed;
+  }
+  throw new Error(`NDJSON: malformed ${message} (${field} is not a decimal u64 string)`);
 }
 
+function list(value: unknown, field: string, message: string): readonly unknown[] {
+  if (Array.isArray(value)) return value as readonly unknown[];
+  throw new Error(`NDJSON: malformed ${message} (${field} is not an array)`);
+}
+
+function record(value: unknown, field: string, message: string): Readonly<Record<string, unknown>> {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Readonly<Record<string, unknown>>;
+  }
+  throw new Error(`NDJSON: malformed ${message} (${field} is not an object)`);
+}
+
+// Compile-time exhaustiveness: adding a kind to a protocol union without
+// deciding how this codec revives it is a type error. At runtime an
+// unknown kind passes through unchanged, as before.
+function passThroughUnknownKind(_kind: never): void {}
+
+// ─── Command revival ─────────────────────────────────────────────────────────
+
 export function reviveCommand(raw: unknown): Command {
-  const r = raw as RawCommand;
-  if (typeof r.kind !== 'string' || typeof r.commandId !== 'string') {
+  const r = record(raw, 'command', 'Command');
+  if (typeof r['kind'] !== 'string' || typeof r['commandId'] !== 'string') {
     throw new Error('NDJSON: malformed Command (missing kind or commandId)');
   }
-  // Revive bigints kind-by-kind. Schema is the source of truth for u64
-  // fields; missing values fall through to the proto3 defaults the in-process
-  // path already accepts.
-  switch (r.kind) {
+  // Revive bigints kind-by-kind.
+  const kind = r['kind'] as CommandBody['kind'];
+  switch (kind) {
     case 'newRun':
-      return { ...r, seed: BigInt(r.seed ?? '0') } as Command;
+      return { ...r, seed: u64(r['seed'], 'seed', 'Command') } as unknown as Command;
     case 'step':
-      return { ...r, ticks: BigInt(r.ticks ?? '0') } as Command;
+      return { ...r, ticks: u64(r['ticks'], 'ticks', 'Command') } as unknown as Command;
     case 'rewindToTick':
-      return { ...r, tick: BigInt(r.tick ?? '0') } as Command;
+      return { ...r, tick: u64(r['tick'], 'tick', 'Command') } as unknown as Command;
+    case 'setSpeed':
+    case 'pause':
+    case 'resume':
+    case 'configureAutoPause':
+    case 'quarantine':
+    case 'releaseQuarantine':
+    case 'applyPatch':
+    case 'queueDecree':
+    case 'revokeDecree':
+    case 'save':
+    case 'deleteSave':
+    case 'load':
+    case 'switchRun':
+    case 'deleteRun':
+      return r as unknown as Command;
     default:
+      passThroughUnknownKind(kind);
       return r as unknown as Command;
   }
 }
@@ -66,27 +112,32 @@ export function decodeCommand(line: string): Command {
 
 // ─── Query revival ───────────────────────────────────────────────────────────
 
-interface RawQuery {
-  readonly kind?: string;
-  readonly queryId?: string;
-  readonly fromTick?: string;
-  readonly toTick?: string;
-  readonly [k: string]: unknown;
-}
-
 export function reviveQuery(raw: unknown): Query {
-  const r = raw as RawQuery;
-  if (typeof r.kind !== 'string' || typeof r.queryId !== 'string') {
+  const r = record(raw, 'query', 'Query');
+  if (typeof r['kind'] !== 'string' || typeof r['queryId'] !== 'string') {
     throw new Error('NDJSON: malformed Query (missing kind or queryId)');
   }
-  if (r.kind === 'logSlice') {
-    return {
-      ...r,
-      fromTick: BigInt(r.fromTick ?? '0'),
-      toTick: BigInt(r.toTick ?? '0'),
-    } as Query;
+  const kind = r['kind'] as QueryBody['kind'];
+  switch (kind) {
+    case 'logSlice':
+      return {
+        ...r,
+        fromTick: u64(r['fromTick'], 'fromTick', 'Query'),
+        toTick: u64(r['toTick'], 'toTick', 'Query'),
+      } as unknown as Query;
+    case 'lineageTree':
+    case 'probeInspector':
+    case 'driftTelemetry':
+    case 'populationSummary':
+    case 'listSaves':
+    case 'substrate':
+    case 'decreeQueue':
+    case 'listRuns':
+      return r as unknown as Query;
+    default:
+      passThroughUnknownKind(kind);
+      return r as unknown as Query;
   }
-  return r as unknown as Query;
 }
 
 export function decodeQuery(line: string): Query {
@@ -95,62 +146,59 @@ export function decodeQuery(line: string): Query {
 
 // ─── SimEvent revival ────────────────────────────────────────────────────────
 
-interface RawEvent {
-  readonly kind?: string;
-  readonly simTick?: string;
-  readonly populationTotal?: string;
-  readonly populationByLineage?: Readonly<Record<string, string>>;
-  readonly originCompute?: string;
-  readonly originComputeMax?: string;
-  readonly probesAffected?: string;
-  readonly carrierPopulation?: string;
-  readonly totalPopulation?: string;
-  readonly [k: string]: unknown;
-}
-
 export function reviveEvent(raw: unknown): SimEvent {
-  const r = raw as RawEvent;
-  if (typeof r.kind !== 'string' || typeof r.simTick !== 'string') {
+  const r = record(raw, 'event', 'SimEvent');
+  if (typeof r['kind'] !== 'string' || typeof r['simTick'] !== 'string') {
     throw new Error('NDJSON: malformed SimEvent (missing kind or simTick)');
   }
-  const simTick = BigInt(r.simTick);
-  switch (r.kind) {
+  const m = 'SimEvent';
+  const simTick = u64(r['simTick'], 'simTick', m);
+  const kind = r['kind'] as SimEventBody['kind'];
+  switch (kind) {
     case 'tick': {
       const byLineage: Record<string, bigint> = {};
-      const map = r.populationByLineage ?? {};
+      const map = record(r['populationByLineage'], 'populationByLineage', m);
       for (const [k, v] of Object.entries(map)) {
-        byLineage[k] = BigInt(v);
+        byLineage[k] = u64(v, `populationByLineage.${k}`, m);
       }
       return {
         ...r,
         simTick,
-        populationTotal: BigInt(r.populationTotal ?? '0'),
+        populationTotal: u64(r['populationTotal'], 'populationTotal', m),
         populationByLineage: byLineage,
-        originCompute: BigInt(r.originCompute ?? '0'),
-        originComputeMax: BigInt(r.originComputeMax ?? '0'),
-      } as SimEvent;
+        originCompute: u64(r['originCompute'], 'originCompute', m),
+        originComputeMax: u64(r['originComputeMax'], 'originComputeMax', m),
+      } as unknown as SimEvent;
     }
     case 'patchApplied':
-      return {
-        ...r,
-        simTick,
-        probesAffected: BigInt(r.probesAffected ?? '0'),
-      } as SimEvent;
-    case 'patchSaturated':
-      return {
-        ...r,
-        simTick,
-        carrierPopulation: BigInt(r.carrierPopulation ?? '0'),
-        totalPopulation: BigInt(r.totalPopulation ?? '0'),
-      } as SimEvent;
     case 'decreeFired':
       return {
         ...r,
         simTick,
-        probesAffected: BigInt(r.probesAffected ?? '0'),
-      } as SimEvent;
+        probesAffected: u64(r['probesAffected'], 'probesAffected', m),
+      } as unknown as SimEvent;
+    case 'patchSaturated':
+      return {
+        ...r,
+        simTick,
+        carrierPopulation: u64(r['carrierPopulation'], 'carrierPopulation', m),
+        totalPopulation: u64(r['totalPopulation'], 'totalPopulation', m),
+      } as unknown as SimEvent;
+    case 'replication':
+    case 'speciation':
+    case 'extinction':
+    case 'death':
+    case 'autoPaused':
+    case 'commandAck':
+    case 'commandError':
+    case 'quarantineImposed':
+    case 'quarantineLifted':
+    case 'decreeQueued':
+    case 'decreeRevoked':
+      return { ...r, simTick } as unknown as SimEvent;
     default:
-      return { ...r, simTick } as SimEvent;
+      passThroughUnknownKind(kind);
+      return { ...r, simTick } as unknown as SimEvent;
   }
 }
 
@@ -160,99 +208,74 @@ export function decodeEvent(line: string): SimEvent {
 
 // ─── QueryResult revival ─────────────────────────────────────────────────────
 
-interface RawQueryResult {
-  readonly kind?: string;
-  readonly queryId?: string;
-  readonly lineages?: readonly RawLineageEntry[];
-  readonly probe?: RawProbe | null;
-  readonly drift?: RawDriftWrapper | null;
-  readonly lineageId?: string;
-  readonly cells?: readonly string[];
-  readonly maxResourcePerCell?: string;
-  readonly side?: number;
-  readonly probes?: readonly unknown[];
-  readonly decrees?: readonly RawDecreeEntry[];
-  readonly [k: string]: unknown;
-}
-
-interface RawLineageEntry {
-  readonly id: string;
-  readonly name: string;
-  readonly parentLineageId: string;
-  readonly foundedAtTick: string;
-  // Decimal string when the lineage is extinct, null while alive, or
-  // missing on a payload from a host that predates the field. The
-  // reviver normalises absence to null.
-  readonly extinctionTick?: string | null;
-  readonly founderProbeId: string;
-  readonly patches: readonly string[];
-  readonly quarantined: boolean;
-}
-
-interface RawProbe {
-  readonly id: string;
-  readonly lineageId: string;
-  readonly bornAtTick: string;
-  readonly firmware: readonly unknown[];
-}
-
-interface RawDriftWrapper {
-  readonly population: string;
-  readonly parameters: Readonly<Record<string, unknown>>;
-  readonly divergenceDivisor: string;
-  readonly referenceFirmware: readonly unknown[];
-  readonly patches: readonly string[];
-}
-
-interface RawDecreeEntry {
-  readonly id: string;
-  readonly queuedAtTick: string;
-  readonly trigger: unknown;
-  readonly patchTargetLineageId: string;
-  readonly patchFirmware: readonly unknown[];
-}
-
 export function reviveQueryResult(raw: unknown): QueryResult {
-  const r = raw as RawQueryResult;
-  if (typeof r.kind !== 'string' || typeof r.queryId !== 'string') {
+  const r = record(raw, 'result', 'QueryResult');
+  if (typeof r['kind'] !== 'string' || typeof r['queryId'] !== 'string') {
     throw new Error('NDJSON: malformed QueryResult (missing kind or queryId)');
   }
-  switch (r.kind) {
+  const m = 'QueryResult';
+  const kind = r['kind'] as QueryResultBody['kind'];
+  switch (kind) {
     case 'lineageTree': {
-      const lineages = (r.lineages ?? []).map((e) => ({
-        ...e,
-        foundedAtTick: BigInt(e.foundedAtTick),
-        // Older host payloads omit the field; missing → null. Live
-        // lineages also come back as null.
-        extinctionTick:
-          e.extinctionTick === null || e.extinctionTick === undefined
-            ? null
-            : BigInt(e.extinctionTick),
-      }));
-      return { ...r, lineages } as QueryResult;
+      const lineages = list(r['lineages'], 'lineages', m).map((item, i) => {
+        const e = record(item, `lineages[${i}]`, m);
+        return {
+          ...e,
+          foundedAtTick: u64(e['foundedAtTick'], `lineages[${i}].foundedAtTick`, m),
+          // Older host payloads omit the field; missing → null. Live
+          // lineages also come back as null.
+          extinctionTick:
+            e['extinctionTick'] === null || e['extinctionTick'] === undefined
+              ? null
+              : u64(e['extinctionTick'], `lineages[${i}].extinctionTick`, m),
+        };
+      });
+      return { ...r, lineages } as unknown as QueryResult;
     }
     case 'probeInspector': {
-      if (r.probe === null || r.probe === undefined) {
-        return { ...r, probe: null } as QueryResult;
+      if (r['probe'] === null || r['probe'] === undefined) {
+        return { ...r, probe: null } as unknown as QueryResult;
       }
-      const probe = { ...r.probe, bornAtTick: BigInt(r.probe.bornAtTick) };
-      return { ...r, probe } as QueryResult;
+      const p = record(r['probe'], 'probe', m);
+      const probe = { ...p, bornAtTick: u64(p['bornAtTick'], 'probe.bornAtTick', m) };
+      return { ...r, probe } as unknown as QueryResult;
     }
     case 'driftTelemetry': {
-      if (r.drift === null || r.drift === undefined) {
-        return { ...r, drift: null } as QueryResult;
+      if (r['drift'] === null || r['drift'] === undefined) {
+        return { ...r, drift: null } as unknown as QueryResult;
       }
-      const drift = { ...r.drift, population: BigInt(r.drift.population) };
-      return { ...r, drift } as QueryResult;
+      const d = record(r['drift'], 'drift', m);
+      const drift = { ...d, population: u64(d['population'], 'drift.population', m) };
+      return { ...r, drift } as unknown as QueryResult;
+    }
+    case 'logSlice': {
+      const events = list(r['events'], 'events', m).map((e) => reviveEvent(e));
+      return { ...r, events } as unknown as QueryResult;
+    }
+    case 'populationSummary': {
+      const points = list(r['points'], 'points', m).map((item, i) => {
+        const p = record(item, `points[${i}]`, m);
+        return {
+          ...p,
+          tick: u64(p['tick'], `points[${i}].tick`, m),
+          totalProbes: u64(p['totalProbes'], `points[${i}].totalProbes`, m),
+        };
+      });
+      return { ...r, points } as unknown as QueryResult;
     }
     case 'decreeQueue': {
-      const decrees = (r.decrees ?? []).map((d) => ({
-        ...d,
-        queuedAtTick: BigInt(d.queuedAtTick),
-      }));
-      return { ...r, decrees } as QueryResult;
+      const decrees = list(r['decrees'], 'decrees', m).map((item, i) => {
+        const d = record(item, `decrees[${i}]`, m);
+        return { ...d, queuedAtTick: u64(d['queuedAtTick'], `decrees[${i}].queuedAtTick`, m) };
+      });
+      return { ...r, decrees } as unknown as QueryResult;
     }
+    case 'listSaves':
+    case 'substrate':
+    case 'listRuns':
+      return r as unknown as QueryResult;
     default:
+      passThroughUnknownKind(kind);
       return r as unknown as QueryResult;
   }
 }
