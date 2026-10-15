@@ -6,11 +6,11 @@ Updated in the same commit as any feature whose status changes.
 
 ## Release 2 — The Engineer's Console
 
-- ✓ Quarantine — a player can suspend a lineage's replication from the inspector; the suspension is reversible and the tree marks quarantined lineages with a pip
+- ✓ Quarantine — a player can suspend a lineage's replication from the inspector; the suspension is reversible, a hold ends when its lineage goes extinct, and the tree marks quarantined lineages with a pip
 - ✓ Origin compute — renewable budget regenerates per tick; patch and decree authoring each consume a one-shot cost, held quarantines pay per-tick maintenance oldest-first before regeneration, with unfunded holds automatically released; the dashboard shows the budget, funding rule, and timeline release reason
 - ✓ Patches — the lineage inspector opens a modal directive editor with readable units, exact exploration thresholds, current reference/proposed comparisons, and the fixed authoring charge with available/remaining compute; submitted patches replace the lineage's reference firmware and every extant probe, with PATCH_AUTHORING_COST charged against Origin compute; descendants inherit and drift like any firmware
 - ✓ Patch provenance — lineage inspection compares recorded authored firmware with the current reference, counts living ancestry carriers and exact firmware matches separately, and marks historical firmware unavailable for older saves; saturation remains ancestry-based
-- ✓ Decrees — modal composer queues a conditional patch (trigger + target lineage + firmware); R2's trigger set is "lineage population below threshold"; the queue panel lists pending decrees and lets the player revoke before firing
+- ✓ Decrees — modal composer queues a conditional patch (trigger + target lineage + firmware); R2's trigger set is "lineage population below threshold" (at least 1); a decree whose target lineage has died fires without landing; the queue panel lists pending decrees and lets the player revoke before firing
 - ✓ Intervention-versioned lineage tree — each lineage's patches list is exposed via the drift telemetry query and rendered in the inspector; child lineages inherit their parent's patches at speciation so the history follows the clade
 - ✓ PatchSaturated auto-pause — fires once when a player-authored patch's carriers exceed 50% of the population; lineages inherit patches at speciation so the saturation count tracks descendant clades automatically
 - ✓ New-visitor tour — a guided overlay walks first-time players through the dashboard in the order they need to learn it (run → population → lineage tree → drift → intervention surface → Origin compute → pacing); auto-fires once and sleeps, with a "?" affordance in the header to reopen on demand
