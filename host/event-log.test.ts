@@ -94,6 +94,48 @@ describe('EventLogWriter / EventLogReader', () => {
     expect(entries[2]?.type).toBe('ev');
   });
 
+  it('holds fenced entries back from flushes until released', async () => {
+    const writer = new EventLogWriter(storage, 'log.ndjson');
+    const reader = new EventLogReader(storage, 'log.ndjson');
+    writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    const releaseFirst = writer.fence();
+    writer.appendSnap(0n, 'a.snap');
+    const releaseSecond = writer.fence();
+    writer.appendSnap(5n, 'b.snap');
+    writer.appendEvent(5n, { kind: 'commandAck', simTick: 5n, commandId: 'c2' });
+
+    await writer.flush();
+    expect((await reader.readAll()).map((e) => e.type)).toEqual(['cmd']);
+    releaseSecond();
+    releaseSecond();
+    await writer.flush();
+    expect(await reader.readAll()).toHaveLength(1);
+    expect(writer.pendingCount()).toBe(3);
+    releaseFirst();
+    await writer.flush();
+    expect((await reader.readAll()).map((e) => e.type)).toEqual(['cmd', 'snap', 'snap', 'ev']);
+    expect(writer.pendingCount()).toBe(0);
+  });
+
+  it('releases the matching fence when fences are released in order', async () => {
+    const writer = new EventLogWriter(storage, 'log.ndjson');
+    const reader = new EventLogReader(storage, 'log.ndjson');
+    writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
+    const releaseFirst = writer.fence();
+    writer.appendSnap(0n, 'a.snap');
+    const releaseSecond = writer.fence();
+    writer.appendSnap(5n, 'b.snap');
+    writer.appendEvent(5n, { kind: 'commandAck', simTick: 5n, commandId: 'c2' });
+
+    releaseFirst();
+    await writer.flush();
+    expect((await reader.readAll()).map((e) => e.type)).toEqual(['cmd', 'snap']);
+    expect(writer.pendingCount()).toBe(2);
+    releaseSecond();
+    await writer.flush();
+    expect((await reader.readAll()).map((e) => e.type)).toEqual(['cmd', 'snap', 'snap', 'ev']);
+  });
+
   it('assigns seq starting at 0 within each tick, resetting on tick change', async () => {
     const writer = new EventLogWriter(storage, 'log.ndjson');
     writer.appendCommand(0n, { kind: 'newRun', commandId: 'c1', seed: 1n });
