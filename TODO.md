@@ -12,7 +12,7 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
 - [PERFORMANCE] `browser-session-budgets` — **Validate browser session budgets and retention.** Implement and validate the [proposed browser session/storage budgets and retention policy](docs/BROWSER_PERSISTENCE_BUDGET.md): wider seed/device/repeat measurements, cadence/anchor comparison, and quota warnings. Chromium OPFS and rendered rewinds are measured through 30,000 ticks; 5,000 ticks is the initial local playtest envelope. No budget or pruning is enforced yet. #host #performance
   - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
   - Blocked by: Browser measurements, retention choices, and human playtest evidence are incomplete.
-  - Coordination: Open PR #31 implements explicit named-save deletion; do not duplicate its scope.
+  - Coordination: Explicit named-save deletion landed in PR #31 (2026-10-08); it is outside this entry's scope.
 
 - [TOOLING] `protobuf-codegen` — **Generate protocol types when a consumer exists.** Wire protobuf codegen into the prebuild step (ts-proto + protoc, or buf) once a consumer of generated types lands #r0 #toolchain
   - Source: TODO.md at `67839b2`, migrated 2026-10-06; original release and area tags retained.
