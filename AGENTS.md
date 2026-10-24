@@ -13,7 +13,7 @@ This project is run with docket. Read [docket/CONTRACT.md](docket/CONTRACT.md) b
 - Merging and releases: the user merges unless they delegate it in that turn; there is no standing delegation. A release is prepared against the gates in [ACCEPTANCE.md](ACCEPTANCE.md), and release tags, deployment and publishing need the user's explicit sign-off in the current or preceding turn, even under a broad autonomy grant.
 - Optional pieces in force: the review ledger, stacked PRs and the scheduled validation of main. No roadmap queue: [SPEC.md](SPEC.md) is the roadmap in prose, not a claimable queue.
 - Environment: Node 22 from `.nvmrc` and the pnpm version pinned in `package.json`; `scripts/install.sh` installs dependencies and `scripts/setup.sh` the hooks. Run tools through the standalone entrypoints in `scripts/` (`check.sh`, `build.sh`, `e2e.sh`, `sim.sh`), not through ad hoc tool invocations. Browser probes tagged `@diagnostic` are local and opt-in.
-- Design gates: R3 implementation needs the user's design pass and an assessment of the R2 experiment and the browser session budgets first; the gates are in [ACCEPTANCE.md](ACCEPTANCE.md).
+- Design gates: R3 implementation needs the user's design pass and an assessment of the [R2 experiment](docs/R2_ENGINEER_LOOP_EXPERIMENT.md) and the [browser session budgets](docs/BROWSER_PERSISTENCE_BUDGET.md) first. Pending work is tracked in [TODO.md](TODO.md).
 
 <!-- docket:end -->
 
