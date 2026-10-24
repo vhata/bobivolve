@@ -25,12 +25,14 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
   - Findings: `fresh-browser-run-never-starts`
   - Related: `browser-run-log-durability`
   - Starting point: `host/node.ts` (`handleSwitchRun` acknowledgement), `ui/sim-store.ts` (`bootstrapRun`). Add a browser test that starts from cleared OPFS without clicking Start.
-- [HOST] `event-log-replay-fidelity` — **Make logged commands replay exactly as they executed live.** Rejected commands are logged and revived by field name. Their replay diverges or poisons the log, `step` replays differently from live play, and `logSlice` can race a new run's log reset.
+- [HOST] `event-log-replay-fidelity` — **Make logged commands replay exactly as they executed live.** Rejected commands are logged and revived by field name. Their replay diverges or poisons the log, `step` replays differently from live play, and `logSlice` can race a new run's log reset. Heartbeats also enter the log despite its documented domain-event-only contract, and their population maps return as strings from in-process `logSlice` queries.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `event-log-reviver-revives-string-params`, `step-pause-and-replay-semantics`, `logslice-flush-races-newrun-delete`
-- [HOST] `host-storage-input-hardening` — **Reject unsafe run IDs and never discard save listings on an unreadable index.** `deleteRun('.')` removes every run on Node storage, and Save rewrites a corrupt index with only the new entry.
+  - Findings: `event-log-reviver-revives-string-params`, `step-pause-and-replay-semantics`, `logslice-flush-races-newrun-delete`, `heartbeat-events-persisted`
+  - Additional evidence: [full review](2026-10-24-0252-full.md), 2026-10-24.
+- [HOST] `host-storage-input-hardening` — **Reject unsafe run IDs and never discard save listings on an unreadable index.** `deleteRun('.')` removes every run on Node storage, and case aliases can bypass the active-run deletion guard on case-insensitive filesystems. Save rewrites a corrupt index with only the new entry and can overwrite another listed save through filesystem aliases. Validate underlying identity for run IDs and save names as well as their path syntax.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `runid-dot-segment-unsafe`, `save-overwrites-corrupt-index`
+  - Additional evidence: [full review](2026-10-24-0252-full.md), 2026-10-24; alias cases reproduced with temporary Node storage on macOS.
 - [HOST] `worker-failure-and-pacing` — **Report worker query and startup failures, and keep worker pacing in step with the host.** Failed queries never reply and leave the dashboard hanging; a failed startup restore strands the session; pacing changes before validation; and Start leaves the worker at the old speed.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `worker-errors-unobserved`, `startup-restore-failure-strands-session`, `worker-pacing-before-validation`, `newrun-speed-desync`
@@ -50,3 +52,11 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [TOOLING] `determinism-gate-integrity` — **Make the determinism checks fail when they compare nothing.** The CLI silently exits 0 from encoded paths, CLI output is never compared with the goldens, regeneration passes unconditionally, and the scheduled probes can be skipped.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `cli-ismain-url-mismatch`, `cli-golden-parity-unverified`, `golden-harness-silent-pass`, `main-validation-probe-gaps`
+- [UI] `timeline-retroactive-ordering` — **Keep promoted timeline events in event-time order before retaining and plotting them.** Retroactively promoted speciations are appended after newer milestones. The default view can show an old event as newest, draw it left of the SVG, and retain entries by promotion order rather than tick.
+  - Source: [full review](2026-10-24-0252-full.md), 2026-10-24
+  - Findings: `timeline-retroactive-ordering`
+  - Starting point: `ui/components/EventsTimelinePanel.tsx:283-316`. Exercise a speciation at tick 10, milestone at tick 20, then population promotion at tick 30. Keep stable tie ordering, display newest events first, and keep both markers inside the timeline; cover truncation after retroactive promotion.
+- [UI] `switch-run-narrow-modal-clipping` — **Keep run-switch controls inside the viewport on narrow screens.** The dialog's 480px minimum plus padding defeats its viewport maximum: at 390px the dialog is 530px wide and Cancel extends beyond the right edge.
+  - Source: [full review](2026-10-24-0252-full.md), 2026-10-24
+  - Findings: `switch-run-narrow-modal-clipping`
+  - Starting point: `ui/styles.css:2064-2072`, `ui/components/SwitchRunModal.tsx:106-118`. Use a viewport-bounded box width and allow rows/creation controls to wrap; verify a 390px viewport and the existing desktop layout.

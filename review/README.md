@@ -6,6 +6,7 @@ The [historical project-direction review](../docs/PROJECT_REVIEW.md) records `c8
 
 | Review (UTC)                                       | Type        | Reviewed commit | Open findings at close |
 | -------------------------------------------------- | ----------- | --------------- | ---------------------- |
+| [2026-10-24 02:52](2026-10-24-0252-full.md)        | Full        | `ba1848b`       | 63                     |
 | [2026-10-12 18:30](2026-10-12-1830-incremental.md) | Incremental | `9eb84dd`       | 58                     |
 | [2026-10-08 07:01](2026-10-08-0701-full.md)        | Full        | `9b37eed`       | 62                     |
 
