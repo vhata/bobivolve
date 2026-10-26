@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 
 test('named save deletion confirms the name, preserves cancel and other saves, and survives reload', async ({
   page,
 }) => {
   await page.addInitScript(() => window.localStorage.setItem('bobivolve:nux-seen', '1'));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   for (const slot of ['delete-fixture', 'keep-fixture']) {
     page.once('dialog', (dialog) => {

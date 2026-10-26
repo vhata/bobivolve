@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 
 // Forensic replay: clicking a row in the events timeline rewinds the
 // sim to that event's tick. Destructive — post-tick state is forfeit.
@@ -15,7 +16,7 @@ test('clicking a timeline event rewinds the sim to that event tick', async ({ pa
   test.setTimeout(60_000);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
 
   // Crank to 64× so a speciation lands in a reasonable window.
   await page.getByRole('button', { name: '64×', exact: true }).click();

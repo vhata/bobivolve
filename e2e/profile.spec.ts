@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import * as fs from 'node:fs';
 
 // Disposable performance probe. We deliberately do NOT click any speed
@@ -38,7 +39,7 @@ test('@diagnostic profile: dashboard at default 4× speed across two windows', a
   test.setTimeout(120_000);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
 
   // Start runs at 4×. We let it warm up and capture
   // population at three timepoints alongside CDP metrics deltas.

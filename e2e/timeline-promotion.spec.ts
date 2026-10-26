@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import type { SimEvent } from '../protocol/types.js';
 import type { SimStoreState } from '../ui/sim-store.js';
 
@@ -71,7 +72,7 @@ async function emitSmallParentSpeciations(
 test('speciations from a patched small parent surface without show-all', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(

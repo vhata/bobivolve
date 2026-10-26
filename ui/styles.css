@@ -1208,7 +1208,8 @@ body {
 
 /* Rewind confirmation modal — modal-on-action for a destructive
    command. The backdrop is click-to-cancel; the dialog stops
-   propagation so clicks inside don't dismiss. */
+   propagation so clicks inside don't dismiss. The Run panel's
+   run-replacement confirmation (Start) shares these classes. */
 .rewind-confirm-backdrop {
   position: fixed;
   inset: 0;

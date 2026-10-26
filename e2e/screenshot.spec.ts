@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 
 // Disposable test that captures a full-page screenshot of the dashboard
 // after a few seconds of live sim. Useful for the assistant to eyeball
@@ -19,7 +20,7 @@ test('@diagnostic snapshot the dashboard visually', async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1400, height: 1100 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   // Let some growth happen so the panels have content to show.
   await page.waitForTimeout(3_000);
   await page.screenshot({
