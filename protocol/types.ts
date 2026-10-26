@@ -257,7 +257,8 @@ export interface QuarantineImposedEvent {
 
 export interface QuarantineLiftedEvent {
   readonly kind: 'quarantineLifted';
-  // Absent on manual releases and legacy events.
+  // Absent on manual releases, releases at lineage extinction, and
+  // legacy events.
   readonly reason?: 'computeExhausted';
   // Lineage whose quarantine just ended. Emitted only on actual state flip.
   readonly lineageId: string;

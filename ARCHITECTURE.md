@@ -60,9 +60,15 @@ Lint enforces some of these boundaries; tests and review cover what static rules
 
 ## Quarantine funding
 
-Each tick funds existing quarantine holds oldest-first from the starting Origin compute budget, releases holds that cannot be fully paid, then regenerates compute. Released lineages can replicate during that same tick. Hold priority is Set insertion order, preserved by the existing snapshot array; releasing and reimposing a hold gives it a new position. Funding consumes no PRNG draws. Automatic releases emit `quarantineLifted` with optional reason `computeExhausted`; manual and legacy releases omit it. The dashboard clears the hold and reports the reason in the timeline.
+Each tick funds existing quarantine holds oldest-first from the starting Origin compute budget, releases holds that cannot be fully paid, then regenerates compute. Released lineages can replicate during that same tick. Hold priority is Set insertion order, preserved by the existing snapshot array; releasing and reimposing a hold gives it a new position. Funding consumes no PRNG draws. Automatic releases emit `quarantineLifted` with optional reason `computeExhausted`; manual, extinction and legacy releases omit it. The dashboard clears the hold and reports the reason in the timeline.
 
 Existing snapshots retain their hold order, but future ticks use this funded-only rule. Replaying historical underfunded holds from before this change can produce different outcomes; cross-version simulation replay is not guaranteed. Current-version direct runs, saves, and command replay share the rule.
+
+## Interventions on extinct lineages
+
+Extinction is permanent, so interventions treat a lineage with no extant probes as unreachable. The host rejects a patch or a new quarantine hold on such a lineage with a `commandError`; releasing an existing hold is still accepted. When a held lineage goes extinct, the extinction phase releases the hold in the same tick and emits `quarantineLifted` without a reason directly after the `extinction` event, so the hold draws no maintenance from the next tick and no longer outranks holds on living lineages. Snapshots written before this rule can carry a hold on an already-extinct lineage; restore keeps it until the player releases it.
+
+A decree whose patch target has no extant probes when its trigger fires is consumed and emits `decreeFired` with `landed: false` and `probesAffected: 0`; it mints no patch id and records no patch. An unknown patch target is a broken invariant and throws. The host rejects a `populationBelow` threshold of 0, which no population can be strictly below.
 
 ## Player attention groups
 
