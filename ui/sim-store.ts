@@ -99,6 +99,9 @@ export interface PendingCommand {
   readonly targetTick?: bigint;
   readonly runId?: string;
   readonly slot?: string;
+  // For save commands: the timeline the save was taken from. An ack that
+  // arrives after a run change must not label the new run as saved.
+  readonly timelineEpoch?: number;
 }
 
 const RETRY_AFTER_MS = 1_000;
@@ -202,11 +205,40 @@ export interface SimStoreState {
   readonly rehydrateAfterLoad: () => Promise<void>;
 }
 
+// Modal-on-action pause: pause unless the player already had, and return
+// the matching close action. Closing resumes only if this call paused and
+// the connection and timeline are unchanged; a run change or reconnect
+// sets its own paused state, which a late resume must not override.
+export function pauseWhileOpen(): () => void {
+  const opened = useSimStore.getState();
+  if (opened.paused || opened.transport === null) return () => {};
+  opened.pause();
+  const { transport, timelineEpoch } = useSimStore.getState();
+  return () => {
+    const closing = useSimStore.getState();
+    if (closing.transport === transport && closing.timelineEpoch === timelineEpoch)
+      closing.resume();
+  };
+}
+
 let nextCommandOrdinal = 0;
 function mintCommandId(prefix: string): string {
   const id = `${prefix}-${nextCommandOrdinal.toString()}`;
   nextCommandOrdinal += 1;
   return id;
+}
+
+// Drop in-flight commands of the given kinds. A newer pause or resume
+// supersedes every older one, and a newer setSpeed every older setSpeed:
+// only the latest intent is retried, so a retry can never re-send an
+// older command after a newer one and leave the host and UI disagreeing.
+function supersedePending(
+  pending: Map<string, PendingCommand>,
+  ...kinds: readonly PendingCommand['kind'][]
+): void {
+  for (const [commandId, cmd] of pending) {
+    if (kinds.includes(cmd.kind)) pending.delete(commandId);
+  }
 }
 
 // True if any pending command's kind matches one of the supplied kinds.
@@ -280,6 +312,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     paused: state.paused,
     actualSpeed: state.actualSpeed,
     selectedLineageId: state.selectedLineageId,
+    lastSaveAtTick: state.lastSaveAtTick,
     quarantinedLineages: state.quarantinedLineages,
     patchedLineages: state.patchedLineages,
     originCompute: state.originCompute,
@@ -325,6 +358,99 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     interventionReplies.clear();
   };
 
+  // Optimistic writes the host can still reject: pause / resume, speed,
+  // quarantine toggles and auto-pause triggers. Each slot holds the value
+  // the host last accepted and the writes still awaiting a reply, oldest
+  // first. The projection shows the newest write; once every write has a
+  // reply, it shows the last accepted value, so a rejection rolls back to
+  // what the host actually holds. The host answers commands in order, so
+  // a reply to one write means any older write still waiting was lost.
+  // Slots tied to a timeline (`epoch`) are dropped silently once the
+  // timeline changes, because the change resets their projection.
+  interface OptimisticSlot {
+    confirmed: unknown;
+    readonly epoch: number | null;
+    readonly writes: string[];
+    readonly values: Map<string, unknown>;
+    readonly show: (value: unknown) => void;
+  }
+  const optimisticSlots = new Map<string, OptimisticSlot>();
+  const optimisticCommands = new Map<string, string>();
+
+  function writeOptimistic<T>(
+    slotKey: string,
+    commandId: string,
+    current: T,
+    value: T,
+    epoch: number | null,
+    show: (value: T) => void,
+  ): void {
+    let slot = optimisticSlots.get(slotKey);
+    if (slot === undefined || slot.epoch !== epoch) {
+      slot = {
+        confirmed: current,
+        epoch,
+        writes: [],
+        values: new Map(),
+        show: show as (value: unknown) => void,
+      };
+      optimisticSlots.set(slotKey, slot);
+    }
+    slot.writes.push(commandId);
+    slot.values.set(commandId, value);
+    optimisticCommands.set(commandId, slotKey);
+    show(value);
+  }
+
+  function settleOptimistic(commandId: string, accepted: boolean): void {
+    const slotKey = optimisticCommands.get(commandId);
+    if (slotKey === undefined) return;
+    optimisticCommands.delete(commandId);
+    const slot = optimisticSlots.get(slotKey);
+    if (slot === undefined || !slot.values.has(commandId)) return;
+    if (accepted) slot.confirmed = slot.values.get(commandId);
+    for (const answered of slot.writes.splice(0, slot.writes.indexOf(commandId) + 1)) {
+      slot.values.delete(answered);
+      optimisticCommands.delete(answered);
+    }
+    if (slot.writes.length > 0) return;
+    optimisticSlots.delete(slotKey);
+    if (slot.epoch !== null && slot.epoch !== get().timelineEpoch) return;
+    slot.show(slot.confirmed);
+  }
+
+  // Host-originated changes (QuarantineImposed / Lifted, AutoPaused) move
+  // the accepted value of a slot that still has writes in flight.
+  function confirmOptimistic(slotKey: string, value: unknown): void {
+    const slot = optimisticSlots.get(slotKey);
+    if (slot !== undefined) slot.confirmed = value;
+  }
+
+  function resetOptimistic(): void {
+    optimisticSlots.clear();
+    optimisticCommands.clear();
+  }
+
+  function showQuarantined(lineageId: string, quarantined: boolean): void {
+    const current = get().quarantinedLineages;
+    if (current.has(lineageId) === quarantined) return;
+    const next = new Set(current);
+    if (quarantined) next.add(lineageId);
+    else next.delete(lineageId);
+    set({ quarantinedLineages: next });
+  }
+
+  // actualSpeed reads the last Tick heartbeat; once paused, no more
+  // heartbeats fire and the lingering value reads as if the sim were
+  // still running. Reset it explicitly.
+  function showPaused(paused: boolean): void {
+    set(paused ? { paused, actualSpeed: 0 } : { paused });
+  }
+
+  function writePaused(commandId: string, paused: boolean): void {
+    writeOptimistic('paused', commandId, get().paused, paused, get().timelineEpoch, showPaused);
+  }
+
   function retryStalePending(): void {
     const state = get();
     const transport = state.transport;
@@ -332,14 +458,22 @@ export const useSimStore = create<SimStoreState>((set, get) => {
     const now = Date.now();
     const updated = new Map(state.pendingCommands);
     let changed = false;
+    let expired: PendingCommand | null = null;
     for (const cmd of state.pendingCommands.values()) {
       if (now - cmd.issuedAtMs < RETRY_AFTER_MS) continue;
-      if (cmd.retryCount >= MAX_RETRIES) continue;
       // Only commands that are safe to repeat without changing semantics.
       // pause/resume are idempotent state toggles; setSpeed re-asserts a
       // value. newRun, save, and load have side effects that shouldn't
       // be repeated silently.
       if (cmd.kind !== 'pause' && cmd.kind !== 'resume' && cmd.kind !== 'setSpeed') continue;
+      if (cmd.retryCount >= MAX_RETRIES) {
+        // Give up: stop showing the command as in flight and tell the
+        // player rather than leaving the pending indicator stuck.
+        updated.delete(cmd.commandId);
+        expired = cmd;
+        changed = true;
+        continue;
+      }
       console.error(
         `SimStore: command ${cmd.commandId} (${cmd.kind}) unacked after ${
           now - cmd.issuedAtMs
@@ -363,7 +497,12 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         });
       }
     }
-    if (changed) set({ pendingCommands: updated });
+    if (expired !== null) {
+      set({
+        pendingCommands: updated,
+        commandError: `The simulation did not acknowledge ${expired.kind}; it may not have taken effect.`,
+      });
+    } else if (changed) set({ pendingCommands: updated });
   }
 
   // Heartbeats are explicitly best-effort per ARCHITECTURE.md. Coalesce
@@ -506,15 +645,20 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         return;
       }
       case 'autoPaused':
+        confirmOptimistic('paused', true);
         set({
           simTick: event.simTick,
           paused: true,
+          // No heartbeats arrive while paused; clear the running reading
+          // as a manual pause does.
+          actualSpeed: 0,
           lastAutoPauseTrigger: event.trigger,
         });
         return;
       case 'commandAck': {
         interventionReplies.get(event.commandId)?.(null);
         interventionReplies.delete(event.commandId);
+        settleOptimistic(event.commandId, true);
         // Confirm a pending command by removing it from the map. The
         // optimistic state set when the command was sent stays — the
         // ack just promotes it from "projected" to "confirmed".
@@ -561,7 +705,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
               saves: get().saves.filter((save) => save.slot !== ackedEntry.slot),
             });
           } else if (ackedEntry.kind === 'save') {
-            set({ pendingCommands: pending, lastSaveAtTick: event.simTick });
+            set(
+              ackedEntry.timelineEpoch === get().timelineEpoch
+                ? { pendingCommands: pending, lastSaveAtTick: event.simTick }
+                : { pendingCommands: pending },
+            );
             // Refresh the saves list so the new entry appears in the UI
             // without the player needing to hit a Refresh button.
             void get().refreshSaves();
@@ -583,6 +731,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       case 'commandError': {
         interventionReplies.get(event.commandId)?.(event.message);
         interventionReplies.delete(event.commandId);
+        settleOptimistic(event.commandId, false);
         set({ commandError: event.message });
         // Roll back the optimistic projection for this command.
         const pending = new Map(get().pendingCommands);
@@ -596,10 +745,10 @@ export const useSimStore = create<SimStoreState>((set, get) => {
             cancelPendingTick();
             set({ ...previous, pendingCommands: pending, paused: true, actualSpeed: 0 });
             void get().rehydrateAfterLoad();
-          } else if (entry.projection?.paused === true) {
-            set({ pendingCommands: pending, paused: false });
-          } else if (entry.projection?.paused === false) {
-            set({ pendingCommands: pending, paused: true });
+          } else if (entry.kind === 'deleteRun') {
+            // The row was dropped optimistically; the listing restores it.
+            set({ pendingCommands: pending });
+            void get().refreshRuns();
           } else {
             set({ pendingCommands: pending });
           }
@@ -629,15 +778,13 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         // throttled Tick heartbeat instead.
         return;
       case 'quarantineImposed': {
-        const next = new Set(get().quarantinedLineages);
-        next.add(event.lineageId);
-        set({ quarantinedLineages: next });
+        confirmOptimistic(`quarantine:${event.lineageId}`, true);
+        showQuarantined(event.lineageId, true);
         return;
       }
       case 'quarantineLifted': {
-        const next = new Set(get().quarantinedLineages);
-        next.delete(event.lineageId);
-        set({ quarantinedLineages: next });
+        confirmOptimistic(`quarantine:${event.lineageId}`, false);
+        showQuarantined(event.lineageId, false);
         return;
       }
       case 'patchApplied':
@@ -701,6 +848,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         settleInterventions('Connection changed before the command was acknowledged.');
       }
       unsubscribe = transport.onEvent(handleEvent);
+      resetOptimistic();
       if (retryHandle === null) {
         retryHandle = setInterval(retryStalePending, 500);
       }
@@ -732,6 +880,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       cancelPendingTick();
       transport.close();
       settleInterventions('Connection closed before the command was acknowledged.');
+      resetOptimistic();
       // Pending commands sent to the now-closed transport will never see
       // their ack — drop them so the retry loop doesn't try to re-send
       // them through some future transport. (React StrictMode exercises
@@ -776,6 +925,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         actualSpeed: 0,
         pendingCommands: pending,
         selectedLineageId: 'L0',
+        lastSaveAtTick: null,
         quarantinedLineages: new Set(),
         patchedLineages: new Set(),
         originCompute: null,
@@ -806,6 +956,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-pause');
       const pending = new Map(get().pendingCommands);
+      supersedePending(pending, 'pause', 'resume');
       pending.set(commandId, {
         commandId,
         kind: 'pause',
@@ -813,10 +964,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { paused: true },
       });
-      // actualSpeed reads the last Tick heartbeat; once paused, no more
-      // heartbeats fire and the lingering value reads as if the sim were
-      // still running. Reset it explicitly.
-      set({ paused: true, actualSpeed: 0, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      writePaused(commandId, true);
       transport.send({ kind: 'pause', commandId });
     },
     resume: () => {
@@ -824,6 +973,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-resume');
       const pending = new Map(get().pendingCommands);
+      supersedePending(pending, 'pause', 'resume');
       pending.set(commandId, {
         commandId,
         kind: 'resume',
@@ -831,7 +981,8 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { paused: false },
       });
-      set({ paused: false, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      writePaused(commandId, false);
       transport.send({ kind: 'resume', commandId });
     },
     setSpeed: (speed) => {
@@ -839,6 +990,7 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-setSpeed');
       const pending = new Map(get().pendingCommands);
+      supersedePending(pending, 'setSpeed');
       pending.set(commandId, {
         commandId,
         kind: 'setSpeed',
@@ -846,7 +998,11 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         retryCount: 0,
         projection: { speed },
       });
-      set({ speed, pendingCommands: pending });
+      set({ pendingCommands: pending });
+      // Speed is host-wide rather than per timeline.
+      writeOptimistic('speed', commandId, get().speed, speed, null, (value) =>
+        set({ speed: value }),
+      );
       transport.send({ kind: 'setSpeed', commandId, speed });
     },
     save: (slot = 'default') => {
@@ -854,7 +1010,13 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       if (transport === null) return;
       const commandId = mintCommandId('ui-save');
       const pending = new Map(get().pendingCommands);
-      pending.set(commandId, { commandId, kind: 'save', issuedAtMs: Date.now(), retryCount: 0 });
+      pending.set(commandId, {
+        commandId,
+        kind: 'save',
+        issuedAtMs: Date.now(),
+        retryCount: 0,
+        timelineEpoch: get().timelineEpoch,
+      });
       // Clear any prior "saved at" indicator while a fresh save is in
       // flight; the ack handler will set it again.
       set({ pendingCommands: pending, lastSaveAtTick: null });
@@ -898,6 +1060,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         paused: true,
         actualSpeed: 0,
         selectedLineageId: 'L0',
+        // The client cannot learn a loaded run's seed or save history.
+        seed: null,
+        lastSaveAtTick: null,
         // The post-Load snapshot may carry a quarantined set, but the
         // client doesn't pull it down today. Resetting to empty matches
         // what the client will observe from the absent events; future
@@ -1001,23 +1166,32 @@ export const useSimStore = create<SimStoreState>((set, get) => {
       // Optimistic flip on the local store. The host echoes via
       // QuarantineImposed if the state actually changed, which
       // re-asserts the flip; on idempotent ack-only the state already
-      // matches and the echo is a no-op. On commandError (unknown
-      // lineage, pre-newRun) the optimistic flip is what's exposed
-      // to the player — surfaceable as a roll-back is a future polish.
-      const next = new Set(get().quarantinedLineages);
-      next.add(lineageId);
+      // matches. On commandError (unknown lineage, pre-newRun, a run
+      // change in progress) the flip rolls back.
       const commandId = mintCommandId('ui-quarantine');
+      writeOptimistic(
+        `quarantine:${lineageId}`,
+        commandId,
+        get().quarantinedLineages.has(lineageId),
+        true,
+        get().timelineEpoch,
+        (quarantined) => showQuarantined(lineageId, quarantined),
+      );
       transport.send({ kind: 'quarantine', commandId, lineageId });
-      set({ quarantinedLineages: next });
     },
     releaseQuarantine: (lineageId) => {
       const transport = get().transport;
       if (transport === null) return;
-      const next = new Set(get().quarantinedLineages);
-      next.delete(lineageId);
       const commandId = mintCommandId('ui-releaseQuarantine');
+      writeOptimistic(
+        `quarantine:${lineageId}`,
+        commandId,
+        get().quarantinedLineages.has(lineageId),
+        false,
+        get().timelineEpoch,
+        (quarantined) => showQuarantined(lineageId, quarantined),
+      );
       transport.send({ kind: 'releaseQuarantine', commandId, lineageId });
-      set({ quarantinedLineages: next });
     },
     applyPatch: (lineageId, firmware) => {
       const transport = get().transport;
@@ -1206,6 +1380,9 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         paused: true,
         actualSpeed: 0,
         selectedLineageId: 'L0',
+        // The client cannot learn another run's seed or save history.
+        seed: null,
+        lastSaveAtTick: null,
         quarantinedLineages: new Set(),
         patchedLineages: new Set(),
         originCompute: null,
@@ -1226,19 +1403,32 @@ export const useSimStore = create<SimStoreState>((set, get) => {
         issuedAtMs: Date.now(),
         retryCount: 0,
       });
-      // Optimistically drop the slot from the local list; the host
-      // will ack and the next refreshRuns will catch any divergence.
+      // Optimistically drop the slot from the local list; a rejection
+      // refreshes the listing so the slot reappears.
       const runs = get().runs.filter((r) => r.runId !== runId);
       set({ pendingCommands: pending, runs });
       transport.send({ kind: 'deleteRun', commandId, runId });
     },
     setAutoPauseTriggers: (triggers) => {
       const transport = get().transport;
-      set({ autoPauseTriggers: new Set(triggers) });
-      if (transport === null) return;
+      if (transport === null) {
+        set({ autoPauseTriggers: new Set(triggers) });
+        return;
+      }
+      // Arming lives on the host, not in the timeline, so a rejected
+      // write rolls back even across a run change.
+      const commandId = mintCommandId('ui-configureAutoPause');
+      writeOptimistic<ReadonlySet<string>>(
+        'autoPause',
+        commandId,
+        get().autoPauseTriggers,
+        new Set(triggers),
+        null,
+        (autoPauseTriggers) => set({ autoPauseTriggers }),
+      );
       transport.send({
         kind: 'configureAutoPause',
-        commandId: 'ui-configureAutoPause',
+        commandId,
         enabledTriggers: [...triggers],
       });
     },
