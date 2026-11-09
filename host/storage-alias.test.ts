@@ -154,7 +154,7 @@ for (const { name, skip, make } of storages) {
       await expectActiveIntact();
       expect(host.currentTick()).toBe(50n);
       expect(await runIds()).toEqual(['active', 'sibling']);
-      // The refusal leaves the active run deletable by nobody.
+      // The active run itself stays protected under its exact name.
       expect(await send({ kind: 'deleteRun', runId: 'active' }, 'delete')).toMatchObject({
         kind: 'commandError',
       });
@@ -172,6 +172,43 @@ for (const { name, skip, make } of storages) {
       });
       expect(await storage.exists('runs/sibling/log.ndjson')).toBe(true);
       expect(await runIds()).toEqual(['active', 'sibling']);
+    });
+
+    function boundHost(runId: string): { host: NodeHost; replies: SimEvent[] } {
+      const bound = new NodeHost({ heartbeatHz: 0, persistence: { storage, runId } });
+      const replies: SimEvent[] = [];
+      bound.subscribe((event) => replies.push(event));
+      return { host: bound, replies };
+    }
+
+    it('refuses to delete the listed spelling of the run the host is bound to', async () => {
+      // A host bound to ACTIVE (the CLI could do this before it checked
+      // aliases) uses runs/active. "active" is an exact listed name, so
+      // only the active-run fold check stands between it and deletion.
+      const { host: bound, replies } = boundHost('ACTIVE');
+      bound.send({ kind: 'deleteRun', commandId: 'delete', runId: 'active' });
+      await bound.flush();
+      expect(replies.find((event) => event.kind === 'commandError')).toMatchObject({
+        commandId: 'delete',
+        message: expect.stringContaining('may name the active run-slot'),
+      });
+      expect(replies.some((event) => event.kind === 'commandAck')).toBe(false);
+      expect(await storage.exists('runs/active/log.ndjson')).toBe(true);
+      expect(await storage.exists('runs/active/snapshots/0.snap')).toBe(true);
+    });
+
+    it('refuses to switch to an alias of a fresh active slot with no directory', async () => {
+      const { host: bound, replies } = boundHost('Fresh');
+      bound.send({ kind: 'switchRun', commandId: 'switch', runId: 'FRESH' });
+      await bound.flush();
+      expect(replies.find((event) => event.kind === 'commandError')).toMatchObject({
+        commandId: 'switch',
+        message: expect.stringContaining('"Fresh"'),
+      });
+      expect(replies.some((event) => event.kind === 'commandAck')).toBe(false);
+      const result = await bound.executeQuery({ kind: 'listRuns', queryId: 'runs' });
+      if (result.kind !== 'listRuns') throw new Error('unexpected query');
+      expect(result.activeRunId).toBe('Fresh');
     });
 
     it('still switches to and deletes slots by their exact spelling', async () => {
@@ -206,6 +243,43 @@ for (const { name, skip, make } of storages) {
     });
   });
 }
+
+// An older build on a case-sensitive adapter (OPFS, most Linux
+// filesystems) could create two slots differing only by case. They are
+// distinct directories there, so each stays reachable by its exact name.
+class LegacyPairStorage extends NodeStorage {
+  override async listEntries(key: string): Promise<readonly StorageDirEntry[]> {
+    const entries = await super.listEntries(key);
+    return key === 'runs' ? [...entries, { name: 'Sibling', kind: 'directory' }] : entries;
+  }
+}
+
+describe('run-slot pairs left by older builds on case-sensitive storage', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'bobivolve-alias-legacy-'));
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('switches to the exactly listed sibling despite a listed Sibling', async () => {
+    const storage = new LegacyPairStorage({ root });
+    await storage.write('runs/sibling/log.ndjson', new TextEncoder().encode(''));
+    const host = new NodeHost({ heartbeatHz: 0, persistence: { storage, runId: 'active' } });
+    const events: SimEvent[] = [];
+    host.subscribe((event) => events.push(event));
+    host.send({ kind: 'switchRun', commandId: 'switch', runId: 'sibling' });
+    await host.flush();
+    expect(events.filter((event) => event.kind === 'commandError')).toEqual([]);
+    expect(events.find((event) => event.kind === 'commandAck')).toMatchObject({
+      commandId: 'switch',
+    });
+    const result = await host.executeQuery({ kind: 'listRuns', queryId: 'runs' });
+    if (result.kind !== 'listRuns') throw new Error('unexpected query');
+    expect(result.activeRunId).toBe('sibling');
+  });
+});
 
 describe('run-slot aliases through Unicode normalization', () => {
   let root: string;
