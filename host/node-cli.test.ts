@@ -451,3 +451,46 @@ describe('CLI intervention scripts', () => {
     }
   });
 });
+
+describe('CLI run-slot identity', () => {
+  let root: string;
+  let io: CapturedIO;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'bobivolve-cli-alias-'));
+    io = captureProcessIo();
+  });
+  afterEach(() => {
+    io.restore();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const args = (runId: string): string[] => [
+    '--seed',
+    '42',
+    '--ticks',
+    '10',
+    '--no-heartbeat',
+    '--save-dir',
+    root,
+    '--run-id',
+    runId,
+  ];
+
+  it('refuses a --run-id that aliases an existing slot and leaves the slot untouched', async () => {
+    expect(await runCli(args('active'))).toBe(0);
+    const log = readFileSync(join(root, 'runs', 'active', 'log.ndjson'));
+    expect(await runCli(args('ACTIVE'))).toBe(2);
+    expect(io.stderr).toContain('--run-id "ACTIVE" may name existing run-slot "active"');
+    expect(readFileSync(join(root, 'runs', 'active', 'log.ndjson'))).toEqual(log);
+    const runs = await new NodeStorage({ root }).listEntries('runs');
+    expect(runs.filter((entry) => entry.kind === 'directory').map((entry) => entry.name)).toEqual([
+      'active',
+    ]);
+  });
+
+  it('still binds to an existing slot by its exact name', async () => {
+    expect(await runCli(args('active'))).toBe(0);
+    expect(await runCli(args('active'))).toBe(0);
+    expect(io.stderr).toBe('');
+  });
+});

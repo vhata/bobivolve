@@ -170,17 +170,29 @@ async function listRunSlotIds(storage: RunsCapableStorage): Promise<string[]> {
     .map((entry) => entry.name);
 }
 
+// Returns a run ID, from `knownRunIds` or the slots listed in storage,
+// that `runId` may alias without matching any of them exactly
+// (run-id.ts). Shared by the run-slot commands and the CLI's --run-id.
+export async function findRunSlotAlias(
+  storage: Storage,
+  knownRunIds: readonly string[],
+  runId: string,
+): Promise<string | undefined> {
+  const listed = isRunsCapable(storage) ? await listRunSlotIds(storage) : [];
+  return findAliasedRunId([...knownRunIds, ...listed], runId);
+}
+
 // Refuses a run ID that may alias the active run or a listed slot without
-// being spelled exactly like it (run-id.ts). Runs before anything is
-// written, so a refused switch or delete changes nothing on disk.
+// being spelled exactly like it. Runs before anything is written, so a
+// refused switch or delete changes nothing on disk. The active run is
+// included because a fresh slot has no directory to list yet.
 async function assertNoRunSlotAlias(
   storage: Storage,
   activeRunId: string,
   runId: string,
   refusal: string,
 ): Promise<void> {
-  const listed = isRunsCapable(storage) ? await listRunSlotIds(storage) : [];
-  const alias = findAliasedRunId([activeRunId, ...listed], runId);
+  const alias = await findRunSlotAlias(storage, [activeRunId], runId);
   if (alias !== undefined) {
     throw new Error(
       `Cannot ${refusal} run-slot ${JSON.stringify(runId)}: run-slot ${JSON.stringify(alias)} has a name differing only by case or Unicode normalization.`,

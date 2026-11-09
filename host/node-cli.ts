@@ -29,7 +29,7 @@
 import { readFile } from 'node:fs/promises';
 import { parseCommandScript, type ScriptCommand } from './command-script.js';
 import { parseArgs } from 'node:util';
-import { NodeHost } from './node.js';
+import { NodeHost, findRunSlotAlias } from './node.js';
 import { isValidRunId } from './run-id.js';
 import { NodeStorage } from './storage-node.js';
 import { NodeTransport } from '../transport/node.js';
@@ -131,6 +131,27 @@ export async function runCli(argv: readonly string[]): Promise<number> {
   }
 
   const storage = opts.saveDir === null ? null : new NodeStorage({ root: opts.saveDir });
+  if (storage !== null && opts.runId !== null) {
+    // Without --resume the host binds to the slot directly, bypassing
+    // switchRun's identity check, so apply the same rule here: a spelling
+    // that may reach an existing slot's directory under another name would
+    // list one directory twice and let deleteRun target the bound run.
+    let alias: string | undefined;
+    try {
+      alias = await findRunSlotAlias(storage, [], opts.runId);
+    } catch (error) {
+      process.stderr.write(
+        `bobivolve: cannot list run slots: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      return 1;
+    }
+    if (alias !== undefined) {
+      process.stderr.write(
+        `bobivolve: --run-id ${JSON.stringify(opts.runId)} may name existing run-slot ${JSON.stringify(alias)}, which differs only by case or Unicode normalization; use the exact name\n`,
+      );
+      return 2;
+    }
+  }
   const persistence =
     storage !== null && opts.runId !== null
       ? { storage, runId: opts.resume ? `${opts.runId}-cli-startup` : opts.runId }
