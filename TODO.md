@@ -63,10 +63,6 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
   - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
   - Blocked by: PR #42 must land.
 
-- [HOST] `logslice-map-value-revival` — **Return the same value types from logSlice on every transport.** In-process and worker `logSlice` results carry tick `populationByLineage` values as strings, because `bigintReviver` in `host/event-log.ts` skips map values; the stdio codec revives them to `bigint` after PR #39. #host #protocol
-  - Source: independent review of `review/protocol-contract-parity` (PR #39), reproduced 2026-10-09.
-  - Related: `event-log-replay-fidelity`
-
 - [PERFORMANCE] `opfs-sync-append` — **Append to OPFS logs without rewriting the whole file.** Chromium's `OPFSStorage.append` path copies the whole file per append (measured once locally: about 2 ms at 1 MiB, 10–34 ms at 8 MiB, about 50 ms at 44 MiB). With PR #44's 1 s flush that is a whole-file rewrite each second on long runs; `createSyncAccessHandle` in the worker would make appends proportional to new data. #host #performance
   - Source: `review/browser-run-log-durability` writer report (PR #44), 2026-10-09.
   - Related: `browser-session-budgets`
