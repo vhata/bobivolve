@@ -26,9 +26,6 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 - [HOST] `worker-failure-and-pacing` — **Report worker query and startup failures, and keep worker pacing in step with the host.** Failed queries never reply and leave the dashboard hanging; a failed startup restore strands the session; pacing changes before validation; and Start leaves the worker at the old speed.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `worker-errors-unobserved`, `startup-restore-failure-strands-session`, `worker-pacing-before-validation`, `newrun-speed-desync`
-- [UI] `ui-projection-consistency` — **Keep the dashboard's projected state consistent with the host after retries, rejections and selection or run changes.** Retries can reorder pause and resume, optimistic toggles never roll back, and several indicators show stale values.
-  - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
-  - Findings: `pause-resume-retry-reorders`, `autopause-leaves-actual-speed`, `stale-seed-and-save-indicator`, `optimistic-commands-no-rollback`, `inspector-stale-drift-on-select`
 - [TOOLING] `determinism-gate-integrity` — **Make the determinism checks fail when they compare nothing.** The CLI silently exits 0 from encoded paths, CLI output is never compared with the goldens, regeneration passes unconditionally, and the scheduled probes can be skipped.
   - Source: [full review](2026-10-08-0701-full.md), 2026-10-08
   - Findings: `cli-ismain-url-mismatch`, `cli-golden-parity-unverified`, `golden-harness-silent-pass`, `main-validation-probe-gaps`
