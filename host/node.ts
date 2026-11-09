@@ -54,7 +54,8 @@ import {
 } from './event-log.js';
 import { deserializeSnapshot, serializeSnapshot } from './snapshot-codec.js';
 import { patchProvenance } from './patch-provenance.js';
-import { isValidRunId } from './run-id.js';
+import { aliasesRunId, findAliasedRunId, isValidRunId } from './run-id.js';
+import { findAliasedName } from './storage-key.js';
 
 // Heartbeat cadence. Best-effort — the UI must not depend on heartbeat ticks
 // for correctness (ARCHITECTURE.md "Heartbeat: ... Best-effort delivery").
@@ -158,6 +159,33 @@ function isRunsCapable(storage: object): storage is RunsCapableStorage {
     'removeDirectory' in storage &&
     typeof (storage as { removeDirectory: unknown }).removeDirectory === 'function'
   );
+}
+
+// Run-slot directories under `runs/`, as the adapter spells them.
+// Dot-prefixed entries are reserved (run-id.ts) and never slots.
+async function listRunSlotIds(storage: RunsCapableStorage): Promise<string[]> {
+  const entries = await storage.listEntries('runs');
+  return entries
+    .filter((entry) => entry.kind === 'directory' && !entry.name.startsWith('.'))
+    .map((entry) => entry.name);
+}
+
+// Refuses a run ID that may alias the active run or a listed slot without
+// being spelled exactly like it (run-id.ts). Runs before anything is
+// written, so a refused switch or delete changes nothing on disk.
+async function assertNoRunSlotAlias(
+  storage: Storage,
+  activeRunId: string,
+  runId: string,
+  refusal: string,
+): Promise<void> {
+  const listed = isRunsCapable(storage) ? await listRunSlotIds(storage) : [];
+  const alias = findAliasedRunId([activeRunId, ...listed], runId);
+  if (alias !== undefined) {
+    throw new Error(
+      `Cannot ${refusal} run-slot ${JSON.stringify(runId)}: run-slot ${JSON.stringify(alias)} has a name differing only by case or Unicode normalization.`,
+    );
+  }
 }
 
 // Active run-slot marker. Plain UTF-8 file at the storage namespace
@@ -302,11 +330,11 @@ async function readSavesIndexForUpdate(storage: Storage, refusal: string): Promi
 // Some filesystem adapters fold case or canonically equivalent Unicode
 // names, so two listed slots could share one file. Returns a listed slot,
 // other than `slot` itself, whose name may resolve to the same file.
-function findAliasedSave(index: SavesIndex, slot: string): SaveSlotEntry | undefined {
-  const foldName = (name: string): string =>
-    name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
-  const foldedSlot = foldName(slot);
-  return index.saves.find((entry) => entry.slot !== slot && foldName(entry.slot) === foldedSlot);
+function findAliasedSave(index: SavesIndex, slot: string): string | undefined {
+  return findAliasedName(
+    index.saves.map((entry) => entry.slot),
+    slot,
+  );
 }
 
 function directiveToInspector(directive: Directive): ProbeInspectorDirective {
@@ -1612,6 +1640,12 @@ export class NodeHost {
     this.paused = true;
 
     this.transition(commandId, async () => {
+      // (0) Refuse a spelling that may reach an existing slot's directory
+      //     under another name. Accepting it would leave the host and the
+      //     active marker naming one directory twice, and deleteRun could
+      //     then target the active run through the other spelling.
+      await assertNoRunSlotAlias(persistence.storage, persistence.runId, runId, 'switch to');
+
       // (1) Snap-out the outgoing slot at its current tick if the
       //     state is live, so a future switch-back restores cleanly.
       //     Flush the active log writer first so any pending cmd/ev
@@ -1676,8 +1710,18 @@ export class NodeHost {
       this.error(commandId, `invalid runId: ${JSON.stringify(runId)}`);
       return;
     }
+    // Compare slot identity, not spelling: on a filesystem that folds
+    // case or Unicode normalization, an alias of the active run's ID
+    // removes the active run's directory.
     if (runId === this.persistence.runId) {
       this.error(commandId, `cannot delete the active run-slot (${runId}); switch away first`);
+      return;
+    }
+    if (aliasesRunId(runId, this.persistence.runId)) {
+      this.error(
+        commandId,
+        `cannot delete ${JSON.stringify(runId)}: it may name the active run-slot (${this.persistence.runId}) through case or Unicode normalization; switch away first`,
+      );
       return;
     }
     const persistence = this.persistence;
@@ -1686,7 +1730,9 @@ export class NodeHost {
       return;
     }
     const storage = persistence.storage;
+    const activeRunId = this.persistence.runId;
     this.enqueue(async () => {
+      await assertNoRunSlotAlias(storage, activeRunId, runId, 'delete');
       await storage.removeDirectory(`runs/${runId}`);
       this.ack(commandId);
     }, commandId);
@@ -1700,13 +1746,9 @@ export class NodeHost {
     }
     const storage = this.persistence.storage;
     const activeRunId = this.persistence.runId;
-    const entries = await storage.listEntries('runs');
     const runs = [];
-    for (const entry of entries) {
-      if (entry.kind !== 'directory') continue;
-      // Skip the active marker dotfile if it ever gets confused as a dir.
-      if (entry.name.startsWith('.')) continue;
-      runs.push(await inspectRunSlot(storage, entry.name));
+    for (const runId of await listRunSlotIds(storage)) {
+      runs.push(await inspectRunSlot(storage, runId));
     }
     // Active slot may not have a snapshot directory yet (fresh slot).
     // Make sure it appears in the list either way.

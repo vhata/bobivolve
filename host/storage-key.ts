@@ -26,3 +26,23 @@ export function splitStorageKey(adapter: string, key: string): readonly string[]
   }
   return segments;
 }
+
+// Filesystems that fold case or Unicode normalization (macOS and Windows
+// by default) resolve differently spelled names to one entry, so `Keep`
+// and `keep`, or `Café` in NFC and NFD, may be the same file. Two names
+// whose folded forms are equal may alias. The repeated case mapping
+// catches characters whose upper and lower forms differ in length or do
+// not round-trip, such as `ß`, `ẞ`, `ς` and `ſ`.
+export function foldStorageName(name: string): string {
+  return name.normalize('NFD').toLowerCase().toUpperCase().toLowerCase().normalize('NFD');
+}
+
+// Returns a name from `names`, spelled differently from `name`, that may
+// resolve to the same storage entry.
+export function findAliasedName(names: Iterable<string>, name: string): string | undefined {
+  const folded = foldStorageName(name);
+  for (const candidate of names) {
+    if (candidate !== name && foldStorageName(candidate) === folded) return candidate;
+  }
+  return undefined;
+}
