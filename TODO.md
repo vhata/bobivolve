@@ -6,6 +6,10 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
 
 ### Unprioritized
 
+- [TOOLING] `playwright-ubuntu-2604` — **Run the browser jobs on current GitHub runners again.** The CI and main-validation workflows pin `runs-on: ubuntu-24.04` because the locked Playwright cannot install Chromium on Ubuntu 26.04. Upgrade Playwright to a release that supports 26.04 and return to `ubuntu-latest`, or keep the pin deliberately and record why. #toolchain
+  - Source: `todo/ci-runner-playwright-chromium`, 2026-11-09.
+  - Starting point: Playwright 1.61.0 is the first release that registers `ubuntu26.04` as a supported platform; the lockfile has 1.59.1. Upgrade, rerun the full browser suite, then drop the pin.
+
 - [TOOLING] `e2e-pause-window-browser-closed` — **Make the dashboard pause-window browser test survive a closed page.** `e2e/dashboard.spec.ts` "pause clears the ... within a reasonable window" failed once with `expect.toBeVisible: Target page, context or browser has been closed` on a documentation-only commit, and passed on the three preceding runs of the same branch and on the re-run.
   - Source: main-validation run 38164550848 on PR #46, 2026-10-11; attempt 2 passed.
   - Starting point: the test's page lifetime around the pause assertion; the run's `error-context.md` artifact.

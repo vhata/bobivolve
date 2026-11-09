@@ -40,13 +40,13 @@ Install or refresh the hooks with `scripts/setup.sh` after changing hook configu
 - Documentation and trivial configuration changes need no new tests. Check links, claims, and relevant formatting. Existing hooks and CI still apply.
 - For tuning, compare representative seeded runs and explain the observed effect. An emergent outcome is not a correctness assertion merely because it occurred in the old version.
 
-Record commands and results under `## Validation` in the PR, with enough detail to reproduce any behaviour-specific check. Once appropriate checks pass, repeat them only when another change or unresolved concern justifies it. Complete the [independent review](../docket/CODE_REVIEW_GUIDE.md#pr-review-every-change) before handing a code PR to the user for final review.
+Record commands and results under `## Validation` in the PR, with enough detail to reproduce any behaviour-specific check. Once appropriate checks pass, repeat them only when another change or unresolved concern justifies it. Complete the [independent review](../docket/CODE_REVIEW_GUIDE.md#change-review-every-change) before handing a code PR to the user for final review.
 
 ## Workflow validation
 
 The workflow validators are vendored under [docket/scripts/](../docket/scripts/) and never edited here; `bash ~/.claude/skills/docket/install.sh --check` reports drift and `bash ~/.claude/skills/docket/install.sh` resyncs (see [docket/README.md](../docket/README.md)). `scripts/check.sh` runs `docket/scripts/check-queues.sh --strict` and `docket/scripts/check-links.sh`. In CI the `check` job also runs `docket/scripts/ci.sh`, which repeats both and, on pull requests, validates the PR markers against the queues at the base branch tip and the checked-out merge commit, reading the PR body as data from the event payload, or through `gh` when the payload is unusable. The regression harness for the scripts themselves (`tests/scripts.sh`) lives in the skill repository and runs in its CI, not here. Start the PR body with `## Why` and use exact markers from [docket/TODO_GUIDE.md](../docket/TODO_GUIDE.md#markers). Post the independent review as a PR comment, not in the body, which becomes the commit message; successful CI does not establish that review occurred.
 
-The [CI workflow](../.github/workflows/ci.yml) cancels superseded PR runs, while main runs are not cancelled by this concurrency policy. Node's major version is pinned in `.nvmrc`; CI reads it, and local workers should use Node 22. `package.json` and the lockfile pin the package-manager/dependency setup.
+The [CI workflow](../.github/workflows/ci.yml) cancels superseded PR runs, while main runs are not cancelled by this concurrency policy. Node's major version is pinned in `.nvmrc`; CI reads it, and local workers should use Node 22. Both workflows run on `ubuntu-24.04` rather than `ubuntu-latest`, because the locked Playwright cannot install Chromium on Ubuntu 26.04 (TODO `playwright-ubuntu-2604`). `package.json` and the lockfile pin the package-manager/dependency setup.
 
 ## Review inputs
 
