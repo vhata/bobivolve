@@ -4,6 +4,8 @@
 // Drives a NodeHost end-to-end from the command line, emitting NDJSON
 // SimEvents to stdout. ARCHITECTURE.md "Headless capability" — this is the
 // canonical reference for the determinism golden test.
+// test/determinism/cli-parity.test.ts runs this entrypoint and compares its
+// output with the checked-in goldens.
 //
 //   --seed <u64>          Required (unless --resume). splitmix64 seed.
 //   --ticks <u64>         Required. Sim ticks to advance to (absolute, not
@@ -21,12 +23,17 @@
 //   --resume              Resume a previously-saved run. Requires
 //                         --save-dir and --run-id. Restores the run log and
 //                         its latest snapshot, then continues to --ticks.
+//   --commands <path>     Optional. JSON array of { tick, command } entries
+//                         (host/command-script.ts). Each command is sent
+//                         when the run reaches its tick.
 //
 // Bigint encoding: proto3 JSON encodes uint64 as a string. We follow that
 // convention here so the NDJSON is round-trippable with a JSON parser that
 // does not natively understand bigints.
 
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { parseCommandScript, type ScriptCommand } from './command-script.js';
 import { parseArgs } from 'node:util';
 import { NodeHost, findRunSlotAlias } from './node.js';
@@ -238,10 +245,22 @@ export async function runCli(argv: readonly string[]): Promise<number> {
   }
 }
 
+// True when the module at moduleUrl is the script Node was asked to run.
+// Compares resolved filesystem paths rather than URL strings: import.meta.url
+// percent-encodes spaces and other characters and names the symlink-resolved
+// file, while process.argv[1] is a raw path that may pass through a symlink.
+export function isEntrypoint(moduleUrl: string, scriptPath: string | undefined): boolean {
+  if (scriptPath === undefined) return false;
+  try {
+    return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(scriptPath);
+  } catch {
+    return false;
+  }
+}
+
 // Top-level entry. node:util's parseArgs takes argv after process.argv[1],
 // per Node's convention.
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+if (isEntrypoint(import.meta.url, process.argv[1])) {
   const argv = process.argv.slice(2);
   runCli(argv).then(
     (code) => {
