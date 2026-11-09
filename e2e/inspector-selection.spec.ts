@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import type { SimStoreState } from '../ui/sim-store.js';
 
 test('the inspector never shows or patches from the previous lineage after a selection change', async ({
@@ -7,7 +8,7 @@ test('the inspector never shows or patches from the previous lineage after a sel
   test.setTimeout(60_000);
   await page.addInitScript(() => localStorage.setItem('bobivolve:nux-seen', '1'));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(

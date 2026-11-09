@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickStart } from './start-run.js';
 
 // The active run must survive a reload that the player did not prepare
 // for. The reload tests in dashboard.spec.ts pause first, and Pause has
@@ -59,7 +60,7 @@ function displayedTick(text: string | null): number {
 test('reload while running restores the run without a pause', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   const populationMeta = page.locator('.population-panel .panel-meta');
   await expect(populationMeta).toContainText(/simTick [1-9]\d{2,}/, { timeout: 20_000 });
   const tick = displayedTick(await populationMeta.textContent());
@@ -82,7 +83,7 @@ test('reload while running restores the run without a pause', async ({ page }) =
 test('a command issued while paused survives a reload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Seed' }).fill('2026');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   const founder = page.locator('.lineage-tree button[aria-pressed]').first();
   await expect(founder).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
@@ -114,7 +115,7 @@ test('play that ends in an auto-pause survives a reload', async ({ page }) => {
   const populationMeta = page.locator('.population-panel .panel-meta');
   // Settle the bootstrapped slot into a paused run first, so no stale
   // auto-pause can arrive once the trigger below is enabled.
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveAttribute(
@@ -122,7 +123,7 @@ test('play that ends in an auto-pause survives a reload', async ({ page }) => {
     'false',
   );
   await page.getByRole('checkbox', { name: 'Significant drift', exact: true }).check();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(autoPauseMeta).toHaveText('last: speciation', { timeout: 30_000 });
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
   await expect.poll(() => populationMeta.textContent().then(displayedTick)).toBeGreaterThan(0);

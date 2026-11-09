@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickStart } from './start-run.js';
 import type { SimStoreState } from '../ui/sim-store.js';
 
 async function freshRun(page: Page): Promise<void> {
   await page.addInitScript(() => localStorage.setItem('bobivolve:nux-seen', '1'));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.lineage-tree button[aria-pressed]').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pin ancestry group', exact: true })).toBeEnabled();
 }
@@ -253,7 +254,7 @@ test('group names survive reload and run switching; a fresh start clears them', 
   await expect(page.locator('.ancestry-group-list > li')).toHaveCount(0);
   await page.getByRole('button', { name: 'Pin ancestry group', exact: true }).click();
   await expect(page.locator('.ancestry-group-list > li')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await clickStart(page);
   await expect(page.locator('.ancestry-groups')).toContainText('Pin a lineage');
   await expect(page.locator('.ancestry-group-list > li')).toHaveCount(0);
 });
