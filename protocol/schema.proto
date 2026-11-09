@@ -8,6 +8,16 @@
 // their field numbers reserved here so R0–R1 work cannot accidentally
 // collide with them.
 //
+// Several u64 counts and ticks were first declared `string` here and were
+// later retyped to `uint64` under the same field numbers. Proto3 JSON
+// encodes both as a decimal string, so the wire shape did not change, and
+// no binary encoding of this schema has been produced because codegen is
+// deferred. Two declarations were corrected to the shape the hosts have
+// always sent: `saved_at_ms` from `uint64` (a JSON string) to `double` (a
+// JSON number), and QueryResult field 4 from DriftTelemetry to the
+// DriftTelemetryResult wrapper. `protocol/schema-parity.test.ts` compares
+// this file with `protocol/types.ts`.
+//
 // Naming convention: snake_case in this file, camelCase on the wire (proto3
 // JSON encoding). The codegen toolchain (ts-proto, prost) produces the
 // language-idiomatic shape on each side.
@@ -46,6 +56,8 @@ message Command {
     RevokeDecree revoke_decree = 14;
     RewindToTick rewind_to_tick = 15;
     DeleteSave delete_save = 16;
+    SwitchRun switch_run = 17;
+    DeleteRun delete_run = 18;
   }
 }
 
@@ -87,6 +99,23 @@ message Load {
 // future Save commands can checkpoint the rewound branch.
 message RewindToTick {
   uint64 tick = 1;
+}
+
+// Per-run slots. A player can keep several in-flight simulations on disk,
+// each with its own log and snapshot history, and switch between them.
+// Distinct from save slots, which are point-in-time snapshots of any run.
+// SwitchRun makes a slot the active run, restoring its latest snapshot and
+// replaying any post-snapshot log entries; if the slot is fresh (no log
+// yet), the host pauses with no state and waits for NewRun to seed it.
+message SwitchRun {
+  string run_id = 1;
+}
+
+// Removes a run slot from disk (log, snapshots and any per-slot metadata).
+// Refused with CommandError when run_id names the active slot; switch away
+// first. Idempotent on a missing slot.
+message DeleteRun {
+  string run_id = 1;
 }
 
 message ConfigureAutoPause {
@@ -209,13 +238,12 @@ message Tick {
   uint32 actual_speed = 1;
   uint64 population_total = 2;
   map<string, uint64> population_by_lineage = 3;
-  // Origin compute budget at the heartbeat tick. Decimal strings for
-  // u64-safety on JSON-encoded transports. Max is the cap regen targets;
-  // the dashboard normalises against it. Best-effort like the rest of
-  // the heartbeat — the UI should treat dropped heartbeats as "value
-  // unchanged", not "value zero".
-  string origin_compute = 4;
-  string origin_compute_max = 5;
+  // Origin compute budget at the heartbeat tick. Max is the cap regen
+  // targets; the dashboard normalises against it. Best-effort like the
+  // rest of the heartbeat — the UI should treat dropped heartbeats as
+  // "value unchanged", not "value zero".
+  uint64 origin_compute = 4;
+  uint64 origin_compute_max = 5;
   // Authoritative run-loop state at the heartbeat tick. The store
   // reconciles its optimistic projection against these when no pending
   // command for the same field is in flight, so any class of message-
@@ -284,9 +312,8 @@ message PatchApplied {
   // Target lineage that just received a player-authored patch.
   string lineage_id = 1;
   // Count of extant probes whose firmware was overwritten when the
-  // patch landed. Decimal string for u64-safety on JSON-encoded
-  // transports.
-  string probes_affected = 2;
+  // patch landed.
+  uint64 probes_affected = 2;
   // Stable id minted by the sim. Carried on the matching
   // PatchSaturated event so the dashboard can correlate.
   string patch_id = 3;
@@ -297,9 +324,9 @@ message PatchSaturated {
   // of population). Fires once per patch — the saturation flag is
   // sticky.
   string patch_id = 1;
-  // Counts at the moment of firing; decimal strings for u64 safety.
-  string carrier_population = 2;
-  string total_population = 3;
+  // Counts at the moment of firing.
+  uint64 carrier_population = 2;
+  uint64 total_population = 3;
 }
 
 message DecreeQueued {
@@ -319,7 +346,7 @@ message DecreeFired {
   // still consumed (one-shot) but no firmware was written.
   bool landed = 3;
   // Probes whose firmware was overwritten. 0 when landed=false.
-  string probes_affected = 4;
+  uint64 probes_affected = 4;
 }
 
 message DecreeRevoked {
@@ -344,6 +371,7 @@ message Query {
     SubstrateQuery substrate = 7;
     ListSavesQuery list_saves = 8;
     DecreeQueueQuery decree_queue = 9;
+    ListRunsQuery list_runs = 10;
   }
 }
 
@@ -353,12 +381,13 @@ message QueryResult {
   oneof body {
     LineageTree lineage_tree = 2;
     ProbeInspector probe_inspector = 3;
-    DriftTelemetry drift_telemetry = 4;
+    DriftTelemetryResult drift_telemetry = 4;
     LogSlice log_slice = 5;
     PopulationSummary population_summary = 6;
     Substrate substrate = 7;
     ListSaves list_saves = 8;
     DecreeQueue decree_queue = 9;
+    ListRuns list_runs = 10;
   }
 }
 
@@ -377,6 +406,9 @@ message LogSliceQuery {
 message PopulationSummaryQuery {}
 message SubstrateQuery {}
 message ListSavesQuery {}
+// Enumerate every persisted run slot. Returns enough metadata to render the
+// switch-run modal; see ListRuns below.
+message ListRunsQuery {}
 
 // Result message bodies. Shapes evolve alongside the dashboard
 // implementation.
@@ -398,10 +430,15 @@ message LineageTreeEntry {
   // speciated to produce this one. Empty-string-as-null follows proto3
   // convention for optional strings.
   string parent_lineage_id = 3;
-  string founded_at_tick = 4;
+  uint64 founded_at_tick = 4;
   string founder_probe_id = 5;
   repeated string patches = 6;
   bool quarantined = 7;
+  // Tick at which the lineage's last probe died. Unset while the lineage
+  // still has live members (null in the TypeScript seam). Set strictly
+  // once, so the phylogeny renders a true lifeline even after a Load or
+  // Rewind.
+  optional uint64 extinction_tick = 8;
 }
 
 // ProbeInspector — per-probe identity and firmware. The `probe`
@@ -423,6 +460,15 @@ message ProbeInspectorDirective {
   // Numeric parameters serialised as decimal strings to preserve u64
   // values across the seam (proto3 JSON convention).
   map<string, string> params = 2;
+}
+
+// DriftTelemetryResult — reply to DriftTelemetryQuery. Echoes the queried
+// lineage; `drift` is unset (null in the TypeScript seam) when the lineage
+// id is not registered. Field 4 of QueryResult first pointed directly at
+// DriftTelemetry; the hosts have always sent this wrapper shape.
+message DriftTelemetryResult {
+  string lineage_id = 1;
+  DriftTelemetry drift = 2;
 }
 
 // DriftTelemetry — per-lineage drift statistics for the lineage
@@ -504,11 +550,10 @@ message PopulationSummary {
 }
 
 message PopulationSummaryPoint {
-  // Sim tick at which the heartbeat sample was taken. Decimal string
-  // (proto3 JSON convention for u64-safe transport).
-  string tick = 1;
-  // Total live probes at that tick. Decimal string for u64 safety.
-  string total_probes = 2;
+  // Sim tick at which the heartbeat sample was taken.
+  uint64 tick = 1;
+  // Total live probes at that tick.
+  uint64 total_probes = 2;
 }
 
 // ListSaves — index of named save slots written by the host. The
@@ -523,10 +568,10 @@ message SaveSummary {
   // Tick at which the save was taken; decimal string (proto3 JSON
   // convention for u64 over JSON-encoded transports).
   string tick = 2;
-  // Wall-clock millis since epoch when the save was written. Number
-  // values fit comfortably in a JS double; uint64 here so the proto
-  // encoding does not lose precision on far-future timestamps.
-  uint64 saved_at_ms = 3;
+  // Wall-clock millis since epoch when the save was written. A JSON
+  // number on the wire (TypeScript `number`), so the schema declares a
+  // double: proto3 JSON would encode a uint64 as a string.
+  double saved_at_ms = 3;
 }
 
 // Substrate — current spatial state of the simulation. Carries the
@@ -544,6 +589,9 @@ message Substrate {
   string max_resource_per_cell = 3;
   // Position + lineage of every extant probe at query time.
   repeated SubstrateProbe probes = 4;
+  // Per-cell carrying capacity; same row-major layout and length as
+  // cells. Fixed for the duration of a run. A void cell's cap is "0".
+  repeated string caps = 5;
 }
 
 message SubstrateProbe {
@@ -562,11 +610,32 @@ message DecreeQueue {
 message DecreeQueueEntry {
   string id = 1;
   // Tick at which the decree was queued.
-  string queued_at_tick = 2;
+  uint64 queued_at_tick = 2;
   // Trigger spec, with one shape per known trigger kind.
   DecreeTriggerSpec trigger = 3;
   // Patch payload's target lineage.
   string patch_target_lineage_id = 4;
   // Patch firmware so the dashboard can show what the decree will do.
   repeated DirectiveSpec patch_firmware = 5;
+}
+
+// ListRuns — every persisted run slot, plus the slot the host is
+// currently writing to.
+message ListRuns {
+  repeated RunSlotInfo runs = 1;
+  // Empty string when no slot is active (host running without
+  // persistence).
+  string active_run_id = 2;
+}
+
+message RunSlotInfo {
+  string run_id = 1;
+  // Tick of the highest-numbered snapshot file under the slot, or "0" if
+  // the slot has no snapshots yet. Decimal string, as in the TypeScript
+  // seam.
+  string latest_tick = 2;
+  // Modification time of the slot's log file in millis since epoch; 0
+  // when the slot has no log file. A JSON number on the wire and may be
+  // fractional (filesystem mtimes), so the schema declares a double.
+  double last_modified_ms = 3;
 }

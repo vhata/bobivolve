@@ -20,9 +20,9 @@ Commands, events, queries, and query results cross as plain data. Use stable str
 
 ### Protocol and IDL
 
-`protocol/schema.proto` defines the intended schema; `protocol/types.ts` is its hand-written TypeScript counterpart used by the application. Keep both in sync. Code generation is deferred, not part of the build.
+`protocol/schema.proto` defines the intended schema; `protocol/types.ts` is its hand-written TypeScript counterpart used by the application. Keep both in sync; `protocol/schema-parity.test.ts` fails when their message kinds, fields or broad field types differ. Code generation is deferred, not part of the build.
 
-Worker messages use structured clone, including native bigints. The stdio transport uses NDJSON with decimal strings for bigint fields and hand-written revival in `transport/ndjson-codec.ts`. This is the current application encoding, not generated protobuf serialization. Evolve the schema additively; do not reuse field numbers or silently change existing field semantics.
+Worker messages use structured clone, including native bigints. The stdio transport uses NDJSON with decimal strings for bigint fields and hand-written revival in `transport/ndjson-codec.ts`. This is the current application encoding, not generated protobuf serialization, and it is stricter than proto3 JSON: zero-valued fields must be present, and a missing or malformed u64 is rejected rather than defaulted. Evolve the schema additively; do not reuse field numbers or silently change existing field semantics.
 
 Commands are acknowledged with events; queries return correlated results. Heartbeats are best-effort summaries (the browser host requests 4 Hz). Domain events are ordered and persisted; the browser worker deliberately filters replication and death events that the UI does not consume. Message definitions may reserve future capabilities; a schema entry alone is not evidence that a feature is implemented.
 
