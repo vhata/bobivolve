@@ -100,6 +100,12 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
 
 ## Ready for separate work
 
+### P1 High
+
+- [TOOLING] `ci-runner-playwright-chromium` — **Get the browser jobs running again on GitHub's runners.** Since 2026-10-31 `ubuntu-latest` resolves to Ubuntu 26.04, where `pnpm exec playwright install --with-deps chromium` fails with "Playwright does not support chromium on ubuntu26.04-x64", so the `browser` job on every PR and push and the scheduled main validation are red. `check-links` on main is also red since `34a3863` renamed the review-guide heading that `docs/QUALITY.md` links to.
+  - Source: main-validation runs from 2026-10-31 onward (last success 2026-10-30), e.g. https://github.com/vhata/bobivolve/actions/runs/42501243433; ci runs https://github.com/vhata/bobivolve/actions/runs/42542809089 (browser) and the ci run on `34a3863` (check-links), 2026-11-09.
+  - Starting point: pin `runs-on` to `ubuntu-24.04` in `.github/workflows/ci.yml` and `main-validation.yml`, and fix the anchor in `docs/QUALITY.md`; upgrading Playwright to a release that supports 26.04 is the longer-term fix.
+
 ### Unprioritized
 
 - [TOOLING] `worktree-git-hooks` — **Install git hooks from linked worktrees.** `scripts/setup.sh` runs `simple-git-hooks`, which fails in a linked worktree (`ENOTDIR ... .git/hooks`, because `.git` is a file there) yet exits 0, so pre-commit and pre-push hooks are silently missing for every agent and Conductor workspace.
