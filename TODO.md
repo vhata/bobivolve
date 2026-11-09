@@ -47,25 +47,9 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
   - Depends on: `r2-engineer-loop`, `browser-session-budgets`
   - Blocked by: User review of the proposed mechanics and design pass before implementation.
 
-- [HOST] `saves-index-repair` — **Let the player recover from an unreadable saves index.** Once PR #43 lands, a corrupt `saves/index.json` makes Save and Delete refuse with no in-app recovery, and an unparsable index lists no saves, so a browser player cannot get unstuck. Options: rebuild the index from `saves/*.save`, or move the corrupt index aside and start a fresh one while keeping the files. #host
+- [HOST] `saves-index-repair` — **Let the player recover from an unreadable saves index.** Since PR #43, a corrupt `saves/index.json` makes Save and Delete refuse with no in-app recovery, and an unparsable index lists no saves, so a browser player cannot get unstuck. Options: rebuild the index from `saves/*.save`, or move the corrupt index aside and start a fresh one while keeping the files. #host
   - Source: `review/host-storage-input-hardening` writer report and independent review (PR #43), 2026-10-09.
-  - Blocked by: PR #43 must land; choose rebuild versus move-aside.
-
-- [HOST] `nodehost-runid-validation` — **Validate the run ID passed to the NodeHost constructor.** Only the CLI validates its `--run-id`; the worker hard-codes its IDs, so the storage key rule is the only guard on `persistence.runId`. #host
-  - Source: `review/host-storage-input-hardening` writer report (PR #43), 2026-10-09.
-  - Blocked by: PR #43 must land (it adds the shared run-ID validator).
-
-- [HOST] `reject-decree-on-extinct-target` — **Reject decrees whose patch target is already extinct when they are queued.** After PR #42 such a decree fires with `landed: false`, which is correct, but the host still accepts it and charges compute at queue time. #host #sim
-  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
-  - Blocked by: PR #42 must land.
-
-- [UI] `decree-composer-threshold-floor` — **Stop the decree composer offering a threshold of 0.** `ui/components/DecreeComposerModal.tsx` accepts 0, which the host rejects after PR #42. The comment at `ui/components/LineageInspectorPanel.tsx:304` about extinct-lineage quarantine is also stale once the host returns an error. #ui
-  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
-  - Blocked by: PR #42 must land.
-
-- [PROTOCOL] `quarantine-lift-extinct-reason` — **Give extinction-released quarantine holds their own lift reason.** After PR #42 a hold on a lineage that dies is lifted with no reason, so the timeline shows it as a manual release just after the extinction event. A `lineageExtinct` reason needs `protocol/types.ts`, `schema.proto`, the codec and the timeline label. #protocol #ui
-  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
-  - Blocked by: PR #42 must land.
+  - Blocked by: Choose rebuilding the index from the save files versus moving the corrupt index aside.
 
 - [PERFORMANCE] `opfs-sync-append` — **Append to OPFS logs without rewriting the whole file.** Chromium's `OPFSStorage.append` path copies the whole file per append (measured once locally: about 2 ms at 1 MiB, 10–34 ms at 8 MiB, about 50 ms at 44 MiB). With PR #44's 1 s flush that is a whole-file rewrite each second on long runs; `createSyncAccessHandle` in the worker would make appends proportional to new data. #host #performance
   - Source: `review/browser-run-log-durability` writer report (PR #44), 2026-10-09.
@@ -104,13 +88,19 @@ Deferred work and unresolved decisions. Follow [the TODO guide](docket/TODO_GUID
 
 ## Ready for separate work
 
-### P1 High
-
-- [TOOLING] `ci-runner-playwright-chromium` — **Get the browser jobs running again on GitHub's runners.** Since 2026-10-31 `ubuntu-latest` resolves to Ubuntu 26.04, where `pnpm exec playwright install --with-deps chromium` fails with "Playwright does not support chromium on ubuntu26.04-x64", so the `browser` job on every PR and push and the scheduled main validation are red. `check-links` on main is also red since `34a3863` renamed the review-guide heading that `docs/QUALITY.md` links to.
-  - Source: main-validation runs from 2026-10-31 onward (last success 2026-10-30), e.g. https://github.com/vhata/bobivolve/actions/runs/42501243433; ci runs https://github.com/vhata/bobivolve/actions/runs/42542809089 (browser) and the ci run on `34a3863` (check-links), 2026-11-09.
-  - Starting point: pin `runs-on` to `ubuntu-24.04` in `.github/workflows/ci.yml` and `main-validation.yml`, and fix the anchor in `docs/QUALITY.md`; upgrading Playwright to a release that supports 26.04 is the longer-term fix.
-
 ### Unprioritized
+
+- [HOST] `nodehost-runid-validation` — **Validate the run ID passed to the NodeHost constructor.** Only the CLI validates its `--run-id`; the worker hard-codes its IDs, so the storage key rule is the only guard on `persistence.runId`. #host
+  - Source: `review/host-storage-input-hardening` writer report (PR #43), 2026-10-09.
+
+- [HOST] `reject-decree-on-extinct-target` — **Reject decrees whose patch target is already extinct when they are queued.** After PR #42 such a decree fires with `landed: false`, which is correct, but the host still accepts it and charges compute at queue time. #host #sim
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
+
+- [UI] `decree-composer-threshold-floor` — **Stop the decree composer offering a threshold of 0.** `ui/components/DecreeComposerModal.tsx` accepts 0, which the host rejects after PR #42. The comment at `ui/components/LineageInspectorPanel.tsx:304` about extinct-lineage quarantine is also stale once the host returns an error. #ui
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
+
+- [PROTOCOL] `quarantine-lift-extinct-reason` — **Give extinction-released quarantine holds their own lift reason.** After PR #42 a hold on a lineage that dies is lifted with no reason, so the timeline shows it as a manual release just after the extinction event. A `lineageExtinct` reason needs `protocol/types.ts`, `schema.proto`, the codec and the timeline label. #protocol #ui
+  - Source: `review/extinct-lineage-interventions` writer report (PR #42), 2026-10-09.
 
 - [TOOLING] `worktree-git-hooks` — **Install git hooks from linked worktrees.** `scripts/setup.sh` runs `simple-git-hooks`, which fails in a linked worktree (`ENOTDIR ... .git/hooks`, because `.git` is a file there) yet exits 0, so pre-commit and pre-push hooks are silently missing for every agent and Conductor workspace.
   - Source: `todo/patched-parent-promotion` writer report, reproduced by the coordinator 2026-10-08; the shared hooks directory held only `.sample` files.
